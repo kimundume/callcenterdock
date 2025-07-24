@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CallDocker Widget Demo</title>
+</head>
+<body>
+  <h1>CallDocker Widget Demo</h1>
+  <p>This page demonstrates the embeddable CallDocker widget. Click the floating button in the bottom right to initiate a call.</p>
+  <div style="margin-bottom: 16px;">
+    <strong>Test Company UUID:</strong> <span id="uuid">demo-uuid</span><br />
+    <strong>Test Agent ID:</strong> <span id="agent">agent1</span>
+  </div>
+  <script>
+    // Set the company UUID for the widget (replace with a real UUID for production)
+    window.CALLDOCKER_COMPANY_UUID = 'demo-uuid';
+  </script>
+  <script src="widget.js"></script>
+</body>
+</html> 
