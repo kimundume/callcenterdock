@@ -211,8 +211,22 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
     }
   };
 
-  // Generate widget script with customization
-  const script = `<script src=\"https://calldocker.com/widget.js?uuid=${companyUuid || 'YOUR_COMPANY_UUID'}&text=${encodeURIComponent(widgetText)}&color=${encodeURIComponent(widgetColor)}&shape=${widgetShape}${widgetImage ? `&img=${encodeURIComponent(widgetImageUrl)}` : ''}&position=${widgetPosition}&animation=${widgetAnimation}&dark=${widgetDarkMode ? '1' : '0'}\"></script>`;
+  // Determine widget base URL dynamically
+  const getWidgetBaseUrl = () => {
+    // Use env variable if set (for Vercel/production)
+    if (import.meta && import.meta.env && import.meta.env.VITE_WIDGET_BASE_URL) {
+      return import.meta.env.VITE_WIDGET_BASE_URL;
+    }
+    // Use window.location.origin for local/dev
+    if (typeof window !== 'undefined' && window.location) {
+      return window.location.origin;
+    }
+    // Fallback to production domain
+    return 'https://calldocker.com';
+  };
+
+  // Generate widget script with customization and dynamic base URL
+  const script = `<script src=\"${getWidgetBaseUrl()}/widget.js?uuid=${companyUuid || 'YOUR_COMPANY_UUID'}&text=${encodeURIComponent(widgetText)}&color=${encodeURIComponent(widgetColor)}&shape=${widgetShape}${widgetImage ? `&img=${encodeURIComponent(widgetImageUrl)}` : ''}&position=${widgetPosition}&animation=${widgetAnimation}&dark=${widgetDarkMode ? '1' : '0'}\"></script>`;
 
   // Copy to clipboard
   const handleCopy = () => {
