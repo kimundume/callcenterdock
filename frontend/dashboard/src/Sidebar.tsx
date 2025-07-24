@@ -37,16 +37,21 @@ export default function Sidebar({ collapsed, onCollapse, selectedKey, onSelect, 
         mode="inline"
         selectedKeys={[selectedKey]}
         onClick={({ key }) => onSelect(key as string)}
-        style={{ border: 'none', background: 'transparent', fontSize: 16, color: '#fff' }}
+        style={{ border: 'none', background: 'transparent', fontSize: 16, color: '#fff', transition: 'width 0.2s' }}
         items={items.map(item => ({
           ...item,
+          label: collapsed ? null : item.label,
           style: {
             color: selectedKey === item.key ? '#00e6ef' : '#fff',
             background: selectedKey === item.key ? 'rgba(0,230,239,0.08)' : 'transparent',
             borderRadius: 8,
             margin: '4px 0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            transition: 'all 0.2s',
           },
-          icon: React.cloneElement(item.icon, { style: { color: selectedKey === item.key ? '#00e6ef' : '#fff' } })
+          icon: React.cloneElement(item.icon, { style: { color: selectedKey === item.key ? '#00e6ef' : '#fff', fontSize: 20, marginRight: collapsed ? 0 : 12, transition: 'margin 0.2s' } })
         }))}
       />
     </div>

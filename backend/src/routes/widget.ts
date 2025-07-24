@@ -3,7 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import cors from 'cors';
-import { companies, users, findUserByCompanyAndRole, calls, agents as onlineAgents, widgetSettings } from '../data/tempDB';
+import rateLimit from 'express-rate-limit';
+import { companies, users, findUserByCompanyAndRole, calls, agents as onlineAgents, widgetSettings, ivrConfigs } from '../data/tempDB';
 
 declare module 'express-serve-static-core' {
   interface Request {
@@ -12,9 +13,22 @@ declare module 'express-serve-static-core' {
 }
 
 const router = Router();
-const JWT_SECRET = 'secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'changeme-in-prod';
 
-router.use(cors({ origin: '*' }));
+// Password strength regex (min 8 chars, 1 upper, 1 lower, 1 number)
+function isStrongPassword(pw: string) {
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d!@#$%^&*()_+\-=]{8,}$/.test(pw);
+}
+
+const corsOrigin = process.env.CORS_ORIGIN || '*';
+router.use(cors({ origin: corsOrigin }));
+
+// Rate limiter: 5 requests per minute per IP
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5,
+  message: { error: 'Too many requests, please try again later.' },
+});
 
 function validateString(val: string, min = 1): boolean {
   return typeof val === 'string' && val.length >= min;
@@ -32,10 +46,13 @@ function authMiddleware(req: Request, res: Response, next: NextFunction) {
 }
 
 // POST /api/company/register
-router.post('/company/register', async (req: Request, res: Response) => {
+router.post('/company/register', authLimiter as any, async (req: Request, res: Response) => {
   const { companyName, adminUsername, adminPassword, email } = req.body;
   if (![companyName, adminUsername, adminPassword, email].every((v: string) => validateString(v))) {
     return res.status(400).json({ error: 'All fields required' });
+  }
+  if (!isStrongPassword(adminPassword)) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters, include upper/lowercase and a number.' });
   }
   const existing = Object.values(companies).find((c: any) => c.email === email);
   if (existing) return res.status(400).json({ error: 'Company already exists' });
@@ -48,12 +65,12 @@ router.post('/company/register', async (req: Request, res: Response) => {
     companyUuid: uuid,
     role: 'admin',
   };
-  const token = jwt.sign({ username: adminUsername, companyUuid: uuid, role: 'admin' }, JWT_SECRET);
+  const token = jwt.sign({ username: adminUsername, companyUuid: uuid, role: 'admin' }, JWT_SECRET, { expiresIn: '1h' });
   res.json({ uuid, token });
 });
 
 // POST /api/auth/login
-router.post('/auth/login', async (req: Request, res: Response) => {
+router.post('/auth/login', authLimiter as any, async (req: Request, res: Response) => {
   const { companyUuid, username, password, role } = req.body;
   if (![companyUuid, username, password, role].every((v: string) => validateString(v))) {
     return res.status(400).json({ error: 'All fields required' });
@@ -62,7 +79,7 @@ router.post('/auth/login', async (req: Request, res: Response) => {
   if (!user || !(await bcrypt.compare(password, user.password))) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
-  const token = jwt.sign({ username, companyUuid, role }, JWT_SECRET);
+  const token = jwt.sign({ username, companyUuid, role }, JWT_SECRET, { expiresIn: '1h' });
   res.json({ token });
 });
 
@@ -71,6 +88,9 @@ router.post('/agent/add', authMiddleware, async (req: Request, res: Response) =>
   const { agentUsername, agentPassword } = req.body;
   if (!validateString(agentUsername) || !validateString(agentPassword)) {
     return res.status(400).json({ error: 'All fields required' });
+  }
+  if (!isStrongPassword(agentPassword)) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters, include upper/lowercase and a number.' });
   }
   const decoded = req.user;
   if (decoded.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
@@ -202,6 +222,41 @@ router.post('/settings/:companyUuid', authMiddleware, (req: Request, res: Respon
   }
   widgetSettings[companyUuid] = { text, color, shape, img, position, animation, dark: !!dark };
   res.json({ success: true, settings: widgetSettings[companyUuid] });
+});
+
+// GET /api/widget/ivr/:companyUuid
+router.get('/ivr/:companyUuid', (req: Request, res: Response) => {
+  const { companyUuid } = req.params;
+  const config = ivrConfigs[companyUuid] || {
+    steps: [
+      {
+        prompt: 'Welcome to CallDocker! Press 1 for Sales, 2 for Support.',
+        routes: {
+          '1': { prompt: 'Connecting you to Sales...' },
+          '2': { prompt: 'Connecting you to Support...' },
+          'sales': { prompt: 'Connecting you to Sales...' },
+          'support': { prompt: 'Connecting you to Support...' },
+        },
+        fallback: { prompt: 'Sorry, I didn\'t get that. Please type 1 for Sales or 2 for Support.' }
+      }
+    ]
+  };
+  res.json(config);
+});
+
+// POST /api/widget/ivr/:companyUuid (admin only)
+router.post('/ivr/:companyUuid', authMiddleware, (req: Request, res: Response) => {
+  const { companyUuid } = req.params;
+  const decoded = req.user;
+  if (!decoded || decoded.companyUuid !== companyUuid || decoded.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const { steps } = req.body;
+  if (!Array.isArray(steps)) {
+    return res.status(400).json({ error: 'Invalid IVR config' });
+  }
+  ivrConfigs[companyUuid] = { steps };
+  res.json({ success: true, config: ivrConfigs[companyUuid] });
 });
 
 export default router; 

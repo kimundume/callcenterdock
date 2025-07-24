@@ -4,6 +4,8 @@ export const users: Record<string, any> = {};
 export const agents: Record<string, any> = {};
 export const widgetSettings: Record<string, any> = {};
 export const calls: Record<string, any> = {};
+export const ivrConfigs: Record<string, any> = {};
+export const callQueue: Record<string, string[]> = {}; // companyUuid -> array of socket IDs in queue. This will track the order of calls for queue logic.
 
 // Helper to find users by company and role
 export function findUserByCompanyAndRole(companyUuid: string, username: string, role: string) {

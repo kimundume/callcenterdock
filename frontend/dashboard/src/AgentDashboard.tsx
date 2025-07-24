@@ -29,6 +29,13 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
   const [callTimer, setCallTimer] = useState('00:00');
   const timerRef = useRef(null);
   const socketRef = useRef(null);
+  const [testCallIncoming, setTestCallIncoming] = useState(false);
+  const [testCallActive, setTestCallActive] = useState(false);
+  const [webrtcState, setWebrtcState] = useState<'idle' | 'connecting' | 'connected'>('idle');
+  const [localStream, setLocalStream] = useState(null);
+  const [remoteStream, setRemoteStream] = useState(null);
+  const peerRef = useRef(null);
+  const remoteAudioRef = useRef(null);
 
   // Fetch call logs for this agent
   useEffect(() => {
@@ -53,6 +60,17 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
       clearInterval(timerRef.current);
     };
   }, [companyUuid, agentUsername]);
+
+  // Listen for test-incoming-call event from backend
+  useEffect(() => {
+    const handler = (data) => {
+      if (data && data.uuid === companyUuid && data.test) {
+        setTestCallIncoming(true);
+      }
+    };
+    socketRef.current.on('test-incoming-call', handler);
+    return () => socketRef.current.off('test-incoming-call', handler);
+  }, [companyUuid]);
 
   // Call timer
   useEffect(() => {
@@ -94,6 +112,18 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
       setIncomingCall(null);
       setCallStart(null);
     }
+  };
+
+  const handleAcceptTestCall = () => {
+    setTestCallIncoming(false);
+    setTestCallActive(true);
+  };
+  const handleRejectTestCall = () => {
+    setTestCallIncoming(false);
+    setTestCallActive(false);
+  };
+  const handleEndTestCall = () => {
+    setTestCallActive(false);
   };
 
   // Save call log (wrap-up)
@@ -140,6 +170,51 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
     { title: 'Notes', dataIndex: 'notes', key: 'notes', render: notes => <span style={{ whiteSpace: 'pre-wrap' }}>{notes}</span> },
     { title: 'Session ID', dataIndex: 'sessionId', key: 'sessionId' },
   ];
+
+  // WebRTC setup on In Call
+  useEffect(() => {
+    if (callStatus === 'In Call' && socketRef.current) {
+      setWebrtcState('connecting');
+      const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      peerRef.current = pc;
+      // Get user media
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        setLocalStream(stream);
+        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      });
+      // Handle remote stream
+      pc.ontrack = (event) => {
+        const [remote] = event.streams;
+        setRemoteStream(remote);
+        if (remoteAudioRef.current) remoteAudioRef.current.srcObject = remote;
+      };
+      // ICE candidates
+      pc.onicecandidate = (event) => {
+        if (event.candidate && socketRef.current && incomingCall) {
+          socketRef.current.emit('webrtc-ice-candidate', { toSocketId: incomingCall.fromSocketId, candidate: event.candidate });
+        }
+      };
+      // Handle offer from widget
+      socketRef.current.on('webrtc-offer', ({ offer, fromSocketId }) => {
+        pc.setRemoteDescription(new RTCSessionDescription(offer));
+        pc.createAnswer().then(answer => {
+          pc.setLocalDescription(answer);
+          socketRef.current.emit('webrtc-answer', { toSocketId: fromSocketId, answer });
+          setWebrtcState('connected');
+        });
+      });
+      // Handle ICE from widget
+      socketRef.current.on('webrtc-ice-candidate', ({ candidate }) => {
+        pc.addIceCandidate(new RTCIceCandidate(candidate));
+      });
+    }
+    return () => {
+      if (peerRef.current) peerRef.current.close();
+      setWebrtcState('idle');
+      setRemoteStream(null);
+      setLocalStream(null);
+    };
+  }, [callStatus, incomingCall]);
 
   return (
     <DashboardLayout>
@@ -240,6 +315,23 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
               )}
             </Col>
           </Row>
+          {/* Test Call Modal */}
+          <Modal open={testCallIncoming} onCancel={handleRejectTestCall} footer={null} title="Test Call Incoming" closable={!testCallActive}>
+            <div style={{ textAlign: 'center', margin: '32px 0' }}>
+              <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Test Call from Widget</div>
+              {!testCallActive ? (
+                <>
+                  <Button type="primary" onClick={handleAcceptTestCall} style={{ marginRight: 12 }}>Accept</Button>
+                  <Button danger onClick={handleRejectTestCall}>Reject</Button>
+                </>
+              ) : (
+                <>
+                  <div style={{ margin: '16px 0' }}><strong>Status:</strong> In Test Call</div>
+                  <Button onClick={handleEndTestCall}>End Test Call</Button>
+                </>
+              )}
+            </div>
+          </Modal>
         </Tabs.TabPane>
         <Tabs.TabPane tab="Call History" key="history">
           {/* Call history table and mini-CRM timeline */}
@@ -308,6 +400,14 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
           </Card>
         </Tabs.TabPane>
       </Tabs>
+      {webrtcState === 'connecting' && <div style={{ background: '#e8f1ff', color: '#2E73FF', fontWeight: 600, fontSize: 15, padding: '8px 0', textAlign: 'center', borderRadius: 8, margin: '8px 0 0 0' }}>Connecting audio...</div>}
+      {webrtcState === 'connected' && <div style={{ background: '#e8f1ff', color: '#1CC88A', fontWeight: 600, fontSize: 15, padding: '8px 0', textAlign: 'center', borderRadius: 8, margin: '8px 0 0 0' }}>Live audio with visitor</div>}
+      <audio ref={remoteAudioRef} autoPlay style={{ display: remoteStream ? 'block' : 'none', width: '100%', marginTop: 8 }} />
+      <Button onClick={() => {
+        if (localStream) {
+          localStream.getAudioTracks().forEach(track => track.enabled = !track.enabled);
+        }
+      }} style={{ marginLeft: 8 }}>{localStream && localStream.getAudioTracks()[0]?.enabled ? 'Mute' : 'Unmute'}</Button>
     </DashboardLayout>
   );
 } 
