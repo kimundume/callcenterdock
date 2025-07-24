@@ -47,17 +47,26 @@ export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: 
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
+    if (!email || !adminUsername || !adminPassword) {
+      setError('All fields required');
+      return;
+    }
+    setLoading(true);
     try {
       const res = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyUuid, username: adminUsername, password: adminPassword, role: 'admin' })
+        body: JSON.stringify({ email, username: adminUsername, password: adminPassword, role: 'admin' })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Login failed');
-      onAuth(data.token, companyUuid);
+      // Fetch companyUuid by email for onAuth
+      let uuid = companyUuid;
+      if (!uuid && email) {
+        uuid = data.companyUuid || '';
+      }
+      onAuth(data.token, uuid);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -183,17 +192,9 @@ export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: 
           )}
           {mode === 'login' && (
             <div style={{ marginBottom: 12 }}>
-              <label>Company UUID<br />
-                <input value={companyUuid} onChange={e => setCompanyUuid(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
+              <label>Email<br />
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
               </label>
-              <div style={{ marginTop: 8, textAlign: 'right', display: 'flex', justifyContent: 'space-between' }}>
-                <button type="button" style={{ color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }} onClick={() => setShowForgotUuid(true)}>
-                  Forgot Company UUID?
-                </button>
-                <button type="button" style={{ color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }} onClick={() => setShowForgotPassword(true)}>
-                  Forgot Password?
-                </button>
-              </div>
             </div>
           )}
           <div style={{ marginBottom: 12 }}>

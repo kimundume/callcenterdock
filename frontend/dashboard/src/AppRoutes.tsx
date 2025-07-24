@@ -5,6 +5,8 @@ import CompanyAuth from './CompanyAuth';
 import AdminDashboard from './AdminDashboard';
 import AgentLogin from './AgentLogin';
 import AgentDashboard from './AgentDashboard';
+import DemoPage from './DemoPage';
+import IVREditor from './IVREditor';
 
 export default function AppRoutes({ setCompanyUuid }: { setCompanyUuid: (uuid: string | null) => void }) {
   const [adminToken, setAdminToken] = useState<string | null>(null);
@@ -59,6 +61,8 @@ export default function AppRoutes({ setCompanyUuid }: { setCompanyUuid: (uuid: s
           ? <Navigate to="/agent-login" />
           : <AgentDashboard agentToken={agentToken} companyUuid={companyUuid} agentUsername={agentUsername} />
       } />
+      <Route path="/demo" element={<DemoPage />} />
+      <Route path="/ivr-editor" element={<IVREditor />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

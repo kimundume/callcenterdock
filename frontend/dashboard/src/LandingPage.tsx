@@ -69,6 +69,8 @@ export default function LandingPage() {
           Calldocker turns your visitors into conversations — instantly. Host multi-agent voice and chat widgets with ease.
         </p>
         <div style={{ display: 'flex', gap: 16, justifyContent: 'center', zIndex: 1 }}>
+          <Button type="primary" size="large" style={{ marginRight: 16 }} onClick={() => navigate('/dashboard')}>Admin Login / Register</Button>
+          <Button type="default" size="large" style={{ background: '#fff', color: '#2E73FF', border: '2px solid #2E73FF' }} onClick={() => navigate('/agent-login')}>Agent Login</Button>
           <button className="cta-btn" style={{ background: 'linear-gradient(90deg, #00e6ef 0%, #2E73FF 100%)', color: '#fff', fontWeight: 700, fontSize: 18, border: 'none', borderRadius: 32, padding: '16px 40px', boxShadow: '0 4px 24px #00e6ef33', cursor: 'pointer', transition: 'transform 0.2s' }} onClick={() => navigate('/dashboard')}>Try It Now</button>
           <button className="cta-btn" style={{ background: '#fff', color: '#2E73FF', fontWeight: 700, fontSize: 18, border: '2px solid #2E73FF', borderRadius: 32, padding: '16px 40px', boxShadow: '0 2px 8px #2E73FF11', cursor: 'pointer', transition: 'transform 0.2s' }} onClick={scrollToDemo}>See Demo</button>
         </div>

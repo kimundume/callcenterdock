@@ -210,22 +210,40 @@ export default function IVRChatWidget({ open, onClose, companyUuid, dark = false
     }
   }, [callState]);
 
-  // WebRTC setup on agent accept
+  // Refactor WebRTC setup and cleanup
   useEffect(() => {
+    let pc;
+    let cleanup = false;
     if (callState === 'in-call' && agentSocketId && socketRef.current) {
       setWebrtcState('connecting');
-      const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
       peerRef.current = pc;
-      // Get user media
+      console.log('Widget: Created RTCPeerConnection');
+      // Get user media and add tracks before offer
       navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
         setLocalStream(stream);
+        console.log('Widget localStream tracks:', stream.getTracks());
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
+        // Create offer only after tracks are added
+        pc.createOffer().then(offer => {
+          pc.setLocalDescription(offer);
+          socketRef.current.emit('webrtc-offer', { toSocketId: agentSocketId, offer });
+        });
+      }).catch(err => {
+        console.error('Widget getUserMedia error:', err);
       });
       // Handle remote stream
       pc.ontrack = (event) => {
         const [remote] = event.streams;
         setRemoteStream(remote);
         if (remoteAudioRef.current) remoteAudioRef.current.srcObject = remote;
+        if (remote) console.log('Widget received remoteStream tracks:', remote.getTracks());
+      };
+      pc.onsignalingstatechange = () => {
+        console.log('Widget signalingState:', pc.signalingState);
+      };
+      pc.oniceconnectionstatechange = () => {
+        console.log('Widget ICE state:', pc.iceConnectionState);
       };
       // ICE candidates
       pc.onicecandidate = (event) => {
@@ -233,28 +251,39 @@ export default function IVRChatWidget({ open, onClose, companyUuid, dark = false
           socketRef.current.emit('webrtc-ice-candidate', { toSocketId: agentSocketId, candidate: event.candidate });
         }
       };
-      // Create offer
-      pc.createOffer().then(offer => {
-        pc.setLocalDescription(offer);
-        socketRef.current.emit('webrtc-offer', { toSocketId: agentSocketId, offer });
-      });
       // Handle answer
       socketRef.current.on('webrtc-answer', ({ answer }) => {
-        pc.setRemoteDescription(new RTCSessionDescription(answer));
-        setWebrtcState('connected');
+        if (pc.signalingState !== 'closed') {
+          pc.setRemoteDescription(new RTCSessionDescription(answer));
+          setWebrtcState('connected');
+          console.log('Widget: setRemoteDescription(answer)');
+        } else {
+          console.warn('Widget: Tried to setRemoteDescription on closed connection');
+        }
       });
       // Handle ICE from agent
       socketRef.current.on('webrtc-ice-candidate', ({ candidate }) => {
-        pc.addIceCandidate(new RTCIceCandidate(candidate));
+        if (pc.signalingState !== 'closed') {
+          pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } else {
+          console.warn('Widget: Tried to addIceCandidate on closed connection');
+        }
       });
     }
+    // Only clean up on unmount or call truly ending
     return () => {
-      if (peerRef.current) peerRef.current.close();
+      if (cleanup) return;
+      cleanup = true;
+      if (peerRef.current) {
+        console.log('Widget: Closing RTCPeerConnection');
+        peerRef.current.close();
+        peerRef.current = null;
+      }
       setWebrtcState('idle');
       setRemoteStream(null);
       setLocalStream(null);
     };
-  }, [callState, agentSocketId]);
+  }, [callState === 'in-call', agentSocketId]);
 
   // Handle speech recognition
   const startListening = () => {
@@ -524,6 +553,10 @@ export default function IVRChatWidget({ open, onClose, companyUuid, dark = false
           </div>
         )}
       </div>
+      <audio ref={remoteAudioRef} autoPlay style={{ display: remoteStream ? 'block' : 'none', width: '100%' }} />
+      {!remoteStream && webrtcState === 'connected' && (
+        <div style={{ color: '#E74A3B', fontWeight: 600, textAlign: 'center', marginTop: 8 }}>No remote audio received. Check agent mic and permissions.</div>
+      )}
       {/* Animations */}
       <style>{`
         @keyframes fadein-bubble { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }

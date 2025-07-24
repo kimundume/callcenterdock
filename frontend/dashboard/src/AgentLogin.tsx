@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 
 const API_URL = 'http://localhost:5000/api/widget';
 
@@ -8,20 +9,40 @@ export default function AgentLogin({ onAuth }: { onAuth: (token: string, uuid: s
   const [agentPassword, setAgentPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const location = useLocation();
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Autofill from query params
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const uuid = params.get('companyUuid') || '';
+    const username = params.get('username') || '';
+    const password = params.get('password') || '';
+    const demo = params.get('demo');
+    if (uuid) setCompanyUuid(uuid);
+    if (username) setAgentUsername(username);
+    if (password) setAgentPassword(password);
+    // Auto-login if all present
+    if (uuid && username && password && demo === '1') {
+      handleLogin(undefined, uuid, username, password);
+    }
+  }, [location.search]);
+
+  const handleLogin = async (e: React.FormEvent | undefined, overrideUuid: string | undefined, overrideUsername: string | undefined, overridePassword: string | undefined) => {
+    if (e) e.preventDefault();
     setLoading(true);
     setError('');
+    const uuid = overrideUuid !== undefined ? overrideUuid : companyUuid;
+    const username = overrideUsername !== undefined ? overrideUsername : agentUsername;
+    const password = overridePassword !== undefined ? overridePassword : agentPassword;
     try {
       const res = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyUuid, username: agentUsername, password: agentPassword, role: 'agent' })
+        body: JSON.stringify({ companyUuid: uuid, username, password, role: 'agent' })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Login failed');
-      onAuth(data.token, companyUuid, agentUsername);
+      onAuth(data.token, uuid, username);
     } catch (err: any) {
       setError(err.message);
     } finally {

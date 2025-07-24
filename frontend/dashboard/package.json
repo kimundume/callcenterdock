@@ -9,6 +9,7 @@
     "start": "vite preview"
   },
   "devDependencies": {
+    "ts-node": "^10.9.2",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
   },

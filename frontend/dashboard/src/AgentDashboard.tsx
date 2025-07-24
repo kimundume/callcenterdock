@@ -171,22 +171,35 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
     { title: 'Session ID', dataIndex: 'sessionId', key: 'sessionId' },
   ];
 
-  // WebRTC setup on In Call
+  // Refactor WebRTC setup and cleanup
   useEffect(() => {
+    let pc;
+    let cleanup = false;
     if (callStatus === 'In Call' && socketRef.current) {
       setWebrtcState('connecting');
-      const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
       peerRef.current = pc;
-      // Get user media
+      console.log('Agent: Created RTCPeerConnection');
+      // Get user media and add tracks before answer
       navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
         setLocalStream(stream);
+        console.log('Agent localStream tracks:', stream.getTracks());
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      }).catch(err => {
+        console.error('Agent getUserMedia error:', err);
       });
       // Handle remote stream
       pc.ontrack = (event) => {
         const [remote] = event.streams;
         setRemoteStream(remote);
         if (remoteAudioRef.current) remoteAudioRef.current.srcObject = remote;
+        if (remote) console.log('Agent received remoteStream tracks:', remote.getTracks());
+      };
+      pc.onsignalingstatechange = () => {
+        console.log('Agent signalingState:', pc.signalingState);
+      };
+      pc.oniceconnectionstatechange = () => {
+        console.log('Agent ICE state:', pc.iceConnectionState);
       };
       // ICE candidates
       pc.onicecandidate = (event) => {
@@ -196,25 +209,43 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
       };
       // Handle offer from widget
       socketRef.current.on('webrtc-offer', ({ offer, fromSocketId }) => {
-        pc.setRemoteDescription(new RTCSessionDescription(offer));
-        pc.createAnswer().then(answer => {
-          pc.setLocalDescription(answer);
-          socketRef.current.emit('webrtc-answer', { toSocketId: fromSocketId, answer });
-          setWebrtcState('connected');
-        });
+        if (pc.signalingState !== 'closed') {
+          pc.setRemoteDescription(new RTCSessionDescription(offer)).then(() => {
+            // Only create answer after tracks are added
+            pc.createAnswer().then(answer => {
+              pc.setLocalDescription(answer);
+              socketRef.current.emit('webrtc-answer', { toSocketId: fromSocketId, answer });
+              setWebrtcState('connected');
+              console.log('Agent: setRemoteDescription(offer) and sent answer');
+            });
+          });
+        } else {
+          console.warn('Agent: Tried to setRemoteDescription/createAnswer on closed connection');
+        }
       });
       // Handle ICE from widget
       socketRef.current.on('webrtc-ice-candidate', ({ candidate }) => {
-        pc.addIceCandidate(new RTCIceCandidate(candidate));
+        if (pc.signalingState !== 'closed') {
+          pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } else {
+          console.warn('Agent: Tried to addIceCandidate on closed connection');
+        }
       });
     }
+    // Only clean up on unmount or call truly ending
     return () => {
-      if (peerRef.current) peerRef.current.close();
+      if (cleanup) return;
+      cleanup = true;
+      if (peerRef.current) {
+        console.log('Agent: Closing RTCPeerConnection');
+        peerRef.current.close();
+        peerRef.current = null;
+      }
       setWebrtcState('idle');
       setRemoteStream(null);
       setLocalStream(null);
     };
-  }, [callStatus, incomingCall]);
+  }, [callStatus === 'In Call', incomingCall]);
 
   return (
     <DashboardLayout>
@@ -402,7 +433,10 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
       </Tabs>
       {webrtcState === 'connecting' && <div style={{ background: '#e8f1ff', color: '#2E73FF', fontWeight: 600, fontSize: 15, padding: '8px 0', textAlign: 'center', borderRadius: 8, margin: '8px 0 0 0' }}>Connecting audio...</div>}
       {webrtcState === 'connected' && <div style={{ background: '#e8f1ff', color: '#1CC88A', fontWeight: 600, fontSize: 15, padding: '8px 0', textAlign: 'center', borderRadius: 8, margin: '8px 0 0 0' }}>Live audio with visitor</div>}
-      <audio ref={remoteAudioRef} autoPlay style={{ display: remoteStream ? 'block' : 'none', width: '100%', marginTop: 8 }} />
+      <audio ref={remoteAudioRef} autoPlay style={{ display: remoteStream ? 'block' : 'none', width: '100%' }} />
+      {!remoteStream && webrtcState === 'connected' && (
+        <div style={{ color: '#E74A3B', fontWeight: 600, textAlign: 'center', marginTop: 8 }}>No remote audio received. Check widget mic and permissions.</div>
+      )}
       <Button onClick={() => {
         if (localStream) {
           localStream.getAudioTracks().forEach(track => track.enabled = !track.enabled);
