@@ -1,5 +1,5 @@
 import { Server, Socket } from 'socket.io';
-import { agents, calls, callQueue } from '../data/tempDB';
+import { agents, calls, callQueue, chatSessions } from '../data/tempDB';
 
 export function registerSignalingHandlers(io: Server) {
   io.on('connection', (socket: Socket) => {
@@ -156,6 +156,49 @@ export function registerSignalingHandlers(io: Server) {
       io.to(agent.socketId).emit('test-incoming-call', { uuid, agentId, fromSocketId: socket.id, test: true });
       socket.emit('test-call-result', { success: true, agentId });
     });
-    // ... other events
+
+    // --- Chat Events (MVP, non-breaking) ---
+    socket.on('chat:join', (data) => {
+      // data: { sessionId, companyUuid, visitorId, pageUrl }
+      if (!data.sessionId || !data.companyUuid || !data.visitorId) return;
+      if (!chatSessions[data.sessionId]) {
+        chatSessions[data.sessionId] = {
+          companyUuid: data.companyUuid,
+          visitorId: data.visitorId,
+          pageUrl: data.pageUrl,
+          startedAt: new Date().toISOString(),
+          messages: []
+        };
+      }
+      socket.join(data.sessionId);
+      socket.emit('chat:joined', { sessionId: data.sessionId });
+    });
+
+    socket.on('chat:message', (data) => {
+      // data: { sessionId, message, from, timestamp }
+      if (!data.sessionId || !data.message || !data.from) return;
+      const msg = {
+        message: data.message,
+        from: data.from,
+        timestamp: data.timestamp || new Date().toISOString()
+      };
+      if (chatSessions[data.sessionId]) {
+        chatSessions[data.sessionId].messages.push(msg);
+      }
+      io.to(data.sessionId).emit('chat:message', { ...msg, sessionId: data.sessionId });
+    });
+
+    socket.on('chat:typing', (data) => {
+      // data: { sessionId, from }
+      // To be implemented: broadcast typing indicator
+      socket.to(data.sessionId).emit('chat:typing', data);
+    });
+
+    socket.on('chat:end', (data) => {
+      // data: { sessionId }
+      // To be implemented: end chat session
+      socket.leave(data.sessionId);
+      socket.emit('chat:ended', { sessionId: data.sessionId });
+    });
   });
 } 

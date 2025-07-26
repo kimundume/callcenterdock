@@ -3,6 +3,8 @@ import Sidebar from './Sidebar';
 import { Avatar, Badge, Dropdown, List, Menu } from 'antd';
 import { BellOutlined } from '@ant-design/icons';
 import AdminDashboard from './AdminDashboard';
+import logoLight from '/logo-light.png';
+import logoDark from '/logo-dark.png';
 
 const sectionTitles: Record<string, string> = {
   dashboard: 'Dashboard Overview',

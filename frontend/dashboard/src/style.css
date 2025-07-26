@@ -158,3 +158,152 @@ body.dark .sidebar-item.active, .dark .sidebar-item.active {
     grid-template-columns: repeat(4, 1fr);
   }
 }
+
+/* Animations for landing page cards and features */
+@keyframes cardFadeIn {
+  0% { opacity: 0; transform: translateY(40px) scale(0.96); }
+  60% { opacity: 1; transform: translateY(-8px) scale(1.03); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes cardBounce {
+  0% { transform: scale(0.98); }
+  60% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+@keyframes cardHoverPop {
+  0% { transform: scale(1); }
+  60% { transform: scale(1.06); }
+  100% { transform: scale(1.03); }
+}
+
+.feature-card, .pricing section .card, .testimonials .card {
+  animation: cardFadeIn 0.8s cubic-bezier(.22,1,.36,1) both;
+}
+.feature-card:hover, .pricing section .card:hover {
+  animation: cardHoverPop 0.4s cubic-bezier(.22,1,.36,1) both;
+  box-shadow: 0 8px 32px #00e6ef33, 0 2px 16px #2E73FF11;
+  transform: scale(1.04) translateY(-4px);
+  z-index: 2;
+}
+
+.how-it-works > div > div, .features .feature-card {
+  transition: box-shadow 0.2s, transform 0.2s, background 0.2s;
+  will-change: transform, box-shadow;
+}
+
+@media (max-width: 600px) {
+  .feature-card, .pricing section .card, .testimonials .card {
+    animation: cardFadeIn 0.8s cubic-bezier(.22,1,.36,1) both;
+  }
+}
+
+/* Calldock floating widget pulse animation */
+@keyframes widgetPulse {
+  0% { box-shadow: 0 4px 24px #00e6ef33, 0 0 0 0 #2E73FF33; }
+  70% { box-shadow: 0 4px 24px #00e6ef33, 0 0 0 12px #2E73FF11; }
+  100% { box-shadow: 0 4px 24px #00e6ef33, 0 0 0 0 #2E73FF00; }
+}
+.sticky-widget > div {
+  animation: widgetPulse 2.2s infinite cubic-bezier(.4,0,.2,1);
+}
+
+/* Call Widget Animations */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+@keyframes cardBounce {
+  0%, 20%, 53%, 80%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  40%, 43% {
+    transform: translate3d(0, -8px, 0);
+  }
+  70% {
+    transform: translate3d(0, -4px, 0);
+  }
+  90% {
+    transform: translate3d(0, -2px, 0);
+  }
+}
+
+@keyframes fadein-bubble {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes music-bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes fadein {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Enhanced hover effects for buttons */
+.ant-btn {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.ant-btn:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Call widget specific styles */
+.call-widget-active {
+  animation: slideInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.call-widget-button {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.call-widget-button:hover {
+  transform: translateY(-2px);
+}
+
+/* Smooth transitions for all elements */
+* {
+  transition: all 0.2s ease;
+}
+
+/* Enhanced focus states */
+.ant-input:focus,
+.ant-btn:focus {
+  box-shadow: 0 0 0 2px rgba(46, 115, 255, 0.2) !important;
+}

@@ -71,15 +71,28 @@ router.post('/company/register', authLimiter as any, async (req: Request, res: R
 
 // POST /api/auth/login
 router.post('/auth/login', authLimiter as any, async (req: Request, res: Response) => {
-  const { companyUuid, username, password, role } = req.body;
-  if (![companyUuid, username, password, role].every((v: string) => validateString(v))) {
+  // Accept either email or companyUuid for login
+  const { email, companyUuid, username, password, role } = req.body;
+  let uuid = companyUuid;
+  if (email && !companyUuid) {
+    // Find companyUuid by email
+    const company = Object.values(companies).find((c: any) => c.email === email);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    uuid = company.uuid;
+  }
+  if (![uuid, username, password, role].every((v: string) => validateString(v))) {
     return res.status(400).json({ error: 'All fields required' });
   }
-  const user = findUserByCompanyAndRole(companyUuid, username, role);
+  // For admin, allow login by email as username
+  let user = findUserByCompanyAndRole(uuid, username, role);
+  if (!user && role === 'admin' && email) {
+    // Try to find admin by email
+    user = Object.values(users).find((u: any) => u.companyUuid === uuid && u.role === 'admin' && companies[uuid]?.email === email);
+  }
   if (!user || !(await bcrypt.compare(password, user.password))) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
-  const token = jwt.sign({ username, companyUuid, role }, JWT_SECRET, { expiresIn: '1h' });
+  const token = jwt.sign({ username: user.username, companyUuid: uuid, role }, JWT_SECRET, { expiresIn: '1h' });
   res.json({ token });
 });
 
@@ -251,6 +264,38 @@ router.post('/ivr/:companyUuid', authMiddleware, (req: Request, res: Response) =
   if (!decoded || decoded.companyUuid !== companyUuid || decoded.role !== 'admin') {
     return res.status(403).json({ error: 'Forbidden' });
   }
+  const { steps } = req.body;
+  if (!Array.isArray(steps)) {
+    return res.status(400).json({ error: 'Invalid IVR config' });
+  }
+  ivrConfigs[companyUuid] = { steps };
+  res.json({ success: true, config: ivrConfigs[companyUuid] });
+});
+
+// DEV ONLY: Create demo agent for demo company (no auth)
+router.post('/demo/create-demo-agent', async (req: Request, res: Response) => {
+  const { companyUuid, username, password } = req.body;
+  if (!companyUuid || !username || !password) return res.status(400).json({ error: 'Missing fields' });
+  const key = username + '@' + companyUuid;
+  if (users[key]) return res.json({ success: true, alreadyExists: true });
+  const hashed = await bcrypt.hash(password, 10);
+  users[key] = { username, password: hashed, companyUuid, role: 'agent' };
+  res.json({ success: true });
+});
+
+// DEV ONLY: Save widget settings without auth
+router.post('/demo/settings/:companyUuid', (req: Request, res: Response) => {
+  const { companyUuid } = req.params;
+  const { text, color, shape, img, position, animation, dark } = req.body;
+  if (!text || !color || !shape || !position || !animation) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+  widgetSettings[companyUuid] = { text, color, shape, img, position, animation, dark: !!dark };
+  res.json({ success: true, settings: widgetSettings[companyUuid] });
+});
+// DEV ONLY: Save IVR config without auth
+router.post('/demo/ivr/:companyUuid', (req: Request, res: Response) => {
+  const { companyUuid } = req.params;
   const { steps } = req.body;
   if (!Array.isArray(steps)) {
     return res.status(400).json({ error: 'Invalid IVR config' });

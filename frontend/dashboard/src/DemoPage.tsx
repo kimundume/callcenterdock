@@ -3,6 +3,7 @@ import { Input, Button, Card, Form, Select, Switch, Typography, Divider, Upload,
 import { UploadOutlined, InfoCircleOutlined, ExportOutlined, ReloadOutlined } from '@ant-design/icons';
 import IVRChatWidget from './IVRChatWidget';
 import { DEMO_COMPANY_UUID, DEMO_AGENT_USERNAME, DEMO_AGENT_PASSWORD, DEMO_ADMIN_USERNAME, DEMO_ADMIN_PASSWORD } from './demoCredentials';
+import logoLight from '/logo-light.png';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -133,7 +134,9 @@ export default function DemoPage() {
 
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto', padding: 32 }}>
-      <Title level={2} style={{ textAlign: 'center', marginBottom: 24 }}>Calldocker Widget Demo</Title>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 32 }}>
+        <img src={logoLight} alt="Calldock Logo" style={{ height: 64, width: 'auto' }} />
+      </div>
       <Paragraph style={{ textAlign: 'center', fontSize: 16, marginBottom: 32 }}>
         Test the full Calldocker MVP experience: configure the widget, start a call/chat, and see it received by an agent — all in one page!
       </Paragraph>
@@ -205,7 +208,7 @@ export default function DemoPage() {
               <span style={{ marginLeft: 8, fontWeight: 700, fontSize: 18 }}>{config.buttonText}</span>
             </Button>
             {/* Key forces remount for config reload */}
-            <IVRChatWidget key={widgetKey} open={widgetOpen} onClose={() => setWidgetOpen(false)} companyUuid={config.companyUuid} />
+            <IVRChatWidget open={widgetOpen} onClose={() => setWidgetOpen(false)} companyUuid={config.companyUuid} logoSrc={logoLight} />
           </div>
         </div>
         {/* Right: Agent Dashboard Iframe */}

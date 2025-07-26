@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import DashboardLayout from './DashboardLayout';
 import { Card, Row, Col, Empty, Table, Button, Modal, Form, Input, Select, Switch, message, Popconfirm, Tabs, Spin, Upload, Tooltip, Switch as AntSwitch, Select as AntSelect, Slider } from 'antd';
 import { Line } from 'react-chartjs-2'; // For analytics chart stub
-import { BellOutlined, ReloadOutlined, StopOutlined, BarChartOutlined, TeamOutlined, UserOutlined, PhoneOutlined, PlusOutlined, EditOutlined, DeleteOutlined, SaveOutlined, InboxOutlined, PlayCircleOutlined, PauseCircleOutlined, AudioOutlined, UserSwitchOutlined, BranchesOutlined, FileTextOutlined, PoweroffOutlined, PlusCircleOutlined, DownloadOutlined, CopyOutlined, CheckCircleOutlined, InfoCircleOutlined, SettingOutlined, QuestionCircleOutlined } from '@ant-design/icons'; // For notifications and controls
+import { BellOutlined, ReloadOutlined, StopOutlined, BarChartOutlined, TeamOutlined, UserOutlined, PhoneOutlined, PlusOutlined, EditOutlined, DeleteOutlined, SaveOutlined, InboxOutlined, PlayCircleOutlined, PauseCircleOutlined, AudioOutlined, UserSwitchOutlined, BranchesOutlined, FileTextOutlined, PoweroffOutlined, PlusCircleOutlined, DownloadOutlined, CopyOutlined, CheckCircleOutlined, InfoCircleOutlined, SettingOutlined, QuestionCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, TagOutlined } from '@ant-design/icons'; // For notifications and controls
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -603,6 +603,70 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
           </Row>
         </Tabs.TabPane>
         <Tabs.TabPane tab="Call Logs" key="calls">
+          {/* Call Metrics Summary */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(1, 1fr)',
+            gap: 24,
+            marginBottom: 32,
+          }}
+          className="metric-card-grid"
+          >
+            <Card className="card" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <PhoneOutlined style={{ fontSize: 32, color: '#2E73FF' }} />
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>Total Calls</div>
+                <div style={{ fontSize: 22, fontWeight: 700 }}>{callLogs.length}</div>
+              </div>
+            </Card>
+            <Card className="card" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <CheckCircleOutlined style={{ fontSize: 32, color: '#1CC88A' }} />
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>Answered Calls</div>
+                <div style={{ fontSize: 22, fontWeight: 700 }}>{callLogs.filter(l => (l.disposition || l.status || '').toLowerCase().includes('answer') || (l.status || '').toLowerCase() === 'accepted').length}</div>
+              </div>
+            </Card>
+            <Card className="card" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <CloseCircleOutlined style={{ fontSize: 32, color: '#E74A3B' }} />
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>Missed Calls</div>
+                <div style={{ fontSize: 22, fontWeight: 700 }}>{callLogs.filter(l => (l.disposition || l.status || '').toLowerCase().includes('miss') || (l.status || '').toLowerCase() === 'rejected').length}</div>
+              </div>
+            </Card>
+            <Card className="card" style={{ display: 'flex', alignItems: 'center', gap: 16, flexDirection: 'column', alignItems: 'flex-start' }}>
+              <ClockCircleOutlined style={{ fontSize: 32, color: '#00e6ef' }} />
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>Average Duration</div>
+                <div style={{ fontSize: 22, fontWeight: 700 }}>{(() => {
+                  if (!callLogs.length) return '00:00';
+                  const toSec = d => {
+                    if (!d) return 0;
+                    if (typeof d === 'number') return d;
+                    if (typeof d === 'string' && d.includes(':')) {
+                      const [min, sec] = d.split(':').map(Number);
+                      return min * 60 + sec;
+                    }
+                    return Number(d) || 0;
+                  };
+                  const avg = Math.round(callLogs.reduce((a, l) => a + toSec(l.duration), 0) / callLogs.length);
+                  const mm = String(Math.floor(avg / 60)).padStart(2, '0');
+                  const ss = String(avg % 60).padStart(2, '0');
+                  return `${mm}:${ss}`;
+                })()}</div>
+              </div>
+            </Card>
+            <Card className="card" style={{ display: 'flex', alignItems: 'center', gap: 16, flexDirection: 'column', alignItems: 'flex-start' }}>
+              <TagOutlined style={{ fontSize: 32, color: '#F6C23E' }} />
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>Call Tags</div>
+                <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {[...new Set(callLogs.flatMap(l => l.tags || []))].map(tag => (
+                    <span key={tag} style={{ background: '#007bff', color: '#fff', borderRadius: 4, padding: '2px 8px', fontSize: 14 }}>{tag}</span>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </div>
           {/* Call logs table and advanced filtering */}
           <Card title="Call Logs">
             <Input.Search

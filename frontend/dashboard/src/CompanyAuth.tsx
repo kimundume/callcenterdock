@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { DEMO_COMPANY_UUID, DEMO_ADMIN_USERNAME, DEMO_ADMIN_PASSWORD } from './demoCredentials';
+import logoLight from '/logo-light.png';
+import logoDark from '/logo-dark.png';
 
 const API_URL = 'http://localhost:5000/api/widget';
 
@@ -171,8 +173,13 @@ export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: 
     );
   }
 
+  const isDark = document.body.classList.contains('dark');
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f7f7f7' }}>
+    <div className="auth-container">
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 32 }}>
+        <img src={logoLight} alt="Calldock Logo" style={{ height: 64, width: 'auto', borderRadius: 16, boxShadow: '0 2px 12px #2E73FF22' }} />
+      </div>
+      <h2 style={{ fontWeight: 900, color: '#2E73FF', margin: 0, fontSize: 28 }}>Calldocker</h2>
       <div style={{ background: '#fff', padding: 32, borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', minWidth: 340 }}>
         <h2>{mode === 'register' ? 'Company Registration' : 'Admin Login'}</h2>
         <form onSubmit={mode === 'register' ? handleRegister : handleLogin}>

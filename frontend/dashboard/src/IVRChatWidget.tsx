@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Modal, Button, Input, Tooltip, Spin } from 'antd';
-import { AudioOutlined, SendOutlined, CloseOutlined, SoundOutlined, LoadingOutlined, RobotOutlined, UserOutlined, AudioMutedOutlined, PlayCircleOutlined, StopOutlined, SmileOutlined, PhoneOutlined } from '@ant-design/icons';
+import { AudioOutlined, SendOutlined, CloseOutlined, SoundOutlined, LoadingOutlined, RobotOutlined, UserOutlined, AudioMutedOutlined, PlayCircleOutlined, StopOutlined, SmileOutlined, PhoneOutlined, PauseCircleOutlined } from '@ant-design/icons';
 import { io } from 'socket.io-client';
+import logoLight from '/logo-light.png';
+import logoDark from '/logo-dark.png';
+import { v4 as uuidv4 } from 'uuid';
 
 const SOCKET_URL = 'http://localhost:5000';
 
@@ -19,7 +22,7 @@ const demoIVR = [
   }
 ];
 
-export default function IVRChatWidget({ open, onClose, companyUuid, dark = false }) {
+export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
   const [ivrConfig, setIvrConfig] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -46,6 +49,31 @@ export default function IVRChatWidget({ open, onClose, companyUuid, dark = false
   const [remoteStream, setRemoteStream] = useState(null);
   const peerRef = useRef(null);
   const remoteAudioRef = useRef(null);
+  // Mute state
+  const [muted, setMuted] = useState(false);
+  // Hold state
+  const [held, setHeld] = useState(false);
+  // Widget mode: 'call' or 'chat'
+  const [mode, setMode] = useState<'call' | 'chat'>('call');
+
+  // Chat state
+  const [chatSessionId, setChatSessionId] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const chatWidgetEndRef = useRef(null);
+  // Typing indicator state
+  const [agentTyping, setAgentTyping] = useState(false);
+  const [agentsOnline, setAgentsOnline] = useState(true);
+
+  // Check agent online status when widget opens or companyUuid changes
+  useEffect(() => {
+    if (!open || !companyUuid) return;
+    console.log('[Widget] companyUuid:', companyUuid);
+    fetch(`http://localhost:5000/api/agents/${companyUuid}`)
+      .then(res => res.json())
+      .then(list => setAgentsOnline(Array.isArray(list) && list.some(a => a.online)))
+      .catch(() => setAgentsOnline(false));
+  }, [open, companyUuid]);
 
   // Fetch IVR config when opened or companyUuid changes
   useEffect(() => {
@@ -285,6 +313,84 @@ export default function IVRChatWidget({ open, onClose, companyUuid, dark = false
     };
   }, [callState === 'in-call', agentSocketId]);
 
+  // Join chat session when entering chat mode
+  useEffect(() => {
+    if (mode !== 'chat' || !open) return;
+    let sessionId = chatSessionId;
+    if (!sessionId) {
+      sessionId = uuidv4();
+      setChatSessionId(sessionId);
+    }
+    if (socketRef.current && sessionId && companyUuid) {
+      console.log('[Widget] emit chat:join', { sessionId, companyUuid, visitorId: sessionId, pageUrl: window.location.href });
+      socketRef.current.emit('chat:join', {
+        sessionId,
+        companyUuid,
+        visitorId: sessionId,
+        pageUrl: window.location.href
+      });
+    }
+    setChatMessages([]);
+  }, [mode, open]);
+
+  // Listen for chat messages
+  useEffect(() => {
+    if (!socketRef.current) return;
+    const socket = socketRef.current;
+    const onMsg = (data) => {
+      console.log('[Widget] received chat:message', data);
+      setChatMessages(msgs => [...msgs, data]);
+    };
+    socket.on('chat:message', onMsg);
+    return () => socket.off('chat:message', onMsg);
+  }, [mode, open]);
+
+  // Scroll to bottom on new chat message
+  useEffect(() => {
+    if (mode === 'chat' && chatWidgetEndRef.current) {
+      chatWidgetEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, mode]);
+
+  // Emit typing event when visitor types
+  useEffect(() => {
+    if (mode !== 'chat' || !open || !chatSessionId || !socketRef.current) return;
+    if (!chatInput) return;
+    const timeout = setTimeout(() => {
+      socketRef.current.emit('chat:typing', { sessionId: chatSessionId, from: 'visitor' });
+    }, 200);
+    return () => clearTimeout(timeout);
+  }, [chatInput, mode, open, chatSessionId]);
+
+  // Listen for agent typing
+  useEffect(() => {
+    if (!socketRef.current || mode !== 'chat' || !open) return;
+    const socket = socketRef.current;
+    const onTyping = (data) => {
+      if (data.from === 'agent') {
+        setAgentTyping(true);
+        setTimeout(() => setAgentTyping(false), 1200);
+      }
+    };
+    socket.on('chat:typing', onTyping);
+    return () => socket.off('chat:typing', onTyping);
+  }, [mode, open]);
+
+  // Send chat message
+  const handleSendChat = () => {
+    if (!chatInput.trim() || !chatSessionId || !socketRef.current) return;
+    const msg = {
+      sessionId: chatSessionId,
+      message: chatInput.trim(),
+      from: 'visitor',
+      timestamp: new Date().toISOString()
+    };
+    console.log('[Widget] emit chat:message', msg);
+    socketRef.current.emit('chat:message', msg);
+    setChatMessages(msgs => [...msgs, msg]);
+    setChatInput('');
+  };
+
   // Handle speech recognition
   const startListening = () => {
     if (!('webkitSpeechRecognition' in window)) {
@@ -368,7 +474,7 @@ export default function IVRChatWidget({ open, onClose, companyUuid, dark = false
 
   // Detect dark mode (auto or from prop)
   const prefersDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const isDark = dark || prefersDark;
+  const isDark = prefersDark;
 
   // Chat bubble animation
   const bubbleAnim = {
@@ -390,6 +496,50 @@ export default function IVRChatWidget({ open, onClose, companyUuid, dark = false
     letterSpacing: -1,
     position: 'relative',
     minHeight: 56,
+  };
+
+  // --- UI polish styles ---
+  const headerGradient = 'linear-gradient(90deg, #2E73FF 0%, #6C47FF 100%)';
+  const agentBubbleStyle = {
+    background: '#fff',
+    color: '#222',
+    borderRadius: 16,
+    padding: '10px 16px',
+    margin: '4px 0',
+    maxWidth: '80%',
+    alignSelf: 'flex-start',
+    boxShadow: '0 1px 4px rgba(44,62,80,0.07)'
+  };
+  const visitorBubbleStyle = {
+    background: 'linear-gradient(90deg, #2E73FF 0%, #6C47FF 100%)',
+    color: '#fff',
+    borderRadius: 16,
+    padding: '10px 16px',
+    margin: '4px 0',
+    maxWidth: '80%',
+    alignSelf: 'flex-end',
+    boxShadow: '0 1px 4px rgba(44,62,80,0.12)'
+  };
+  const chatContainerStyle = {
+    display: 'flex', flexDirection: 'column', height: 340, overflowY: 'auto', background: '#f7fafd', padding: 16, borderRadius: 16, marginBottom: 8
+  };
+  const inputBarStyle = {
+    display: 'flex', alignItems: 'center', background: '#fff', borderRadius: 24, boxShadow: '0 1px 4px rgba(44,62,80,0.07)', padding: '4px 12px', margin: '0 8px 8px 8px'
+  };
+  const sendBtnStyle = {
+    background: 'linear-gradient(90deg, #2E73FF 0%, #6C47FF 100%)',
+    borderRadius: '50%',
+    width: 40,
+    height: 40,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    boxShadow: '0 2px 8px rgba(44,62,80,0.12)',
+    color: '#fff',
+    fontSize: 22,
+    border: 'none',
+    cursor: 'pointer'
   };
 
   // Responsive modal width
@@ -422,150 +572,366 @@ export default function IVRChatWidget({ open, onClose, companyUuid, dark = false
     return null;
   }
 
+  // In chat mode, show offline banner if no agents online
+  if (mode === 'chat' && !agentsOnline) {
+    return (
+      <Modal open={open} onCancel={onClose} footer={null} width={400} centered>
+        <div style={{ padding: 32, textAlign: 'center' }}>
+          <RobotOutlined style={{ fontSize: 48, color: '#aaa', marginBottom: 16 }} />
+          <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>All agents are offline</div>
+          <div style={{ color: '#888', marginBottom: 24 }}>Please try again later or leave a message.</div>
+          <Button type="primary" onClick={() => setMode('call')}>Back</Button>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
-    <Modal open={open} onCancel={onClose} footer={null} width={modalWidth} centered bodyStyle={{ padding: 0, borderRadius: 16, overflow: 'hidden', background: isDark ? '#181f2a' : '#f7fafd' }} closeIcon={null} style={{ top: 24 }}>
-      {/* Header */}
-      <div style={headerStyle}>
-        <div style={{ width: 36, height: 36, borderRadius: 12, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: '#00e6ef', fontWeight: 900, boxShadow: '0 2px 8px #00e6ef22' }}>🤖</div>
-        <span style={{ flex: 1 }}>CallDocker IVR</span>
-        {callState === 'in-call' && (
-          <span style={{ marginRight: 16, fontWeight: 600, color: isDark ? '#00e6ef' : '#2E73FF', fontSize: 15, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <PhoneOutlined style={{ color: '#00e6ef' }} /> In Call <span style={{ fontVariantNumeric: 'tabular-nums', marginLeft: 4 }}>{callTimer}</span>
-          </span>
-        )}
-        <button onClick={onClose} style={{ position: 'absolute', right: 16, top: 12, background: 'none', border: 'none', color: '#fff', fontSize: 22, cursor: 'pointer' }}><CloseOutlined /></button>
+    <Modal
+      open={open}
+      onCancel={onClose}
+      footer={null}
+      width={400}
+      centered
+      bodyStyle={{ 
+        padding: 0, 
+        borderRadius: (callState === 'in-call' || callState === 'ringing') ? 32 : 24, 
+        overflow: 'hidden', 
+        background: '#f7fafd',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: (callState === 'in-call' || callState === 'ringing') 
+          ? '0 20px 40px rgba(46, 115, 255, 0.15), 0 8px 16px rgba(0, 0, 0, 0.1)' 
+          : '0 8px 24px rgba(0, 0, 0, 0.12)',
+        transform: (callState === 'in-call' || callState === 'ringing') ? 'scale(1.02)' : 'scale(1)',
+        border: (callState === 'in-call' || callState === 'ringing') ? '2px solid rgba(46, 115, 255, 0.2)' : 'none'
+      }}
+      style={{ 
+        top: 'auto', 
+        bottom: 24, 
+        right: 24, 
+        margin: 0, 
+        padding: 0,
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+      }}
+      closeIcon={
+        <span style={{ 
+          fontSize: 22, 
+          color: '#2E73FF',
+          transition: 'all 0.2s ease',
+          cursor: 'pointer',
+          padding: '4px',
+          borderRadius: '50%',
+          display: 'inline-block'
+        }} 
+        onMouseEnter={(e) => {
+          e.target.style.background = 'rgba(46, 115, 255, 0.1)';
+          e.target.style.transform = 'scale(1.1)';
+        }}
+        onMouseLeave={(e) => {
+          e.target.style.background = 'transparent';
+          e.target.style.transform = 'scale(1)';
+        }}
+        >×</span>
+      }
+      mask={false}
+      maskClosable={true}
+      zIndex={1200}
+    >
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        marginBottom: 16,
+        transition: 'all 0.3s ease'
+      }}>
+        <img 
+          src={logoSrc || logoLight} 
+          alt="Calldock Widget Logo" 
+          style={{ 
+            width: 48, 
+            height: 48, 
+            objectFit: 'contain', 
+            marginTop: 8,
+            transition: 'all 0.3s ease',
+            transform: (callState === 'in-call' || callState === 'ringing') ? 'scale(1.1)' : 'scale(1)',
+            filter: (callState === 'in-call' || callState === 'ringing') ? 'drop-shadow(0 4px 8px rgba(46, 115, 255, 0.3))' : 'none'
+          }} 
+        />
       </div>
-      {/* Chat body */}
-      <div style={{ background: isDark ? '#181f2a' : '#fff', borderRadius: 16, boxShadow: isDark ? '0 4px 24px #2E73FF22' : '0 4px 24px #00e6ef22', minHeight: 320, display: 'flex', flexDirection: 'column', position: 'relative', height: window.innerWidth < 500 ? '70vh' : 520 }}>
-        {callState === 'idle' && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24 }}>
-            <div style={{ fontSize: 38, color: isDark ? '#00e6ef' : '#2E73FF', marginBottom: 12 }}><PhoneOutlined /></div>
-            <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 8, color: isDark ? '#fff' : '#0a2239' }}>Ready to Call</div>
-            <div style={{ color: isDark ? '#aaa' : '#888', fontSize: 15, marginBottom: 24 }}>Click below to start a call with our AI IVR</div>
-            <Button type="primary" size="large" icon={<PhoneOutlined />} style={{ borderRadius: 24, background: 'linear-gradient(90deg, #00e6ef 0%, #2E73FF 100%)', fontWeight: 700, fontSize: 18, height: 48, width: 180 }} onClick={handleStartCall}>
-              Start Call
-            </Button>
-            {callError && <div style={{ color: '#E74A3B', fontWeight: 600, marginTop: 16 }}>{callError}</div>}
-          </div>
-        )}
-        {(callState === 'ringing' || callState === 'in-call') && (
+      <div style={{ 
+        padding: 16,
+        transition: 'all 0.3s ease'
+      }}>
+        {mode === 'call' && (
           <>
             <CallStatusBanner />
-            {webrtcState === 'connecting' && <div style={{ background: '#e8f1ff', color: '#2E73FF', fontWeight: 600, fontSize: 15, padding: '8px 0', textAlign: 'center', borderRadius: 8, margin: '8px 0 0 0' }}>Connecting audio...</div>}
-            {webrtcState === 'connected' && <div style={{ background: '#e8f1ff', color: '#1CC88A', fontWeight: 600, fontSize: 15, padding: '8px 0', textAlign: 'center', borderRadius: 8, margin: '8px 0 0 0' }}>Live audio with agent</div>}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '24px 8px 12px 8px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ 
+              minHeight: 180, 
+              maxHeight: 220, 
+              overflowY: 'auto', 
+              background: '#fff', 
+              borderRadius: (callState === 'in-call' || callState === 'ringing') ? 20 : 12, 
+              marginBottom: 12, 
+              padding: 12,
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: (callState === 'in-call' || callState === 'ringing') 
+                ? '0 4px 12px rgba(46, 115, 255, 0.1)' 
+                : '0 2px 8px rgba(0, 0, 0, 0.05)',
+              border: (callState === 'in-call' || callState === 'ringing') 
+                ? '1px solid rgba(46, 115, 255, 0.1)' 
+                : 'none'
+            }}>
               {messages.map((msg, i) => (
-                <div key={i} style={{ alignSelf: msg.from === 'user' ? 'flex-end' : 'flex-start', maxWidth: '80%', ...bubbleAnim }}>
-                  <div style={{
-                    background: msg.from === 'user' ? (isDark ? 'linear-gradient(90deg, #2E73FF 0%, #00e6ef 100%)' : 'linear-gradient(90deg, #00e6ef 0%, #2E73FF 100%)') : (isDark ? '#232c3d' : '#f7fafd'),
-                    color: msg.from === 'user' ? '#fff' : (isDark ? '#fff' : '#0a2239'),
-                    borderRadius: msg.from === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                    padding: '12px 18px',
-                    fontWeight: 500,
-                    fontSize: 16,
-                    boxShadow: msg.from === 'user' ? '0 2px 8px #00e6ef33' : (isDark ? '0 1px 4px #2E73FF22' : '0 1px 4px #2E73FF11'),
-                    marginBottom: 2,
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    transition: 'background 0.2s',
+                <div key={i} style={{ textAlign: msg.from === 'user' ? 'right' : 'left', margin: '8px 0' }}>
+                  <span style={{
+                    display: 'inline-block',
+                    background: msg.from === 'user' ? '#2E73FF' : '#e8f1ff',
+                    color: msg.from === 'user' ? '#fff' : '#222',
+                    borderRadius: (callState === 'in-call' || callState === 'ringing') ? 16 : 12,
+                    padding: '6px 14px',
+                    maxWidth: 220,
+                    transition: 'all 0.3s ease',
+                    transform: 'translateY(0)',
+                    ...bubbleAnim
                   }}>
-                    {/* Avatar */}
-                    <span style={{ marginRight: 8, display: 'flex', alignItems: 'center' }}>
-                      {msg.from === 'user' ? <UserOutlined style={{ color: isDark ? '#fff' : '#2E73FF' }} /> : <RobotOutlined style={{ color: isDark ? '#00e6ef' : '#2E73FF' }} />}
-                    </span>
                     {msg.text}
-                  </div>
+                  </span>
                 </div>
               ))}
-              {/* On Hold Indicator */}
-              {onHold && (
-                <div style={{ alignSelf: 'flex-start', maxWidth: '80%', ...bubbleAnim }}>
-                  <div style={{ background: isDark ? '#232c3d' : '#f7fafd', color: isDark ? '#00e6ef' : '#2E73FF', borderRadius: '18px 18px 18px 4px', padding: '12px 18px', fontWeight: 600, fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <SoundOutlined style={{ fontSize: 20, color: isDark ? '#00e6ef' : '#2E73FF' }} />
-                    <span>🎵 You are on hold. Please wait...</span>
-                    <span className="typing-indicator" style={{ display: 'inline-block', width: 32 }}>
-                      <span style={{ display: 'inline-block', width: 6, height: 6, background: isDark ? '#00e6ef' : '#2E73FF', borderRadius: '50%', marginRight: 2, animation: 'blink 1s infinite alternate' }} />
-                      <span style={{ display: 'inline-block', width: 6, height: 6, background: isDark ? '#00e6ef' : '#2E73FF', borderRadius: '50%', marginRight: 2, animation: 'blink 1s 0.2s infinite alternate' }} />
-                      <span style={{ display: 'inline-block', width: 6, height: 6, background: isDark ? '#00e6ef' : '#2E73FF', borderRadius: '50%', animation: 'blink 1s 0.4s infinite alternate' }} />
-                    </span>
-                  </div>
-                </div>
-              )}
-              {/* Typing indicator */}
-              {loading && (
-                <div style={{ alignSelf: 'flex-start', maxWidth: '80%', ...bubbleAnim }}>
-                  <div style={{ background: isDark ? '#232c3d' : '#f7fafd', color: isDark ? '#fff' : '#0a2239', borderRadius: '18px 18px 18px 4px', padding: '12px 18px', fontWeight: 500, fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <RobotOutlined style={{ color: isDark ? '#00e6ef' : '#2E73FF' }} />
-                    <span className="typing-indicator" style={{ display: 'inline-block', width: 32 }}>
-                      <span style={{ display: 'inline-block', width: 6, height: 6, background: isDark ? '#00e6ef' : '#2E73FF', borderRadius: '50%', marginRight: 2, animation: 'blink 1s infinite alternate' }} />
-                      <span style={{ display: 'inline-block', width: 6, height: 6, background: isDark ? '#00e6ef' : '#2E73FF', borderRadius: '50%', marginRight: 2, animation: 'blink 1s 0.2s infinite alternate' }} />
-                      <span style={{ display: 'inline-block', width: 6, height: 6, background: isDark ? '#00e6ef' : '#2E73FF', borderRadius: '50%', animation: 'blink 1s 0.4s infinite alternate' }} />
-                    </span>
-                  </div>
-                </div>
-              )}
               <div ref={chatEndRef} />
             </div>
-            {/* Input area */}
-            <div style={{ borderTop: isDark ? '1px solid #232c3d' : '1px solid #e5e7eb', padding: 12, display: 'flex', alignItems: 'center', gap: 8, background: isDark ? '#232c3d' : '#f7fafd' }}>
+            <div style={{ 
+              display: 'flex', 
+              gap: 8,
+              transition: 'all 0.3s ease'
+            }}>
               <Input
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onPressEnter={() => handleSend()}
-                placeholder="Type 1, 2, or say 'Sales'..."
-                style={{ flex: 1, borderRadius: 24, fontSize: 16, background: isDark ? '#181f2a' : '#fff', color: isDark ? '#fff' : undefined, border: isDark ? '1px solid #232c3d' : undefined }}
-                disabled={loading || listening}
-                autoFocus
+                placeholder="Type or speak..."
+                disabled={loading || callState === 'ended'}
+                style={{ 
+                  flex: 1,
+                  borderRadius: (callState === 'in-call' || callState === 'ringing') ? 20 : 6,
+                  transition: 'all 0.3s ease',
+                  border: (callState === 'in-call' || callState === 'ringing') 
+                    ? '1px solid rgba(46, 115, 255, 0.2)' 
+                    : undefined
+                }}
               />
-              <Tooltip title={listening ? 'Stop Listening' : 'Speak'}>
+              <Button 
+                icon={<AudioOutlined />} 
+                onClick={startListening} 
+                disabled={listening || loading}
+                style={{
+                  borderRadius: (callState === 'in-call' || callState === 'ringing') ? 20 : 6,
+                  transition: 'all 0.3s ease'
+                }}
+              />
+              <Button 
+                icon={<SendOutlined />} 
+                type="primary" 
+                onClick={() => handleSend()} 
+                disabled={!input || loading}
+                style={{
+                  borderRadius: (callState === 'in-call' || callState === 'ringing') ? 20 : 6,
+                  transition: 'all 0.3s ease'
+                }}
+              />
+            </div>
+            <div style={{ 
+              marginTop: 12, 
+              textAlign: 'center', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              gap: 12,
+              transition: 'all 0.3s ease'
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                gap: 8, 
+                justifyContent: 'center', 
+                alignItems: 'center', 
+                flexWrap: 'wrap', 
+                maxWidth: '100%',
+                transition: 'all 0.3s ease'
+              }}>
                 <Button
-                  icon={listening ? <AudioMutedOutlined /> : <AudioOutlined />} 
-                  onClick={listening ? stopListening : startListening}
-                  style={{ background: listening ? (isDark ? '#2E73FF' : '#2E73FF') : (isDark ? '#232c3d' : '#fff'), color: listening ? '#fff' : (isDark ? '#00e6ef' : '#2E73FF'), borderRadius: 24, border: 'none', fontSize: 20 }}
-                  disabled={loading}
-                />
-              </Tooltip>
-              <Button
-                icon={<SendOutlined />}
-                type="primary"
-                onClick={() => handleSend()}
-                style={{ borderRadius: 24, background: 'linear-gradient(90deg, #00e6ef 0%, #2E73FF 100%)', fontWeight: 700 }}
-                disabled={loading || !input.trim()}
+                  icon={<PhoneOutlined />}
+                  type="primary"
+                  onClick={handleStartCall}
+                  disabled={callState === 'ringing' || callState === 'in-call'}
+                  style={{ 
+                    fontWeight: 700, 
+                    fontSize: 16, 
+                    padding: '0 18px', 
+                    height: 44, 
+                    borderRadius: 22, 
+                    boxShadow: '0 2px 12px #00e6ef33', 
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', 
+                    animation: callState === 'idle' ? 'cardBounce 1.2s' : undefined,
+                    transform: 'translateY(0)',
+                    ':hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 4px 16px #00e6ef44'
+                    }
+                  }}
+                >
+                  Start Call
+                </Button>
+                <Button
+                  icon={<SendOutlined />}
+                  type="default"
+                  onClick={() => setMode('chat')}
+                  style={{ 
+                    fontWeight: 700, 
+                    fontSize: 16, 
+                    padding: '0 18px', 
+                    height: 44, 
+                    borderRadius: 22, 
+                    boxShadow: '0 2px 12px #00e6ef22', 
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', 
+                    animation: 'cardBounce 1.2s',
+                    transform: 'translateY(0)',
+                    ':hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 4px 16px #00e6ef33'
+                    }
+                  }}
+                >
+                  Start Chat
+                </Button>
+              </div>
+              {(callState === 'in-call' || callState === 'ringing') && (
+                <div style={{ 
+                  display: 'flex', 
+                  gap: 8, 
+                  justifyContent: 'center', 
+                  alignItems: 'center', 
+                  flexWrap: 'wrap', 
+                  maxWidth: '100%',
+                  animation: 'slideInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+                  transition: 'all 0.3s ease'
+                }}>
+                  <Button
+                    icon={muted ? <AudioMutedOutlined /> : <SoundOutlined />}
+                    onClick={() => {
+                      setMuted(m => !m);
+                      if (localStream) {
+                        localStream.getAudioTracks().forEach(track => (track.enabled = muted));
+                      }
+                    }}
+                    style={{ 
+                      background: muted ? '#e74a3b' : '#f7fafd', 
+                      color: muted ? '#fff' : '#2E73FF', 
+                      border: 'none', 
+                      fontWeight: 700, 
+                      fontSize: 16, 
+                      height: 44, 
+                      borderRadius: 22, 
+                      boxShadow: muted ? '0 2px 12px #e74a3b33' : '0 2px 12px #00e6ef22', 
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', 
+                      animation: muted ? 'pulse 0.6s ease-in-out' : undefined,
+                      transform: 'translateY(0)',
+                      ':hover': {
+                        transform: 'translateY(-2px)',
+                        boxShadow: muted ? '0 4px 16px #e74a3b44' : '0 4px 16px #00e6ef33'
+                      }
+                    }}
+                  >
+                    {muted ? 'Unmute' : 'Mute'}
+                  </Button>
+                  <Button
+                    icon={<PauseCircleOutlined />}
+                    onClick={() => setHeld(h => !h)}
+                    style={{ 
+                      background: held ? '#f6c23e' : '#f7fafd', 
+                      color: held ? '#fff' : '#2E73FF', 
+                      border: 'none', 
+                      fontWeight: 700, 
+                      fontSize: 16, 
+                      height: 44, 
+                      borderRadius: 22, 
+                      boxShadow: held ? '0 2px 12px #f6c23e33' : '0 2px 12px #00e6ef22', 
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', 
+                      animation: held ? 'pulse 0.6s ease-in-out' : undefined,
+                      transform: 'translateY(0)',
+                      ':hover': {
+                        transform: 'translateY(-2px)',
+                        boxShadow: held ? '0 4px 16px #f6c23e44' : '0 4px 16px #00e6ef33'
+                      }
+                    }}
+                  >
+                    {held ? 'Resume' : 'Hold'}
+                  </Button>
+                  <Button
+                    icon={<CloseOutlined />}
+                    danger
+                    onClick={handleHangUp}
+                    style={{ 
+                      fontWeight: 700, 
+                      fontSize: 16, 
+                      height: 44, 
+                      borderRadius: 22, 
+                      boxShadow: '0 2px 12px #e74a3b33', 
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', 
+                      animation: 'cardBounce 1.2s',
+                      transform: 'translateY(0)',
+                      ':hover': {
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 4px 16px #e74a3b44'
+                      }
+                    }}
+                  >
+                    End Call
+                  </Button>
+                </div>
+              )}
+            </div>
+            {callError && <div style={{ color: 'red', marginTop: 8 }}>{callError}</div>}
+          </>
+        )}
+        {mode === 'chat' && (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 8 }}>
+              <Button size="small" onClick={() => setMode('call')} icon={<CloseOutlined />} style={{ borderRadius: 16, background: '#f7fafd', color: '#2E73FF', border: '1px solid #2E73FF', fontWeight: 600 }}>Back</Button>
+            </div>
+            {/* --- Header ---
+            <div style={{ background: headerGradient, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: '18px 20px 10px 20px', color: '#fff', display: 'flex', alignItems: 'center', flexDirection: 'column' }}>
+              <div style={{ fontWeight: 600, fontSize: 18, marginBottom: 2 }}>Chat with us</div>
+              <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 2 }}>{agentsOnline ? 'We are online!' : 'All agents are offline'}</div>
+            </div> */}
+            {/* Chat area */}
+            <div style={chatContainerStyle}>
+              {chatMessages.map((msg, i) => (
+                <div key={i} style={msg.from === 'visitor' ? visitorBubbleStyle : agentBubbleStyle}>
+                  <div style={{ fontSize: 15 }}>{msg.message}</div>
+                  <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2, textAlign: msg.from === 'visitor' ? 'right' : 'left' }}>{msg.timestamp && new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+              ))}
+              {/* Typing indicator */}
+              {agentTyping && <div style={{ alignSelf: 'flex-start', margin: '4px 0', fontSize: 13, color: '#2E73FF', background: '#eaf1ff', borderRadius: 12, padding: '4px 12px' }}>Agent is typing...</div>}
+              <div ref={chatWidgetEndRef} />
+            </div>
+            {/* Input bar */}
+            <div style={inputBarStyle}>
+              <input
+                style={{ flex: 1, border: 'none', outline: 'none', fontSize: 15, background: 'transparent', padding: 8 }}
+                placeholder="Type in a message..."
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSendChat()}
+                disabled={!agentsOnline}
               />
-              <Button danger icon={<PhoneOutlined />} style={{ borderRadius: 24, fontWeight: 700, marginLeft: 8 }} onClick={handleHangUp}>
-                Hang Up
-              </Button>
-              <Button onClick={() => {
-                if (localStream) {
-                  localStream.getAudioTracks().forEach(track => track.enabled = !track.enabled);
-                }
-              }} style={{ marginLeft: 8 }}>{localStream && localStream.getAudioTracks()[0]?.enabled ? 'Mute' : 'Unmute'}</Button>
+              <button style={sendBtnStyle} onClick={handleSendChat} disabled={!chatInput.trim() || !agentsOnline}>
+                <span style={{ fontWeight: 700, fontSize: 22 }}>&#9658;</span>
+              </button>
             </div>
           </>
         )}
-        {callState === 'ended' && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24 }}>
-            <div style={{ fontSize: 38, color: '#E74A3B', marginBottom: 12 }}><PhoneOutlined /></div>
-            <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 8, color: isDark ? '#fff' : '#0a2239' }}>Call Ended</div>
-            <div style={{ color: isDark ? '#aaa' : '#888', fontSize: 15, marginBottom: 24 }}>{callError || 'Thank you for calling.'}</div>
-            <Button type="primary" size="large" icon={<PhoneOutlined />} style={{ borderRadius: 24, background: 'linear-gradient(90deg, #00e6ef 0%, #2E73FF 100%)', fontWeight: 700, fontSize: 18, height: 48, width: 180 }} onClick={() => setCallState('idle')}>
-              New Call
-            </Button>
-          </div>
-        )}
       </div>
-      <audio ref={remoteAudioRef} autoPlay style={{ display: remoteStream ? 'block' : 'none', width: '100%' }} />
-      {!remoteStream && webrtcState === 'connected' && (
-        <div style={{ color: '#E74A3B', fontWeight: 600, textAlign: 'center', marginTop: 8 }}>No remote audio received. Check agent mic and permissions.</div>
-      )}
-      {/* Animations */}
-      <style>{`
-        @keyframes fadein-bubble { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-        @keyframes blink { 0% { opacity: 0.2; } 100% { opacity: 1; } }
-        @keyframes music-bounce { 0% { transform: translateY(0); } 100% { transform: translateY(-6px) scale(1.2); } }
-        @media (max-width: 500px) {
-          .ant-modal-content { border-radius: 0 !important; }
-        }
-      `}</style>
     </Modal>
   );
 } 

@@ -3,6 +3,9 @@ import './style.css';
 import { useNavigate } from 'react-router-dom';
 import { Modal, Button } from 'antd';
 import IVRChatWidget from './IVRChatWidget';
+import { FaWhatsapp, FaUsers, FaChartLine, FaGlobe, FaLink, FaChartPie, FaPlug, FaPhoneAlt, FaUserCircle, FaUserTie, FaUserNurse, FaStar } from 'react-icons/fa';
+import logoLight from '/logo-light.png';
+import logoDark from '/logo-dark.png';
 
 // Placeholder icons and images
 const FeatureIcon = ({ children }: { children: React.ReactNode }) => (
@@ -12,12 +15,12 @@ const FeatureIcon = ({ children }: { children: React.ReactNode }) => (
 );
 
 const features = [
-  { icon: '👥', title: 'Multi-Agent Support' },
-  { icon: '💬', title: 'WhatsApp Integration' },
-  { icon: '📈', title: 'Real-Time Logs' },
-  { icon: '🌐', title: 'Embedded Anywhere' },
-  { icon: '🔗', title: 'Webhook-Ready' },
-  { icon: '📊', title: 'Analytics Dashboard' },
+  { icon: <FaUsers />, title: 'Multi-Agent Support' },
+  { icon: <FaWhatsapp color="#25D366" />, title: 'WhatsApp Integration' },
+  { icon: <FaChartLine color="#2E73FF" />, title: 'Real-Time Logs' },
+  { icon: <FaGlobe color="#00e6ef" />, title: 'Embedded Anywhere' },
+  { icon: <FaLink color="#2E73FF" />, title: 'Webhook-Ready' },
+  { icon: <FaChartPie color="#2E73FF" />, title: 'Analytics Dashboard' },
 ];
 
 const useCases = [
@@ -25,9 +28,9 @@ const useCases = [
 ];
 
 const testimonials = [
-  { name: 'Jane Doe', avatar: '🧑‍💼', text: 'Calldocker made our support seamless and fast!' },
-  { name: 'John Smith', avatar: '👨‍💻', text: 'The widget is beautiful and easy to use.' },
-  { name: 'Priya Patel', avatar: '👩‍⚕️', text: 'Our clinic never misses a call now.' },
+  { name: 'Jane Doe', avatar: <FaUserTie color="#2E73FF" />, text: 'Calldocker made our support seamless and fast!', company: 'Acme Corp', rating: 5 },
+  { name: 'John Smith', avatar: <FaUserCircle color="#00e6ef" />, text: 'The widget is beautiful and easy to use.', company: 'Smith Digital', rating: 5 },
+  { name: 'Priya Patel', avatar: <FaUserNurse color="#1CC88A" />, text: 'Our clinic never misses a call now.', company: 'Patel Clinic', rating: 4 },
 ];
 
 const plans = [
@@ -53,6 +56,7 @@ export default function LandingPage() {
     <div className="landing-root" style={{ fontFamily: 'Inter, sans-serif', background: 'linear-gradient(120deg, #f7fafd 0%, #e8f1ff 100%)', color: '#0a2239', minHeight: '100vh' }}>
       {/* Hero Section */}
       <section className="hero" style={{ minHeight: 520, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', textAlign: 'center', padding: '64px 16px 32px' }}>
+        <img src={logoLight} alt="Calldock Logo" style={{ width: 120, height: 120, marginBottom: 16, marginTop: 8, filter: 'drop-shadow(0 4px 24px #00e6ef33)' }} />
         <div className="hero-bg-anim" style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
           {/* Animated bubbles or flowing lines (placeholder) */}
           <svg width="100%" height="100%" style={{ position: 'absolute', left: 0, top: 0 }}>
@@ -91,10 +95,14 @@ export default function LandingPage() {
       <section className="how-it-works" style={{ maxWidth: 1100, margin: '0 auto', padding: '64px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <h2 style={{ fontSize: 32, fontWeight: 800, marginBottom: 32 }}>How It Works</h2>
         <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {['Embed Widget', 'Connect Webhooks', 'Receive Live Calls'].map((step, i) => (
-            <div key={step} style={{ background: '#fff', borderRadius: 24, boxShadow: '0 2px 16px #2E73FF11', padding: 32, minWidth: 220, maxWidth: 260, textAlign: 'center', transition: 'transform 0.3s', fontWeight: 600, fontSize: 20 }}>
-              <div style={{ fontSize: 40, marginBottom: 16 }}>{i === 0 ? '🔌' : i === 1 ? '🔗' : '📞'}</div>
-              {step}
+          {[
+            { icon: <FaPlug color="#00e6ef" />, label: 'Embed Widget' },
+            { icon: <FaLink color="#2E73FF" />, label: 'Connect Webhooks' },
+            { icon: <FaPhoneAlt color="#1CC88A" />, label: 'Receive Live Calls' },
+          ].map((step, i) => (
+            <div key={step.label} style={{ background: 'linear-gradient(120deg, #f7fafd 60%, #e8f1ff 100%)', borderRadius: 24, boxShadow: '0 2px 16px #2E73FF11', padding: 32, minWidth: 220, maxWidth: 260, textAlign: 'center', transition: 'transform 0.3s', fontWeight: 600, fontSize: 20, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 16 }}>{step.icon}</div>
+              {step.label}
             </div>
           ))}
         </div>
@@ -143,10 +151,15 @@ export default function LandingPage() {
         <h2 style={{ fontSize: 32, fontWeight: 800, marginBottom: 32, textAlign: 'center' }}>What Our Users Say</h2>
         <div style={{ display: 'flex', gap: 32, overflowX: 'auto', scrollSnapType: 'x mandatory', paddingBottom: 16 }}>
           {testimonials.map((t, i) => (
-            <div key={t.name} style={{ minWidth: 280, background: '#fff', borderRadius: 20, boxShadow: '0 2px 16px #2E73FF11', padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', scrollSnapAlign: 'center', fontWeight: 500, fontSize: 18, marginRight: 8 }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>{t.avatar}</div>
-              <div style={{ marginBottom: 12, color: '#213547' }}>{t.text}</div>
+            <div key={t.name} style={{ minWidth: 320, background: 'linear-gradient(120deg, #f7fafd 60%, #e8f1ff 100%)', borderRadius: 20, boxShadow: '0 2px 16px #2E73FF11', padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', scrollSnapAlign: 'center', fontWeight: 500, fontSize: 18, marginRight: 8, position: 'relative' }}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>{t.avatar}</div>
+              <div style={{ marginBottom: 12, color: '#213547', fontStyle: 'italic', fontSize: 18, lineHeight: 1.5 }}>
+                <FaStar color="#F6C23E" style={{ marginRight: 2, verticalAlign: 'middle' }} />
+                {Array.from({ length: t.rating - 1 }).map((_, idx) => <FaStar key={idx} color="#F6C23E" style={{ marginRight: 2, verticalAlign: 'middle' }} />)}
+                <span style={{ marginLeft: 8 }}>{t.text}</span>
+              </div>
               <div style={{ color: '#00e6ef', fontWeight: 700 }}>{t.name}</div>
+              <div style={{ color: '#888', fontSize: 15, marginTop: 2 }}>{t.company}</div>
             </div>
           ))}
         </div>
@@ -161,17 +174,32 @@ export default function LandingPage() {
         </div>
         <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', justifyContent: 'center' }}>
           {plans.map((plan, i) => (
-            <div key={plan.name} style={{ background: '#fff', borderRadius: 20, boxShadow: '0 2px 16px #2E73FF11', padding: 40, minWidth: 260, maxWidth: 320, textAlign: 'center', fontWeight: 600, fontSize: 20, position: 'relative', border: i === 1 ? '2px solid #00e6ef' : 'none', zIndex: i === 1 ? 2 : 1 }}>
-              <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>{plan.name}</div>
-              <div style={{ fontSize: 36, fontWeight: 900, color: '#00e6ef', marginBottom: 16 }}>
+            <div key={plan.name} style={{
+              background: 'linear-gradient(120deg, #fff 60%, #e8f1ff 100%)',
+              borderRadius: 24,
+              boxShadow: i === 1 ? '0 8px 32px #00e6ef33' : '0 2px 16px #2E73FF11',
+              padding: 48,
+              minWidth: 280,
+              maxWidth: 340,
+              textAlign: 'center',
+              fontWeight: 600,
+              fontSize: 20,
+              position: 'relative',
+              border: i === 1 ? '2px solid #00e6ef' : 'none',
+              zIndex: i === 1 ? 2 : 1,
+              transform: i === 1 ? 'scale(1.06)' : 'scale(1)',
+              transition: 'box-shadow 0.2s, transform 0.2s',
+            }}>
+              <div style={{ fontSize: 26, fontWeight: 900, marginBottom: 8, color: i === 1 ? '#2E73FF' : '#00e6ef', letterSpacing: -1 }}>{plan.name}</div>
+              <div style={{ fontSize: 40, fontWeight: 900, color: i === 1 ? '#2E73FF' : '#00e6ef', marginBottom: 16, lineHeight: 1 }}>
                 ${billing === 'monthly' ? plan.price : (parseInt(plan.price) * 10).toString()}
-                <span style={{ fontSize: 16, color: '#888', fontWeight: 500 }}>/mo</span>
+                <span style={{ fontSize: 18, color: '#888', fontWeight: 500 }}>/mo</span>
               </div>
-              <ul style={{ listStyle: 'none', padding: 0, margin: '16px 0', color: '#213547', fontSize: 16 }}>
-                {plan.features.map(f => <li key={f} style={{ marginBottom: 8 }}>✔ {f}</li>)}
+              <ul style={{ listStyle: 'none', padding: 0, margin: '16px 0', color: '#213547', fontSize: 16, textAlign: 'left', maxWidth: 220, marginLeft: 'auto', marginRight: 'auto' }}>
+                {plan.features.map(f => <li key={f} style={{ marginBottom: 10, display: 'flex', alignItems: 'center' }}><FaStar color="#1CC88A" style={{ marginRight: 8, fontSize: 16 }} /> {f}</li>)}
               </ul>
-              {i === 1 && <div style={{ position: 'absolute', top: 16, right: 16, background: '#00e6ef', color: '#fff', fontWeight: 700, borderRadius: 12, padding: '2px 12px', fontSize: 14 }}>Most Popular</div>}
-              <button style={{ marginTop: 16, padding: '12px 32px', borderRadius: 24, border: 'none', background: 'linear-gradient(90deg, #00e6ef 0%, #2E73FF 100%)', color: '#fff', fontWeight: 700, fontSize: 18, boxShadow: '0 2px 8px #00e6ef33', cursor: 'pointer', transition: 'background 0.2s' }} onClick={() => navigate('/dashboard')}>Get Started</button>
+              {i === 1 && <div style={{ position: 'absolute', top: 16, right: 16, background: 'linear-gradient(90deg, #00e6ef 0%, #2E73FF 100%)', color: '#fff', fontWeight: 700, borderRadius: 12, padding: '2px 16px', fontSize: 15, boxShadow: '0 2px 8px #00e6ef33' }}>Most Popular</div>}
+              <button style={{ marginTop: 18, padding: '14px 36px', borderRadius: 24, border: 'none', background: 'linear-gradient(90deg, #00e6ef 0%, #2E73FF 100%)', color: '#fff', fontWeight: 800, fontSize: 20, boxShadow: '0 2px 8px #00e6ef33', cursor: 'pointer', transition: 'background 0.2s, transform 0.2s', letterSpacing: 1 }} onClick={() => navigate('/dashboard')}>Get Started</button>
             </div>
           ))}
         </div>
@@ -191,8 +219,8 @@ export default function LandingPage() {
 
       {/* Sticky Widget Preview */}
       <div className="sticky-widget" style={{ position: 'fixed', right: 24, bottom: 24, zIndex: 100, animation: 'fadein 1.2s 1.2s both' }}>
-        <div style={{ width: 80, height: 80, borderRadius: 40, background: 'linear-gradient(120deg, #00e6ef 0%, #2E73FF 100%)', boxShadow: '0 4px 24px #00e6ef33', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 32, cursor: 'pointer', border: '4px solid #fff', transition: 'transform 0.2s' }} onClick={() => setWidgetOpen(true)}>
-          🤖
+        <div style={{ width: 80, height: 80, borderRadius: 40, background: 'linear-gradient(120deg, #00e6ef 0%, #2E73FF 100%)', boxShadow: '0 4px 24px #00e6ef33', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 32, cursor: 'pointer', border: '4px solid #fff', transition: 'transform 0.2s', overflow: 'hidden' }} onClick={() => setWidgetOpen(true)}>
+          <img src={logoLight} alt="Calldock Widget Logo" style={{ width: 56, height: 56, objectFit: 'contain' }} />
         </div>
         <IVRChatWidget open={widgetOpen} onClose={() => setWidgetOpen(false)} />
       </div>

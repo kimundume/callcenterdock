@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Button, Input, Form, message, Upload, Space, Typography, Divider } from 'antd';
-import { UploadOutlined, SaveOutlined, PlusOutlined } from '@ant-design/icons';
+import { Card, Button, Input, Form, message, Upload, Space, Typography, Divider, Tooltip } from 'antd';
+import { UploadOutlined, SaveOutlined, PlusOutlined, DeleteOutlined, InfoCircleOutlined } from '@ant-design/icons';
 
 const { Title } = Typography;
 
@@ -118,15 +118,15 @@ export default function IVREditor() {
       {steps.map((step, idx) => (
         <Card key={idx} title={`Step ${idx + 1}`} style={{ marginBottom: 16 }}>
           <Form layout="vertical">
-            <Form.Item label="Prompt">
-              <Input.TextArea value={step.prompt} onChange={e => handlePromptChange(idx, e.target.value)} rows={2} />
+            <Form.Item label={<span>Prompt <Tooltip title="This is what callers will hear or see as the first message."><InfoCircleOutlined /></Tooltip></span>}>
+              <Input.TextArea aria-label="IVR Prompt" value={step.prompt} onChange={e => handlePromptChange(idx, e.target.value)} rows={2} style={{ resize: 'vertical' }} />
             </Form.Item>
-            <Form.Item label="Prompt Audio (optional)">
+            <Form.Item label={<span>Prompt Audio (optional) <Tooltip title="Upload a custom audio file for the prompt."><InfoCircleOutlined /></Tooltip></span>}>
               <Upload accept="audio/*" showUploadList={false} beforeUpload={() => false} onChange={info => handleAudioUpload(idx, info)}>
-                <Button icon={<UploadOutlined />}>Upload Audio</Button>
+                <Button icon={<UploadOutlined />} aria-label="Upload Prompt Audio">Upload Audio</Button>
               </Upload>
               {step.audio ? (
-                <audio src={step.audio} controls style={{ marginTop: 8, width: '100%' }} />
+                <audio src={step.audio} controls style={{ marginTop: 8, width: '100%' }} aria-label="Prompt Audio Preview" />
               ) : (
                 <div style={{ color: '#888', fontSize: 13 }}>No prompt audio uploaded.</div>
               )}
@@ -145,18 +145,42 @@ export default function IVREditor() {
             <Form.Item label="Fallback Prompt">
               <Input value={step.fallback?.prompt || ''} onChange={e => handleFallbackChange(idx, e.target.value)} />
             </Form.Item>
-            <Form.Item label="Hold Music (optional)">
-              <input type="file" accept="audio/*" onChange={e => {
-                if (e.target.files && e.target.files[0]) {
-                  handleHoldMusicUpload(idx, { file: { status: 'done', originFileObj: e.target.files[0] } });
-                }
-              }} />
-              {step.holdMusic ? (
-                <div style={{ marginTop: 8 }}>
-                  <audio src={step.holdMusic} controls style={{ width: '100%' }} />
-                  <Button danger size="small" style={{ marginTop: 4 }} onClick={() => handleRemoveHoldMusic(idx)}>Remove</Button>
-                </div>
-              ) : (
+            <Form.Item label={<span>Hold Music (optional) <Tooltip title="Upload MP3/WAV, max 1MB. This will play for callers on hold."><InfoCircleOutlined /></Tooltip></span>}>
+              <Upload.Dragger
+                accept="audio/*"
+                showUploadList={false}
+                beforeUpload={() => false}
+                onChange={info => {
+                  if (info.file.status === 'done' || info.file.status === 'uploading') {
+                    const file = info.file.originFileObj;
+                    if (file.size > MAX_AUDIO_SIZE) {
+                      message.error('Audio file too large (max 1MB)');
+                      return false;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                      handleHoldMusicUpload(idx, { file: { status: 'done', originFileObj: file } });
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+                style={{ borderRadius: 8, background: '#f7fafd', marginBottom: 8 }}
+              >
+                <p className="ant-upload-drag-icon"><UploadOutlined /></p>
+                <p className="ant-upload-text">Click or drag audio file to upload (MP3/WAV, max 1MB)</p>
+                {step.holdMusic && (
+                  <audio src={step.holdMusic} controls style={{ width: '100%', marginTop: 8 }} />
+                )}
+                {step.holdMusic && (
+                  <Button danger size="small" icon={<DeleteOutlined />} style={{ marginTop: 4 }} onClick={() => handleRemoveHoldMusic(idx)}>
+                    Remove
+                  </Button>
+                )}
+                {step.holdMusic && info?.file?.name && (
+                  <div style={{ color: '#888', fontSize: 13, marginTop: 4 }}>File: {info.file.name} ({(info.file.size/1024).toFixed(1)} KB)</div>
+                )}
+              </Upload.Dragger>
+              {!step.holdMusic && (
                 <div style={{ color: '#888', fontSize: 13 }}>No hold music uploaded.</div>
               )}
             </Form.Item>
@@ -166,6 +190,13 @@ export default function IVREditor() {
       <Button icon={<PlusOutlined />} onClick={handleAddStep} style={{ marginBottom: 16 }}>Add Step</Button>
       <Divider />
       <Button type="primary" icon={<SaveOutlined />} loading={loading} onClick={handleSave}>Save IVR Config</Button>
+      <style>{`
+@media (max-width: 600px) {
+  .ant-card { margin: 0 !important; }
+  .ant-form-item { margin-bottom: 12px !important; }
+  .ant-btn { width: 100% !important; margin-bottom: 8px; }
+}
+`}</style>
     </div>
   );
 } 
