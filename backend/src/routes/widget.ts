@@ -4,7 +4,8 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
-import { companies, users, findUserByCompanyAndRole, calls, agents as onlineAgents, widgetSettings, ivrConfigs } from '../data/tempDB';
+import { companies, users, findUserByCompanyAndRole, calls, agents as onlineAgents, widgetSettings, ivrConfigs, pendingCompanies, findCompanyByEmail, findPendingCompanyByEmail } from '../data/tempDB';
+import { EmailService } from '../services/emailService';
 
 declare module 'express-serve-static-core' {
   interface Request {
@@ -20,103 +21,457 @@ function isStrongPassword(pw: string) {
   return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d!@#$%^&*()_+\-=]{8,}$/.test(pw);
 }
 
-const corsOrigin = process.env.CORS_ORIGIN || '*';
-router.use(cors({ origin: corsOrigin }));
+// Email validation regex
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
 
-// Rate limiter: 5 requests per minute per IP
+// Input validation
+function validateString(str: string) {
+  return typeof str === 'string' && str.trim().length > 0;
+}
+
+// Rate limiting
 const authLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 5,
-  message: { error: 'Too many requests, please try again later.' },
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // limit each IP to 5 requests per windowMs
+  message: 'Too many authentication attempts, please try again later.'
 });
 
-function validateString(val: string, min = 1): boolean {
-  return typeof val === 'string' && val.length >= min;
-}
-
-function authMiddleware(req: Request, res: Response, next: NextFunction) {
-  const token = req.body.token || req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'No token provided' });
+// JWT middleware
+const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'No token provided' });
+  const token = authHeader.split(' ')[1];
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    req.user = decoded;
     next();
-  } catch (e) {
+  } catch (err) {
     res.status(401).json({ error: 'Invalid token' });
   }
-}
+};
 
-// POST /api/company/register
+// POST /api/company/register - Now requires email verification
 router.post('/company/register', authLimiter as any, async (req: Request, res: Response) => {
-  const { companyName, adminUsername, adminPassword, email } = req.body;
+  const { companyName, displayName, adminUsername, adminPassword, email } = req.body;
+  
+  // Validate all required fields
   if (![companyName, adminUsername, adminPassword, email].every((v: string) => validateString(v))) {
     return res.status(400).json({ error: 'All fields required' });
   }
+  
+  // Validate email format
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
+  
+  // Validate password strength
   if (!isStrongPassword(adminPassword)) {
     return res.status(400).json({ error: 'Password must be at least 8 characters, include upper/lowercase and a number.' });
   }
-  const existing = Object.values(companies).find((c: any) => c.email === email);
-  if (existing) return res.status(400).json({ error: 'Company already exists' });
+  
+  // Check if company already exists (by email)
+  const existingCompany = findCompanyByEmail(email);
+  if (existingCompany) {
+    return res.status(400).json({ error: 'A company with this email already exists' });
+  }
+  
+  // Check if there's already a pending registration
+  const existingPending = findPendingCompanyByEmail(email);
+  if (existingPending) {
+    return res.status(400).json({ error: 'A registration is already pending for this email. Please check your email for verification.' });
+  }
+  
+  // Generate UUID and verification token
   const uuid = uuidv4();
-  companies[uuid] = { uuid, companyName, email, createdAt: new Date().toISOString() };
-  const hashed = await bcrypt.hash(adminPassword, 10);
-  users[adminUsername + '@' + uuid] = {
-    username: adminUsername,
-    password: hashed,
-    companyUuid: uuid,
-    role: 'admin',
+  const verificationToken = EmailService.generateToken();
+  
+  // Store pending registration
+  pendingCompanies[uuid] = {
+    uuid,
+    companyName,
+    displayName: displayName || companyName, // Use companyName as default display name
+    email,
+    adminUsername,
+    adminPassword,
+    verificationToken,
+    createdAt: new Date().toISOString()
   };
-  const token = jwt.sign({ username: adminUsername, companyUuid: uuid, role: 'admin' }, JWT_SECRET, { expiresIn: '1h' });
-  res.json({ uuid, token });
+  
+  // Store verification token
+  EmailService.storeToken(email, verificationToken, 'email');
+  
+  // Send verification email
+  const emailSent = await EmailService.sendEmailVerification(email, companyName, verificationToken);
+  
+  if (!emailSent) {
+    // Remove pending registration if email fails
+    delete pendingCompanies[uuid];
+    return res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
+  }
+  
+  res.json({ 
+    message: 'Registration successful! Please check your email to verify your account.',
+    uuid,
+    email,
+    requiresVerification: true
+  });
 });
 
-// POST /api/auth/login
+// POST /api/company/verify-email
+router.post('/company/verify-email', async (req: Request, res: Response) => {
+  const { email, token } = req.body;
+  
+  if (!email || !token) {
+    return res.status(400).json({ error: 'Email and verification token required' });
+  }
+  
+  // Verify token
+  if (!EmailService.verifyToken(email, token, 'email')) {
+    return res.status(400).json({ error: 'Invalid or expired verification token' });
+  }
+  
+  // Find pending company
+  const pendingCompany = findPendingCompanyByEmail(email);
+  if (!pendingCompany) {
+    return res.status(404).json({ error: 'No pending registration found for this email' });
+  }
+  
+  try {
+    // Create the actual company
+    companies[pendingCompany.uuid] = {
+      uuid: pendingCompany.uuid,
+      companyName: pendingCompany.companyName,
+      displayName: pendingCompany.displayName,
+      email: pendingCompany.email,
+      verified: true,
+      createdAt: new Date().toISOString()
+    };
+    
+    // Create admin user
+    const hashedPassword = await bcrypt.hash(pendingCompany.adminPassword, 10);
+    users[pendingCompany.adminUsername + '@' + pendingCompany.uuid] = {
+      username: pendingCompany.adminUsername,
+      password: hashedPassword,
+      companyUuid: pendingCompany.uuid,
+      role: 'admin',
+      email: pendingCompany.email,
+      createdAt: new Date().toISOString()
+    };
+    
+    // Remove from pending
+    delete pendingCompanies[pendingCompany.uuid];
+    
+    // Generate JWT token
+    const token = jwt.sign({ 
+      username: pendingCompany.adminUsername, 
+      companyUuid: pendingCompany.uuid, 
+      role: 'admin' 
+    }, JWT_SECRET, { expiresIn: '1h' });
+    
+    res.json({ 
+      message: 'Email verified successfully! Your account is now active.',
+      uuid: pendingCompany.uuid,
+      token,
+      companyName: pendingCompany.companyName,
+      displayName: pendingCompany.displayName
+    });
+    
+  } catch (error) {
+    console.error('Error creating company after verification:', error);
+    res.status(500).json({ error: 'Failed to create account. Please try again.' });
+  }
+});
+
+// POST /api/auth/login - Updated to support email login
 router.post('/auth/login', authLimiter as any, async (req: Request, res: Response) => {
-  // Accept either email or companyUuid for login
   const { email, companyUuid, username, password, role } = req.body;
+  
   let uuid = companyUuid;
+  let user = null;
+  
+  // If email is provided, find company by email
   if (email && !companyUuid) {
-    // Find companyUuid by email
-    const company = Object.values(companies).find((c: any) => c.email === email);
-    if (!company) return res.status(404).json({ error: 'Company not found' });
+    const company = findCompanyByEmail(email);
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found with this email' });
+    }
     uuid = company.uuid;
   }
-  if (![uuid, username, password, role].every((v: string) => validateString(v))) {
-    return res.status(400).json({ error: 'All fields required' });
+  
+  if (!uuid || !password || !role) {
+    return res.status(400).json({ error: 'Company UUID, password, and role are required' });
   }
-  // For admin, allow login by email as username
-  let user = findUserByCompanyAndRole(uuid, username, role);
-  if (!user && role === 'admin' && email) {
-    // Try to find admin by email
-    user = Object.values(users).find((u: any) => u.companyUuid === uuid && u.role === 'admin' && companies[uuid]?.email === email);
+  
+  // Try to find user by username first
+  if (username) {
+    user = findUserByCompanyAndRole(uuid, username, role);
   }
+  
+  // If no user found and email provided, try to find admin by email
+  if (!user && email && role === 'admin') {
+    const company = findCompanyByEmail(email);
+    if (company) {
+      user = Object.values(users).find((u: any) => 
+        u.companyUuid === company.uuid && 
+        u.role === 'admin' && 
+        u.email === email
+      );
+    }
+  }
+  
   if (!user || !(await bcrypt.compare(password, user.password))) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
-  const token = jwt.sign({ username: user.username, companyUuid: uuid, role }, JWT_SECRET, { expiresIn: '1h' });
-  res.json({ token });
+  
+  const token = jwt.sign({ 
+    username: user.username, 
+    companyUuid: uuid, 
+    role 
+  }, JWT_SECRET, { expiresIn: '1h' });
+  
+  // Get company info for response
+  const company = companies[uuid];
+  
+  res.json({ 
+    token,
+    companyUuid: uuid,
+    username: user.username,
+    role,
+    companyName: company?.companyName,
+    displayName: company?.displayName
+  });
 });
 
-// POST /api/agent/add (admin only, protected)
-router.post('/agent/add', authMiddleware, async (req: Request, res: Response) => {
-  const { agentUsername, agentPassword } = req.body;
-  if (!validateString(agentUsername) || !validateString(agentPassword)) {
-    return res.status(400).json({ error: 'All fields required' });
+// POST /api/auth/forgot-password
+router.post('/auth/forgot-password', authLimiter as any, async (req: Request, res: Response) => {
+  const { email, companyUuid, username } = req.body;
+  
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' });
   }
+  
+  let uuid = companyUuid;
+  let user = null;
+  
+  // Find company by email if UUID not provided
+  if (!uuid) {
+    const company = findCompanyByEmail(email);
+    if (!company) {
+      return res.status(404).json({ error: 'No account found with this email' });
+    }
+    uuid = company.uuid;
+  }
+  
+  // Find user
+  if (username) {
+    user = findUserByCompanyAndRole(uuid, username, 'admin');
+  } else {
+    // Find admin by email
+    user = Object.values(users).find((u: any) => 
+      u.companyUuid === uuid && 
+      u.role === 'admin' && 
+      u.email === email
+    );
+  }
+  
+  if (!user) {
+    return res.status(404).json({ error: 'No account found with the provided information' });
+  }
+  
+  // Generate reset token
+  const resetToken = EmailService.generateToken();
+  EmailService.storeToken(email, resetToken, 'password');
+  
+  // Send password reset email
+  const emailSent = await EmailService.sendPasswordReset(email, user.username, resetToken);
+  
+  if (!emailSent) {
+    return res.status(500).json({ error: 'Failed to send password reset email. Please try again.' });
+  }
+  
+  res.json({ message: 'Password reset email sent. Please check your inbox.' });
+});
+
+// POST /api/auth/reset-password
+router.post('/auth/reset-password', async (req: Request, res: Response) => {
+  const { email, token, newPassword } = req.body;
+  
+  if (!email || !token || !newPassword) {
+    return res.status(400).json({ error: 'Email, token, and new password are required' });
+  }
+  
+  // Validate password strength
+  if (!isStrongPassword(newPassword)) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters, include upper/lowercase and a number.' });
+  }
+  
+  // Verify token
+  if (!EmailService.verifyToken(email, token, 'password')) {
+    return res.status(400).json({ error: 'Invalid or expired reset token' });
+  }
+  
+  // Find company and user
+  const company = findCompanyByEmail(email);
+  if (!company) {
+    return res.status(404).json({ error: 'Company not found' });
+  }
+  
+  const user = Object.values(users).find((u: any) => 
+    u.companyUuid === company.uuid && 
+    u.role === 'admin' && 
+    u.email === email
+  );
+  
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  
+  try {
+    // Update password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Error updating password:', error);
+    res.status(500).json({ error: 'Failed to update password. Please try again.' });
+  }
+});
+
+// POST /api/auth/forgot-uuid
+router.post('/auth/forgot-uuid', authLimiter as any, async (req: Request, res: Response) => {
+  const { email } = req.body;
+  
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+  
+  // Find company by email
+  const company = findCompanyByEmail(email);
+  if (!company) {
+    return res.status(404).json({ error: 'No company found with this email' });
+  }
+  
+  // Send UUID reminder email
+  const emailSent = await EmailService.sendCompanyUuidReminder(email, company.companyName, company.uuid);
+  
+  if (!emailSent) {
+    return res.status(500).json({ error: 'Failed to send UUID reminder. Please try again.' });
+  }
+  
+  res.json({ message: 'Company UUID reminder sent. Please check your inbox.' });
+});
+
+// POST /api/agent/add (admin only, protected) - Updated with email support
+router.post('/agent/add', authMiddleware, async (req: Request, res: Response) => {
+  const { agentUsername, agentPassword, agentEmail } = req.body;
+  
+  if (!validateString(agentUsername) || !validateString(agentPassword)) {
+    return res.status(400).json({ error: 'Username and password are required' });
+  }
+  
+  if (agentEmail && !isValidEmail(agentEmail)) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
+  
   if (!isStrongPassword(agentPassword)) {
     return res.status(400).json({ error: 'Password must be at least 8 characters, include upper/lowercase and a number.' });
   }
+  
   const decoded = req.user;
-  if (decoded.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  if (decoded.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  
   const key = agentUsername + '@' + decoded.companyUuid;
-  if (users[key]) return res.status(400).json({ error: 'Agent already exists' });
-  const hashed = await bcrypt.hash(agentPassword, 10);
-  users[key] = {
-    username: agentUsername,
-    password: hashed,
-    companyUuid: decoded.companyUuid,
-    role: 'agent',
-  };
-  res.json({ success: true });
+  if (users[key]) {
+    return res.status(400).json({ error: 'Agent already exists' });
+  }
+  
+  try {
+    const hashed = await bcrypt.hash(agentPassword, 10);
+    users[key] = {
+      username: agentUsername,
+      password: hashed,
+      companyUuid: decoded.companyUuid,
+      role: 'agent',
+      email: agentEmail,
+      createdAt: new Date().toISOString()
+    };
+    
+    // Send invitation email if email provided
+    if (agentEmail) {
+      const company = companies[decoded.companyUuid];
+      const emailSent = await EmailService.sendAgentInvitation(
+        agentEmail,
+        agentUsername,
+        company.companyName,
+        decoded.companyUuid,
+        agentPassword // Send temporary password
+      );
+      
+      if (!emailSent) {
+        console.warn('Failed to send agent invitation email');
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      message: agentEmail ? 'Agent created and invitation email sent' : 'Agent created successfully'
+    });
+  } catch (error) {
+    console.error('Error creating agent:', error);
+    res.status(500).json({ error: 'Failed to create agent. Please try again.' });
+  }
+});
+
+// PUT /api/company/update-display-name (admin only, protected)
+router.put('/company/update-display-name', authMiddleware, async (req: Request, res: Response) => {
+  const { displayName } = req.body;
+  
+  if (!validateString(displayName)) {
+    return res.status(400).json({ error: 'Display name is required' });
+  }
+  
+  const decoded = req.user;
+  if (decoded.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  
+  const company = companies[decoded.companyUuid];
+  if (!company) {
+    return res.status(404).json({ error: 'Company not found' });
+  }
+  
+  company.displayName = displayName;
+  company.updatedAt = new Date().toISOString();
+  
+  res.json({ 
+    success: true, 
+    message: 'Display name updated successfully',
+    displayName
+  });
+});
+
+// GET /api/company/info (protected)
+router.get('/company/info', authMiddleware, async (req: Request, res: Response) => {
+  const decoded = req.user;
+  const company = companies[decoded.companyUuid];
+  
+  if (!company) {
+    return res.status(404).json({ error: 'Company not found' });
+  }
+  
+  res.json({
+    uuid: company.uuid,
+    companyName: company.companyName,
+    displayName: company.displayName,
+    email: company.email,
+    verified: company.verified,
+    createdAt: company.createdAt
+  });
 });
 
 // POST /api/widget/register

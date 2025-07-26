@@ -307,3 +307,96 @@ body.dark .sidebar-item.active, .dark .sidebar-item.active {
 .ant-btn:focus {
   box-shadow: 0 0 0 2px rgba(46, 115, 255, 0.2) !important;
 }
+
+/* Chat Message Highlight Animation */
+.highlight-message {
+  animation: highlightPulse 2s ease-in-out;
+}
+
+@keyframes highlightPulse {
+  0% { 
+    background: rgba(46, 115, 255, 0.1);
+    transform: scale(1);
+  }
+  50% { 
+    background: rgba(46, 115, 255, 0.2);
+    transform: scale(1.02);
+  }
+  100% { 
+    background: transparent;
+    transform: scale(1);
+  }
+}
+
+/* Chat Session Hover Effects */
+.chat-session-item:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  transform: translateX(4px);
+}
+
+/* Quick Reply Hover Effects */
+.quick-reply-item:hover {
+  background: #e8f1ff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(46, 115, 255, 0.15);
+}
+
+/* Search Results Highlight */
+.search-result-highlight {
+  background: rgba(255, 193, 7, 0.3);
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+/* Visitor Info Drawer Enhancements */
+.visitor-info-section {
+  transition: all 0.3s ease;
+}
+
+.visitor-info-section:hover {
+  background: #f7fafd;
+  border-radius: 8px;
+  padding: 8px;
+  margin: -8px;
+}
+
+/* Chat Input Enhancements */
+.chat-input-enhanced:focus {
+  border-color: #2E73FF;
+  box-shadow: 0 0 0 2px rgba(46, 115, 255, 0.2);
+}
+
+/* Message Bubble Enhancements */
+.message-bubble-agent {
+  position: relative;
+}
+
+.message-bubble-agent::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: -8px;
+  width: 0;
+  height: 0;
+  border: 8px solid transparent;
+  border-left-color: #2E73FF;
+  border-bottom: none;
+  border-right: none;
+}
+
+.message-bubble-visitor {
+  position: relative;
+}
+
+.message-bubble-visitor::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: -8px;
+  width: 0;
+  height: 0;
+  border: 8px solid transparent;
+  border-right-color: #fff;
+  border-bottom: none;
+  border-left: none;
+}

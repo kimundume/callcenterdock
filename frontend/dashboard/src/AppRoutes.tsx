@@ -7,6 +7,7 @@ import AgentLogin from './AgentLogin';
 import AgentDashboard from './AgentDashboard';
 import DemoPage from './DemoPage';
 import IVREditor from './IVREditor';
+import EmailVerification from './EmailVerification';
 
 export default function AppRoutes({ setCompanyUuid }: { setCompanyUuid: (uuid: string | null) => void }) {
   const [adminToken, setAdminToken] = useState<string | null>(null);
@@ -50,6 +51,7 @@ export default function AppRoutes({ setCompanyUuid }: { setCompanyUuid: (uuid: s
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/verify-email" element={<EmailVerification />} />
       <Route path="/dashboard" element={
         (!adminToken || !companyUuid)
           ? <CompanyAuth onAuth={handleAdminAuth} />
@@ -59,7 +61,7 @@ export default function AppRoutes({ setCompanyUuid }: { setCompanyUuid: (uuid: s
       <Route path="/agent-dashboard" element={
         (!agentToken || !companyUuid || !agentUsername)
           ? <Navigate to="/agent-login" />
-          : <AgentDashboard agentToken={agentToken} companyUuid={companyUuid} agentUsername={agentUsername} />
+          : <AgentDashboard agentToken={agentToken} companyUuid={companyUuid} agentUsername={agentUsername} onLogout={handleAgentLogout} />
       } />
       <Route path="/demo" element={<DemoPage />} />
       <Route path="/ivr-editor" element={<IVREditor />} />

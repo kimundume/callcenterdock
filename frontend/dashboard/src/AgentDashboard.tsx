@@ -2,11 +2,12 @@ import React, { useEffect, useState, useRef } from 'react';
 import DashboardLayout from './DashboardLayout';
 import { Card, Row, Col, Table, Button, Input, Tag, Form, Select, message, Modal, Empty, Tabs } from 'antd';
 import { io, Socket } from 'socket.io-client';
-import { SoundOutlined, PauseCircleOutlined, SwapOutlined, UserSwitchOutlined, BellOutlined, PhoneOutlined, ClockCircleOutlined, CloseCircleOutlined, SendOutlined, CheckCircleOutlined, TagOutlined } from '@ant-design/icons'; // For agent controls and notifications
+import { SoundOutlined, PauseCircleOutlined, SwapOutlined, UserSwitchOutlined, BellOutlined, PhoneOutlined, ClockCircleOutlined, CloseCircleOutlined, SendOutlined, CheckCircleOutlined, TagOutlined, AudioOutlined, AudioMutedOutlined, FormOutlined } from '@ant-design/icons'; // For agent controls and notifications
 import logoLight from '/logo-light.png';
 import logoDark from '/logo-dark.png';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import notificationSound from '/notification.mp3';
+import ChatSessionsLayout from './ChatSessionsLayout';
 
 const API_URL = 'http://localhost:5000/api/widget';
 const SOCKET_URL = 'http://localhost:5000';
@@ -17,7 +18,10 @@ const TAG_OPTIONS = [
   '#VIP', '#complaint', '#technical', '#pricing', '#followup', '#sales', '#support', '#escalated', '#spam', '#other'
 ];
 
-export default function AgentDashboard({ agentToken, companyUuid, agentUsername }) {
+export default function AgentDashboard({ agentToken, companyUuid, agentUsername, onLogout }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [callLog, setCallLog] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -40,6 +44,8 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
   const [remoteStream, setRemoteStream] = useState(null);
   const peerRef = useRef(null);
   const remoteAudioRef = useRef(null);
+  // Add flag to prevent automatic call acceptance
+  const [callManuallyAccepted, setCallManuallyAccepted] = useState(false);
   // Chat state
   const [chatSessions, setChatSessions] = useState([]); // [{ sessionId, visitorId, pageUrl, startedAt }]
   const [activeChat, setActiveChat] = useState(null); // sessionId
@@ -70,6 +76,15 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
     return () => { clearInterval(interval); isMounted = false; };
   }, [companyUuid]);
 
+  // Sync tab with URL
+  React.useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get('tab');
+    if (tab && tab !== activeTab) {
+      setActiveTab(tab);
+    }
+  }, [location.search]);
+
   // Fetch call logs for this agent
   useEffect(() => {
     setLoading(true);
@@ -79,19 +94,41 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
       .finally(() => setLoading(false));
   }, [companyUuid, agentUsername]);
 
+  // Debug callStatus changes
+  useEffect(() => {
+    console.log('callStatus changed to:', callStatus);
+  }, [callStatus]);
+
   // Socket.IO setup
   useEffect(() => {
     const socket = io(SOCKET_URL);
     socketRef.current = socket;
     socket.emit('register-agent', { uuid: companyUuid, agentId: agentUsername });
     socket.on('incoming-call', (data) => {
+      console.log('Received incoming-call event:', data);
+      console.log('Setting callStatus to "Ringing"');
       setIncomingCall(data);
       setCallStatus('Ringing');
+      setCallManuallyAccepted(false); // Reset manual acceptance flag for new call
+      console.log('callStatus should now be "Ringing"');
     });
     // Listen for chat events
     socket.on('chat:join', (data) => {
       setChatSessions(sessions => {
         if (sessions.some(s => s.sessionId === data.sessionId)) return sessions;
+        // Create new chat session in backend
+        const newSession = {
+          companyId: 'demo-company-001', // Hardcoded for dev
+          sessionId: data.sessionId,
+          visitorId: data.visitorId,
+          pageUrl: data.pageUrl,
+          startedAt: data.startedAt || new Date().toISOString()
+        };
+        fetch('http://localhost:5000/api/chat-sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newSession)
+        });
         // Agent joins the chat room for this session
         socket.emit('chat:join', {
           sessionId: data.sessionId,
@@ -110,14 +147,20 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
       });
       setChatSessions(sessions => {
         if (sessions.some(s => s.sessionId === msg.sessionId)) return sessions;
-        // Agent joins the chat room for this session
-        socket.emit('chat:join', {
+        // Create new chat session in backend for new messages
+        const newSession = {
+          companyId: 'demo-company-001', // Hardcoded for dev
           sessionId: msg.sessionId,
-          companyUuid,
-          visitorId: msg.from === 'visitor' ? msg.from : 'visitor',
-          pageUrl: ''
+          visitorId: `visitor-${msg.sessionId.slice(-4)}`,
+          pageUrl: window.location.href,
+          startedAt: new Date().toISOString()
+        };
+        fetch('http://localhost:5000/api/chat-sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newSession)
         });
-        return [...sessions, { sessionId: msg.sessionId, visitorId: msg.from === 'visitor' ? msg.from : 'visitor', pageUrl: '', startedAt: msg.timestamp }];
+        return [...sessions, newSession];
       });
       if (activeChat !== msg.sessionId) {
         setUnreadChats(prev => ({ ...prev, [msg.sessionId]: (prev[msg.sessionId] || 0) + 1 }));
@@ -126,6 +169,30 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
           audioRef.current.play();
         }
       }
+    });
+    
+    // Listen for form responses
+    socket.on('form:response', (response) => {
+      console.log('Agent received form response:', response);
+      
+      // Convert form response to chat message
+      const formMessage = {
+        sessionId: response.sessionId,
+        message: `📋 **Form Submitted**\n${Object.entries(response.values).map(([field, value]) => `**${field}:** ${value}`).join('\n')}`,
+        from: 'visitor',
+        timestamp: response.timestamp,
+        type: 'form-response',
+        formData: response
+      };
+      
+      setChatMessages(prev => {
+        const arr = prev[response.sessionId] ? [...prev[response.sessionId]] : [];
+        arr.push(formMessage);
+        return { ...prev, [response.sessionId]: arr };
+      });
+      
+      // Show notification
+      message.success('Visitor submitted a form!');
     });
     // Listen for typing
     socket.on('chat:typing', (data) => {
@@ -174,27 +241,111 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
 
   // Accept/Reject/End Call
   const handleCallAction = (action) => {
-    if (!incomingCall || !socketRef.current) return;
-    if (action === 'end') {
-      setCallStatus('Wrap-up');
-      setWrapUp(true);
-      setIncomingCall(null);
-      setCallStart(null);
+    console.log('handleCallAction called with action:', action);
+    console.log('Current callStatus:', callStatus);
+    console.log('incomingCall:', incomingCall);
+    console.log('callManuallyAccepted:', callManuallyAccepted);
+    
+    if (!incomingCall || !socketRef.current) {
+      console.log('Early return: no incomingCall or socketRef');
       return;
     }
+    
+    if (action === 'end') {
+      console.log('Ending call - setting status to Wrap-up');
+      const sessionId = incomingCall?.fromSocketId || 'unknown-session';
+      setCallStatus('Wrap-up');
+      setWrapUp(true);
+      // Store sessionId in a ref or state before clearing incomingCall
+      setIncomingCall(prev => {
+        if (prev) {
+          // Store sessionId for wrap-up modal
+          sessionStorage.setItem('lastCallSessionId', prev.fromSocketId || 'unknown-session');
+        }
+        return null;
+      });
+      setCallStart(null);
+      setCallManuallyAccepted(false);
+      return;
+    }
+    
+    // Only allow accept/reject if call is in Ringing state and not already manually accepted
+    if (callStatus !== 'Ringing' || callManuallyAccepted) {
+      console.log('Call not in Ringing state or already manually accepted, ignoring action:', action);
+      return;
+    }
+    
+    console.log('Emitting', `${action}-call`, {
+      uuid: companyUuid,
+      agentId: agentUsername,
+      fromSocketId: incomingCall.fromSocketId,
+    });
+    
     socketRef.current.emit(`${action}-call`, {
       uuid: companyUuid,
       agentId: agentUsername,
       fromSocketId: incomingCall.fromSocketId,
     });
+    
     if (action === 'accept') {
+      console.log('Setting callStatus to "In Call" and marking as manually accepted');
       setCallStatus('In Call');
       setCallStart(new Date());
       setWrapUp(false);
+      setCallManuallyAccepted(true);
+      
+      // Create a chat session for this call so form pushes work
+      if (incomingCall?.fromSocketId) {
+        // Use the widget's session ID instead of creating a new one
+        // The widget creates its own session ID when it enters chat mode
+        const chatSessionId = incomingCall.fromSocketId; // Use the widget's session ID directly
+        
+        // Check if this session already exists in our chat sessions
+        const existingSession = chatSessions.find(s => s.sessionId === chatSessionId);
+        
+        if (!existingSession) {
+          // Create new session only if it doesn't exist
+          const newSession = {
+            companyId: 'demo-company-001',
+            sessionId: chatSessionId,
+            visitorId: `visitor-${chatSessionId.slice(-4)}`,
+            pageUrl: window.location.href,
+            startedAt: new Date().toISOString()
+          };
+          
+          // Create chat session in backend
+          fetch('http://localhost:5000/api/chat-sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newSession)
+          });
+          
+          // Add to local chat sessions
+          setChatSessions(sessions => {
+            if (sessions.some(s => s.sessionId === chatSessionId)) return sessions;
+            return [...sessions, newSession];
+          });
+        }
+        
+        // Set as active chat
+        setActiveChat(chatSessionId);
+        
+        // Join the chat room
+        if (socketRef.current) {
+          socketRef.current.emit('chat:join', {
+            sessionId: chatSessionId,
+            companyUuid,
+            visitorId: `visitor-${chatSessionId.slice(-4)}`,
+            pageUrl: window.location.href
+          });
+        }
+      }
     } else {
+      console.log('Setting callStatus to "Idle"');
       setCallStatus('Idle');
       setIncomingCall(null);
       setCallStart(null);
+      setCallManuallyAccepted(false);
     }
   };
 
@@ -212,13 +363,14 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
 
   // Save call log (wrap-up)
   const handleSaveLog = async () => {
+    const sessionId = sessionStorage.getItem('lastCallSessionId') || 'unknown-session';
     const log = {
       companyUuid,
       agent: agentUsername,
       notes,
       disposition: disposition === 'Other' ? customDisposition : disposition,
       duration: callTimer,
-      sessionId: incomingCall?.fromSocketId || '-',
+      sessionId: sessionId,
       tags,
       time: new Date().toISOString(),
     };
@@ -234,6 +386,8 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
     setTags([]);
     setWrapUp(false);
     setCallStatus('Idle');
+    // Clear stored sessionId
+    sessionStorage.removeItem('lastCallSessionId');
     message.success('Call log saved!');
   };
 
@@ -339,7 +493,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
   }, [chatMessages, activeChat]);
 
   // Send agent chat message
-  const handleSendChat = () => {
+  const handleSendChat = async () => {
     if (!chatInput.trim() || !activeChat || !socketRef.current) return;
     const msg = {
       sessionId: activeChat,
@@ -347,6 +501,19 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
       from: 'agent',
       timestamp: new Date().toISOString()
     };
+    // Persist to backend
+    const companyId = 'demo-company-001'; // Hardcoded for dev
+    await fetch('http://localhost:5000/api/chat-messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        companyId,
+        sessionId: activeChat,
+        from: 'agent',
+        message: chatInput.trim(),
+        timestamp: msg.timestamp
+      })
+    });
     socketRef.current.emit('chat:message', msg);
     setChatMessages(prev => {
       const arr = prev[activeChat] ? [...prev[activeChat]] : [];
@@ -363,308 +530,670 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
     }
   }, [activeChat]);
 
+  // Fetch chat messages when activeChat changes
+  useEffect(() => {
+    if (!activeChat) return;
+    fetch(`http://localhost:5000/api/chat-messages?companyId=demo-company-001&sessionId=${activeChat}`)
+      .then(res => res.json())
+      .then(messages => {
+        setChatMessages(prev => ({ ...prev, [activeChat]: messages }));
+      });
+      
+    // Also fetch form responses
+    fetch(`http://localhost:5000/api/form-response?companyId=demo-company-001&sessionId=${activeChat}`)
+      .then(res => res.json())
+      .then(responses => {
+        // Convert form responses to chat messages
+        const formMessages = responses.map(response => ({
+          sessionId: response.sessionId,
+          message: `📋 **Form Submitted**\n${Object.entries(response.values).map(([field, value]) => `**${field}:** ${value}`).join('\n')}`,
+          from: 'visitor',
+          timestamp: response.timestamp,
+          type: 'form-response',
+          formData: response
+        }));
+        
+        // Combine with existing messages
+        setChatMessages(prev => {
+          const existingMessages = prev[activeChat] || [];
+          const allMessages = [...existingMessages, ...formMessages].sort((a, b) => 
+            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+          );
+          return { ...prev, [activeChat]: allMessages };
+        });
+      });
+  }, [activeChat]);
+
+  // Escalation state (frontend only)
+  const [escalatedChats, setEscalatedChats] = useState<Record<string, boolean>>({});
+  // Chat escalation handler
+  const handleEscalateChat = async (sessionId: string) => {
+    await fetch(`http://localhost:5000/api/chat-sessions/${sessionId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ escalated: true })
+    });
+    setEscalatedChats(prev => ({ ...prev, [sessionId]: true }));
+    message.success('Chat escalated to supervisor');
+  };
+
+  // Chat rating state (frontend only)
+  const [chatRatings, setChatRatings] = useState<Record<string, number>>({});
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [pendingRatingSession, setPendingRatingSession] = useState<string | null>(null);
+  const [ratingValue, setRatingValue] = useState(0);
+
+  // Canned responses state
+  const companyId = 'demo-company-001'; // Hardcoded for dev
+  const [cannedResponses, setCannedResponses] = useState([]);
+
+  // Fetch canned responses on mount
+  useEffect(() => {
+    fetch(`http://localhost:5000/api/canned-responses?companyId=${companyId}`)
+      .then(res => res.json())
+      .then(setCannedResponses);
+  }, []);
+
+  // Fetch chat sessions on mount
+  useEffect(() => {
+    fetch(`http://localhost:5000/api/chat-sessions?companyId=${companyId}`)
+      .then(res => res.json())
+      .then(sessions => {
+        setChatSessions(sessions);
+        // Initialize chat messages for existing sessions
+        const messages = {};
+        sessions.forEach(session => {
+          messages[session.sessionId] = [];
+        });
+        setChatMessages(messages);
+      });
+  }, []);
+
+  // Simulate ending a chat and requesting feedback
+  const handleEndChat = (sessionId: string) => {
+    setPendingRatingSession(sessionId);
+    setShowRatingModal(true);
+  };
+
+  const handleSubmitRating = async () => {
+    if (!pendingRatingSession || ratingValue === 0) return;
+    await fetch(`http://localhost:5000/api/chat-sessions/${pendingRatingSession}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rating: ratingValue })
+    });
+    setChatRatings(prev => ({ ...prev, [pendingRatingSession]: ratingValue }));
+    setShowRatingModal(false);
+    setPendingRatingSession(null);
+    setRatingValue(0);
+    message.success('Thank you for your feedback!');
+  };
+
   const isDark = document.body.classList.contains('dark');
-  const navigate = useNavigate();
   return (
-    <DashboardLayout>
+    <DashboardLayout 
+      userType="agent"
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      onLogout={onLogout}
+    >
       <Modal
         open={callStatus === 'Ringing'}
-        title="Incoming Call"
+        title={<span style={{ fontWeight: 700 }}>Incoming Call</span>}
         footer={null}
         closable={false}
         centered
+        style={{ borderRadius: 16 }}
       >
         <p>You have an incoming call!</p>
-        <Button type="primary" onClick={() => handleCallAction('accept')} style={{ marginRight: 12 }}>Accept</Button>
-        <Button danger onClick={() => handleCallAction('reject')}>Reject</Button>
+        <p style={{ fontSize: 12, color: '#666' }}>Debug: callStatus = "{callStatus}", Modal open = {callStatus === 'Ringing' ? 'true' : 'false'}</p>
+        <Button type="primary" onClick={() => handleCallAction('accept')} style={{ marginRight: 12, borderRadius: 8, fontWeight: 600 }}>Accept</Button>
+        <Button danger onClick={() => handleCallAction('reject')} style={{ borderRadius: 8, fontWeight: 600 }}>Reject</Button>
       </Modal>
-      {/* Place performance summary cards grid at the top */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(1, 1fr)',
-        gap: 24,
-        marginBottom: 32,
-      }}
-      className="metric-card-grid"
+
+      {/* Wrap-up Modal for Call Disposition and Tagging */}
+      <Modal
+        open={wrapUp}
+        title={<span style={{ fontWeight: 700 }}>Call Wrap-up</span>}
+        onCancel={() => {
+          setWrapUp(false);
+          setCallStatus('Idle');
+        }}
+        onOk={handleSaveLog}
+        okText="Save Call Log"
+        cancelText="Skip"
+        centered
+        style={{ borderRadius: 16 }}
+        okButtonProps={{ style: { borderRadius: 8, fontWeight: 600 } }}
+        cancelButtonProps={{ style: { borderRadius: 8, fontWeight: 600 } }}
       >
-        {/* Accurate Call Metrics */}
-        <Card className="card" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <PhoneOutlined style={{ fontSize: 32, color: '#2E73FF' }} />
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 16 }}>Total Calls</div>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{callLog.length}</div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>Call Duration: {callTimer}</label>
+        </div>
+        
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>Disposition:</label>
+          <Select
+            value={disposition}
+            onChange={setDisposition}
+            style={{ width: '100%' }}
+            placeholder="Select disposition"
+            options={[
+              { value: 'Answered', label: 'Answered' },
+              { value: 'Missed', label: 'Missed' },
+              { value: 'Busy', label: 'Busy' },
+              { value: 'No Answer', label: 'No Answer' },
+              { value: 'Other', label: 'Other' }
+            ]}
+          />
+          {disposition === 'Other' && (
+            <Input
+              value={customDisposition}
+              onChange={(e) => setCustomDisposition(e.target.value)}
+              placeholder="Specify disposition"
+              style={{ marginTop: 8 }}
+            />
+          )}
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>Tags:</label>
+          <Select
+            mode="tags"
+            value={tags}
+            onChange={setTags}
+            style={{ width: '100%' }}
+            placeholder="Add tags"
+            options={[
+              { value: 'urgent', label: 'Urgent' },
+              { value: 'follow-up', label: 'Follow-up' },
+              { value: 'sale', label: 'Sale' },
+              { value: 'support', label: 'Support' },
+              { value: 'complaint', label: 'Complaint' }
+            ]}
+          />
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>Notes:</label>
+          <Input.TextArea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Add call notes..."
+            rows={4}
+          />
+        </div>
+      </Modal>
+      
+      {/* Integrated Header with Logo and Welcome */}
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'space-between',
+        marginBottom: 32,
+        padding: '24px 32px',
+        background: 'linear-gradient(135deg, #2E73FF 0%, #00e6ef 100%)',
+        borderRadius: 24,
+        boxShadow: '0 8px 32px rgba(46, 115, 255, 0.15)',
+        color: '#fff'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ 
+            background: 'rgba(255, 255, 255, 0.15)', 
+            borderRadius: 16, 
+            padding: 12,
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.2)'
+          }}>
+            <img src={logoLight} alt="CallDocker Logo" style={{ width: 48, height: 48, filter: 'brightness(0) invert(1)' }} />
           </div>
-        </Card>
-        <Card className="card" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <CheckCircleOutlined style={{ fontSize: 32, color: '#1CC88A' }} />
           <div>
-            <div style={{ fontWeight: 600, fontSize: 16 }}>Answered Calls</div>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{callLog.filter(l => (l.disposition || l.status || '').toLowerCase().includes('answer') || (l.status || '').toLowerCase() === 'accepted').length}</div>
+            <div style={{ fontWeight: 700, fontSize: 24, marginBottom: 4 }}>Agent Dashboard</div>
+            <div style={{ fontSize: 16, opacity: 0.9 }}>Welcome back, {agentUsername}</div>
           </div>
-        </Card>
-        <Card className="card" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <CloseCircleOutlined style={{ fontSize: 32, color: '#E74A3B' }} />
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 16 }}>Missed Calls</div>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{callLog.filter(l => (l.disposition || l.status || '').toLowerCase().includes('miss') || (l.status || '').toLowerCase() === 'rejected').length}</div>
-          </div>
-        </Card>
-        <Card className="card" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <ClockCircleOutlined style={{ fontSize: 32, color: '#00e6ef' }} />
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 16 }}>Average Duration</div>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{(() => {
-              if (!callLog.length) return '00:00';
-              const toSec = d => {
-                if (!d) return 0;
-                if (typeof d === 'number') return d;
-                if (typeof d === 'string' && d.includes(':')) {
-                  const [min, sec] = d.split(':').map(Number);
-                  return min * 60 + sec;
-                }
-                return Number(d) || 0;
-              };
-              const avg = Math.round(callLog.reduce((a, l) => a + toSec(l.duration), 0) / callLog.length);
-              const mm = String(Math.floor(avg / 60)).padStart(2, '0');
-              const ss = String(avg % 60).padStart(2, '0');
-              return `${mm}:${ss}`;
-            })()}</div>
-          </div>
-        </Card>
-        <Card className="card" style={{ display: 'flex', alignItems: 'center', gap: 16, flexDirection: 'column', alignItems: 'flex-start' }}>
-          <TagOutlined style={{ fontSize: 32, color: '#F6C23E' }} />
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 16 }}>Call Tags</div>
-            <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {[...new Set(callLog.flatMap(l => l.tags || []))].map(tag => (
-                <span key={tag} style={{ background: '#007bff', color: '#fff', borderRadius: 4, padding: '2px 8px', fontSize: 14 }}>{tag}</span>
-              ))}
-            </div>
-          </div>
-        </Card>
+        </div>
+        <div style={{ 
+          background: 'rgba(255, 255, 255, 0.1)', 
+          borderRadius: 12, 
+          padding: '8px 16px',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{ fontSize: 14, opacity: 0.8, marginBottom: 2 }}>Status</div>
+          <div style={{ fontWeight: 600, fontSize: 16 }}>{callStatus}</div>
+        </div>
       </div>
-      <Tabs defaultActiveKey="active" style={{ background: '#fff', borderRadius: 8, padding: 16 }}>
-        <Tabs.TabPane tab="Active Call" key="active">
-          {/* Active call controls and wrap-up */}
-          <Row gutter={[24, 24]}>
-            <Col xs={24} md={12}>
-              <Card title="Active Call">
-                {callStatus === 'In Call' ? (
-                  <>
-                    <div><strong>Status:</strong> In Call</div>
-                    <div><strong>Call Timer:</strong> {callTimer}</div>
-                    {/* Agent controls stubs */}
-                    <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-                      <Button icon={<SoundOutlined />} onClick={() => {/* TODO: Mute/unmute logic */}}>Mute</Button>
-                      <Button icon={<PauseCircleOutlined />} onClick={() => {/* TODO: Hold logic */}}>Hold</Button>
-                      <Button icon={<SwapOutlined />} onClick={() => {/* TODO: Transfer logic */}}>Transfer</Button>
-                      <Button icon={<UserSwitchOutlined />} onClick={() => {/* TODO: Change status logic */}}>Set Away</Button>
-                    </div>
-                    <Button danger style={{ marginTop: 16 }} onClick={() => handleCallAction('end')}>End Call</Button>
-                  </>
-                ) : (
-                  <Empty description="No active call" />
-                )}
-              </Card>
-            </Col>
-            <Col xs={24} md={12}>
-              {wrapUp && (
-                <Card title="Call Wrap-up" style={{ background: '#fffbe6' }}>
-                  <Form layout="vertical" onFinish={handleSaveLog}>
-                    <Form.Item label="Notes">
-                      <Input.TextArea value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
-                    </Form.Item>
-                    <Form.Item label="Disposition">
-                      <Select value={disposition} onChange={setDisposition} style={{ width: '100%' }}>
-                        <Select.Option value="">Select outcome...</Select.Option>
-                        {DISPOSITIONS.map(d => <Select.Option key={d} value={d}>{d}</Select.Option>)}
-                      </Select>
-                      {disposition === 'Other' && (
-                        <Input value={customDisposition} onChange={e => setCustomDisposition(e.target.value)} placeholder="Custom disposition..." style={{ marginTop: 8 }} />
-                      )}
-                    </Form.Item>
-                    <Form.Item label="Tags">
-                      <Select
-                        mode="multiple"
-                        value={tags}
-                        onChange={setTags}
-                        style={{ width: '100%' }}
-                        options={TAG_OPTIONS.map(tag => ({ label: tag, value: tag }))}
-                      />
-                    </Form.Item>
-                    <Button type="primary" htmlType="submit">Save Log</Button>
-                  </Form>
-                </Card>
-              )}
-            </Col>
-          </Row>
-          {/* Test Call Modal */}
-          <Modal open={testCallIncoming} onCancel={handleRejectTestCall} footer={null} title="Test Call Incoming" closable={!testCallActive}>
-            <div style={{ textAlign: 'center', margin: '32px 0' }}>
-              <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Test Call from Widget</div>
-              {!testCallActive ? (
-                <>
-                  <Button type="primary" onClick={handleAcceptTestCall} style={{ marginRight: 12 }}>Accept</Button>
-                  <Button danger onClick={handleRejectTestCall}>Reject</Button>
-                </>
-              ) : (
-                <>
-                  <div style={{ margin: '16px 0' }}><strong>Status:</strong> In Test Call</div>
-                  <Button onClick={handleEndTestCall}>End Test Call</Button>
-                </>
-              )}
+
+      {/* Call Management Interface - Only show when in call */}
+      {callStatus === 'In Call' && (
+        <Card style={{ 
+          marginBottom: 32, 
+          borderRadius: 20, 
+          boxShadow: '0 8px 32px rgba(46, 115, 255, 0.15)',
+          background: 'linear-gradient(135deg, #2E73FF 0%, #00e6ef 100%)',
+          color: '#fff',
+          border: 'none'
+        }}>
+          <div style={{ padding: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 20, marginBottom: 4 }}>Active Call</div>
+                <div style={{ fontSize: 16, opacity: 0.9 }}>Duration: {callTimer}</div>
+              </div>
+              <div style={{ 
+                background: 'rgba(255, 255, 255, 0.15)', 
+                borderRadius: 12, 
+                padding: '8px 16px',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                backdropFilter: 'blur(10px)'
+              }}>
+                <div style={{ fontSize: 14, opacity: 0.8, marginBottom: 2 }}>Status</div>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>{webrtcState === 'connected' ? 'Connected' : 'Connecting...'}</div>
+              </div>
             </div>
-          </Modal>
-        </Tabs.TabPane>
-        <Tabs.TabPane tab="Call History" key="history">
-          {/* Call history table and mini-CRM timeline */}
-          <Row gutter={[24, 24]} style={{ marginBottom: 32 }}>
+            
+            {/* Call Control Buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
+              <Button 
+                type="primary" 
+                icon={localStream && localStream.getAudioTracks()[0]?.enabled ? <AudioMutedOutlined /> : <AudioOutlined />}
+                onClick={() => {
+                  if (localStream) {
+                    localStream.getAudioTracks().forEach(track => track.enabled = !track.enabled);
+                  }
+                }}
+                style={{ 
+                  borderRadius: 12, 
+                  fontWeight: 600, 
+                  height: 48,
+                  background: localStream && localStream.getAudioTracks()[0]?.enabled ? 'rgba(255, 255, 255, 0.2)' : '#fff',
+                  color: localStream && localStream.getAudioTracks()[0]?.enabled ? '#fff' : '#2E73FF',
+                  border: '1px solid rgba(255, 255, 255, 0.3)'
+                }}
+              >
+                {localStream && localStream.getAudioTracks()[0]?.enabled ? 'Mute' : 'Unmute'}
+              </Button>
+              
+              <Button 
+                icon={<PauseCircleOutlined />}
+                onClick={() => {
+                  // TODO: Implement hold functionality
+                  message.info('Hold functionality coming soon');
+                }}
+                style={{ 
+                  borderRadius: 12, 
+                  fontWeight: 600, 
+                  height: 48,
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  color: '#fff',
+                  border: '1px solid rgba(255, 255, 255, 0.3)'
+                }}
+              >
+                Hold
+              </Button>
+              
+              <Button 
+                danger 
+                icon={<CloseCircleOutlined />}
+                onClick={() => handleCallAction('end')}
+                style={{ 
+                  borderRadius: 12, 
+                  fontWeight: 600, 
+                  height: 48,
+                  background: 'rgba(220, 53, 69, 0.9)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)'
+                }}
+              >
+                End Call
+              </Button>
+            </div>
+            
+            {/* Form Push Section */}
+            <div style={{ 
+              background: 'rgba(255, 255, 255, 0.1)', 
+              borderRadius: 16, 
+              padding: 20,
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              backdropFilter: 'blur(10px)'
+            }}>
+              <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 12 }}>Push Forms to Visitor</div>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <Button 
+                  icon={<FormOutlined />}
+                  onClick={() => {
+                    // Push email form
+                    const formData = {
+                      companyId: 'demo-company-001',
+                      sessionId: activeChat || 'demo-session', // Use active chat session ID
+                      from: agentUsername,
+                      type: 'email',
+                      fields: [
+                        { label: 'Email Address', type: 'email', required: true }
+                      ]
+                    };
+                    console.log('Pushing email form:', formData);
+                    fetch('http://localhost:5000/api/form-push', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(formData)
+                    })
+                    .then(res => {
+                      if (!res.ok) {
+                        throw new Error(`HTTP error! status: ${res.status}`);
+                      }
+                      return res.json();
+                    })
+                    .then(data => {
+                      console.log('Form push successful:', data);
+                      message.success('Email form pushed to visitor');
+                    })
+                    .catch(error => {
+                      console.error('Form push failed:', error);
+                      message.error('Failed to push form: ' + error.message);
+                    });
+                  }}
+                  style={{ 
+                    borderRadius: 8, 
+                    fontWeight: 600,
+                    background: 'rgba(255, 255, 255, 0.2)',
+                    color: '#fff',
+                    border: '1px solid rgba(255, 255, 255, 0.3)'
+                  }}
+                >
+                  Request Email
+                </Button>
+                
+                <Button 
+                  icon={<FormOutlined />}
+                  onClick={() => {
+                    // Push phone form
+                    const formData = {
+                      companyId: 'demo-company-001',
+                      sessionId: activeChat || 'demo-session', // Use active chat session ID
+                      from: agentUsername,
+                      type: 'phone',
+                      fields: [
+                        { label: 'Phone Number', type: 'tel', required: true }
+                      ]
+                    };
+                    console.log('Pushing phone form:', formData);
+                    fetch('http://localhost:5000/api/form-push', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(formData)
+                    })
+                    .then(res => {
+                      if (!res.ok) {
+                        throw new Error(`HTTP error! status: ${res.status}`);
+                      }
+                      return res.json();
+                    })
+                    .then(data => {
+                      console.log('Form push successful:', data);
+                      message.success('Phone form pushed to visitor');
+                    })
+                    .catch(error => {
+                      console.error('Form push failed:', error);
+                      message.error('Failed to push form: ' + error.message);
+                    });
+                  }}
+                  style={{ 
+                    borderRadius: 8, 
+                    fontWeight: 600,
+                    background: 'rgba(255, 255, 255, 0.2)',
+                    color: '#fff',
+                    border: '1px solid rgba(255, 255, 255, 0.3)'
+                  }}
+                >
+                  Request Phone
+                </Button>
+                
+                <Button 
+                  icon={<FormOutlined />}
+                  onClick={() => {
+                    // Push custom form
+                    const formData = {
+                      companyId: 'demo-company-001',
+                      sessionId: activeChat || 'demo-session', // Use active chat session ID
+                      from: agentUsername,
+                      type: 'custom',
+                      fields: [
+                        { label: 'Full Name', type: 'text', required: true },
+                        { label: 'Company', type: 'text', required: false },
+                        { label: 'How can we help?', type: 'textarea', required: true }
+                      ]
+                    };
+                    console.log('Pushing custom form:', formData);
+                    fetch('http://localhost:5000/api/form-push', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(formData)
+                    })
+                    .then(res => {
+                      if (!res.ok) {
+                        throw new Error(`HTTP error! status: ${res.status}`);
+                      }
+                      return res.json();
+                    })
+                    .then(data => {
+                      console.log('Form push successful:', data);
+                      message.success('Custom form pushed to visitor');
+                    })
+                    .catch(error => {
+                      console.error('Form push failed:', error);
+                      message.error('Failed to push form: ' + error.message);
+                    });
+                  }}
+                  style={{ 
+                    borderRadius: 8, 
+                    fontWeight: 600,
+                    background: 'rgba(255, 255, 255, 0.2)',
+                    color: '#fff',
+                    border: '1px solid rgba(255, 255, 255, 0.3)'
+                  }}
+                >
+                  Custom Form
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Main Content by Tab */}
+      {activeTab === 'dashboard' && (
+        <>
+          {/* Metric Cards */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: 32,
+            marginBottom: 32,
+          }}
+          className="metric-card-grid"
+          >
+            <Card className="card" style={{ borderRadius: 20, boxShadow: '0 4px 24px #2E73FF11', background: 'linear-gradient(120deg, #2E73FF 0%, #00e6ef 100%)', color: '#fff', display: 'flex', alignItems: 'center', gap: 16 }}>
+              <PhoneOutlined style={{ fontSize: 36, color: '#fff' }} />
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>Total Calls</div>
+                <div style={{ fontSize: 28, fontWeight: 900 }}>{callLog.length}</div>
+              </div>
+            </Card>
+            <Card className="card" style={{ borderRadius: 20, boxShadow: '0 4px 24px #1CC88A22', background: 'linear-gradient(120deg, #1CC88A 0%, #2E73FF 100%)', color: '#fff', display: 'flex', alignItems: 'center', gap: 16 }}>
+              <CheckCircleOutlined style={{ fontSize: 36, color: '#fff' }} />
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>Answered Calls</div>
+                <div style={{ fontSize: 28, fontWeight: 900 }}>{callLog.filter(l => (l.disposition || l.status || '').toLowerCase().includes('answer') || (l.status || '').toLowerCase() === 'accepted').length}</div>
+              </div>
+            </Card>
+            <Card className="card" style={{ borderRadius: 20, boxShadow: '0 4px 24px #E74A3B22', background: 'linear-gradient(120deg, #E74A3B 0%, #2E73FF 100%)', color: '#fff', display: 'flex', alignItems: 'center', gap: 16 }}>
+              <CloseCircleOutlined style={{ fontSize: 36, color: '#fff' }} />
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>Missed Calls</div>
+                <div style={{ fontSize: 28, fontWeight: 900 }}>{callLog.filter(l => (l.disposition || l.status || '').toLowerCase().includes('miss') || (l.status || '').toLowerCase() === 'rejected').length}</div>
+              </div>
+            </Card>
+            <Card className="card" style={{ borderRadius: 20, boxShadow: '0 4px 24px #00e6ef22', background: 'linear-gradient(120deg, #00e6ef 0%, #2E73FF 100%)', color: '#fff', display: 'flex', alignItems: 'center', gap: 16 }}>
+              <ClockCircleOutlined style={{ fontSize: 36, color: '#fff' }} />
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>Average Duration</div>
+                <div style={{ fontSize: 28, fontWeight: 900 }}>{(() => {
+                  if (!callLog.length) return '00:00';
+                  const toSec = d => {
+                    if (!d) return 0;
+                    if (typeof d === 'number') return d;
+                    if (typeof d === 'string' && d.includes(':')) {
+                      const [min, sec] = d.split(':').map(Number);
+                      return min * 60 + sec;
+                    }
+                    return Number(d) || 0;
+                  };
+                  const avg = Math.round(callLog.reduce((a, l) => a + toSec(l.duration), 0) / callLog.length);
+                  const mm = String(Math.floor(avg / 60)).padStart(2, '0');
+                  const ss = String(avg % 60).padStart(2, '0');
+                  return `${mm}:${ss}`;
+                })()}</div>
+              </div>
+            </Card>
+            <Card className="card" style={{ borderRadius: 20, boxShadow: '0 4px 24px #F6C23E22', background: 'linear-gradient(120deg, #F6C23E 0%, #2E73FF 100%)', color: '#fff', display: 'flex', alignItems: 'center', gap: 16 }}>
+              <TagOutlined style={{ fontSize: 36, color: '#fff' }} />
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>Call Tags</div>
+                <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {[...new Set(callLog.flatMap(l => l.tags || []))].map(tag => (
+                    <span key={tag} style={{ background: 'rgba(255, 255, 255, 0.2)', color: '#fff', borderRadius: 4, padding: '2px 8px', fontSize: 14 }}>{tag}</span>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </div>
+        </>
+      )}
+      {activeTab === 'calls' && (
+        <>
+          {/* Call History Section */}
+          <Row gutter={[32, 32]} style={{ marginBottom: 32 }}>
             <Col xs={24} md={12}>
-              <Card title="Call History">
+              <Card style={{ borderRadius: 20, boxShadow: '0 4px 24px #2E73FF11', padding: 24 }} title={<span style={{ fontWeight: 700, fontSize: 18 }}>Call History</span>}>
                 <Input.Search
                   placeholder="Search notes, tags, agent..."
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  style={{ marginBottom: 16, maxWidth: 320 }}
+                  style={{ marginBottom: 16, maxWidth: 320, borderRadius: 8 }}
                   allowClear
                 />
-                <Table columns={columns} dataSource={filteredLogs} rowKey={(_, i) => i} loading={loading} pagination={{ pageSize: 8 }} />
+                <Table columns={columns} dataSource={filteredLogs} rowKey={(_, i) => i} loading={loading} pagination={{ pageSize: 8 }} style={{ borderRadius: 12, overflow: 'hidden' }} />
               </Card>
             </Col>
             <Col xs={24} md={12}>
-              <Card title="Mini-CRM Timeline">
+              <Card style={{ borderRadius: 20, boxShadow: '0 4px 24px #00e6ef22', padding: 24 }} title={<span style={{ fontWeight: 700, fontSize: 18 }}>Mini-CRM Timeline</span>}>
                 <Input
                   placeholder="Session ID for timeline"
                   value={timelineSession}
                   onChange={e => setTimelineSession(e.target.value)}
-                  style={{ marginBottom: 12 }}
+                  style={{ marginBottom: 12, borderRadius: 8 }}
                 />
                 <ul style={{ paddingLeft: 0, listStyle: 'none' }}>
                   {callLog.filter(log => log.sessionId === timelineSession).length === 0 && <li style={{ color: '#888' }}>(No interactions yet)</li>}
                   {callLog.filter(log => log.sessionId === timelineSession).map((log, i) => (
-                    <li key={i} style={{ marginBottom: 12, background: '#fff', padding: 12, borderRadius: 6 }}>
-                      <div><strong>Time:</strong> {log.time}</div>
-                      <div><strong>Disposition:</strong> {log.disposition}</div>
-                      <div><strong>Tags:</strong> {log.tags?.map((tag) => <Tag key={tag}>{tag}</Tag>)}</div>
-                      <div><strong>Notes:</strong> <pre style={{ margin: 0 }}>{log.notes}</pre></div>
+                    <li key={i} style={{ marginBottom: 12, background: '#fff', padding: 16, borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                      <div style={{ fontWeight: 600, marginBottom: 4 }}>Time: {log.time}</div>
+                      <div style={{ marginBottom: 4 }}>Disposition: {log.disposition}</div>
+                      <div style={{ marginBottom: 4 }}>Tags: {log.tags?.map((tag) => <Tag key={tag} style={{ borderRadius: 4 }}>{tag}</Tag>)}</div>
+                      <div>Notes: <pre style={{ margin: 0, fontSize: 14 }}>{log.notes}</pre></div>
                     </li>
                   ))}
                 </ul>
               </Card>
             </Col>
           </Row>
-        </Tabs.TabPane>
-        <Tabs.TabPane tab={<span>Chats{Object.values(unreadChats).reduce((a, b) => a + b, 0) > 0 && <span style={{ background: '#2E73FF', color: '#fff', borderRadius: 8, padding: '0 8px', marginLeft: 6, fontSize: 12 }}>{Object.values(unreadChats).reduce((a, b) => a + b, 0)}</span>}</span>} key="chats">
-          {/* Chat session list and chat view */}
-          {!activeChat ? (
-            <>
-              <h3>Active Chat Sessions</h3>
-              {chatSessions.length === 0 && <Empty description="No active chats" />}
-              <ul style={{ paddingLeft: 0, listStyle: 'none' }}>
-                {chatSessions.map((s, i) => (
-                  <li key={s.sessionId} style={{ marginBottom: 12, background: '#f7fafd', padding: 12, borderRadius: 8, cursor: 'pointer' }} onClick={() => setActiveChat(s.sessionId)}>
-                    <div><strong>Session:</strong> {s.sessionId}</div>
-                    <div><strong>Visitor:</strong> {s.visitorId}</div>
-                    <div><strong>Page:</strong> {s.pageUrl}</div>
-                    <div><strong>Started:</strong> {s.startedAt && new Date(s.startedAt).toLocaleString()}</div>
-                    {unreadChats[s.sessionId] > 0 && <span style={{ background: '#2E73FF', color: '#fff', borderRadius: 8, padding: '0 8px', marginLeft: 6, fontSize: 12 }}>{unreadChats[s.sessionId]}</span>}
-                  </li>
+        </>
+      )}
+      {activeTab === 'chat' && (
+        <>
+          <ChatSessionsLayout
+            sessions={chatSessions.map(s => ({
+              ...s,
+              unreadCount: unreadChats[s.sessionId] || 0,
+              lastMessage: (chatMessages[s.sessionId] || []).slice(-1)[0]?.message || '',
+              lastTimestamp: (chatMessages[s.sessionId] || []).slice(-1)[0]?.timestamp ? new Date((chatMessages[s.sessionId] || []).slice(-1)[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+              status: unreadChats[s.sessionId] > 0 ? 'unread' : (chatMessages[s.sessionId]?.some(m => m.from === agentUsername) ? 'replied' : 'contacted'),
+              visitorInfo: {
+                name: s.visitorId,
+                email: `visitor-${s.sessionId.slice(-4)}@example.com`, // Demo email
+                phone: `+1-555-${s.sessionId.slice(-4)}`, // Demo phone
+                location: 'New York, NY', // Demo location
+                browser: 'Chrome 120.0', // Demo browser
+                device: 'Desktop', // Demo device
+                previousChats: Math.floor(Math.random() * 5), // Demo previous chats
+                totalTime: `${Math.floor(Math.random() * 60)}m ${Math.floor(Math.random() * 60)}s`, // Demo total time
+              },
+              assignedAgent: agentUsername, // For demo, assign all to current agent
+              escalated: escalatedChats[s.sessionId] || false,
+              rating: chatRatings[s.sessionId] || null,
+            }))}
+            activeChat={activeChat}
+            messages={chatMessages}
+            onSelectSession={setActiveChat}
+            onSendMessage={msg => { if (msg.trim()) { handleSendChat(); } }}
+            chatInput={chatInput}
+            setChatInput={setChatInput}
+            agentUsername={agentUsername}
+            onEscalateChat={handleEscalateChat}
+            cannedResponses={cannedResponses}
+          />
+          {/* End Chat & Rate Modal (for demo) */}
+          <Modal open={showRatingModal} onCancel={() => setShowRatingModal(false)} onOk={handleSubmitRating} okText="Submit Rating" title="Rate this Chat" style={{ borderRadius: 16 }} okButtonProps={{ style: { borderRadius: 8, fontWeight: 600 } }}>
+            <div style={{ textAlign: 'center', margin: '24px 0' }}>
+              <span style={{ fontWeight: 600, fontSize: 16 }}>How would you rate your chat experience?</span>
+              <div style={{ marginTop: 16 }}>
+                {[1,2,3,4,5].map(star => (
+                  <span key={star} style={{ fontSize: 32, color: ratingValue >= star ? '#FFD700' : '#e0e0e0', cursor: 'pointer' }} onClick={() => setRatingValue(star)}>&#9733;</span>
                 ))}
-              </ul>
-            </>
-          ) : (
-            <>
-              <Button onClick={() => setActiveChat(null)} style={{ marginBottom: 12 }}>Back to Chats</Button>
-              <Card>
-                <div style={{ marginBottom: 8 }}>
-                  <strong>Session:</strong> {activeChat}
-                </div>
-                <div style={{ minHeight: 180, maxHeight: 220, overflowY: 'auto', background: '#fff', borderRadius: 12, marginBottom: 12, padding: 12 }}>
-                  {(chatMessages[activeChat] || []).map((msg, i) => (
-                    <div key={i} style={{ textAlign: msg.from === 'agent' ? 'right' : 'left', margin: '8px 0' }}>
-                      <span style={{
-                        display: 'inline-block',
-                        background: msg.from === 'agent' ? '#2E73FF' : '#e8f1ff',
-                        color: msg.from === 'agent' ? '#fff' : '#222',
-                        borderRadius: 12,
-                        padding: '6px 14px',
-                        maxWidth: 220,
-                        fontWeight: 500
-                      }}>
-                        {msg.message}
-                      </span>
-                      <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>{msg.timestamp && new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                    </div>
-                  ))}
-                  {visitorTyping[activeChat] && (
-                    <div style={{ textAlign: 'right', margin: '8px 0' }}>
-                      <span style={{
-                        display: 'inline-block',
-                        background: '#2E73FF',
-                        color: '#fff',
-                        borderRadius: 12,
-                        padding: '6px 14px',
-                        maxWidth: 220,
-                        fontWeight: 500,
-                        fontStyle: 'italic',
-                        opacity: 0.7
-                      }}>
-                        Visitor is typing...
-                      </span>
-                    </div>
-                  )}
-                  <div ref={chatEndRef} />
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <Input
-                    value={chatInput}
-                    onChange={handleAgentInput}
-                    onPressEnter={handleSendChat}
-                    placeholder="Type your message..."
-                    style={{ flex: 1 }}
-                  />
-                  <Button
-                    icon={<SendOutlined />}
-                    type="primary"
-                    onClick={handleSendChat}
-                    disabled={!chatInput}
-                  />
-                </div>
-              </Card>
-            </>
-          )}
-        </Tabs.TabPane>
-        <Tabs.TabPane tab="Profile/Settings" key="profile">
-          {/* Audio device selection, agent profile/settings */}
-          <Row gutter={[24, 24]}>
-            <Col xs={24} md={12}>
-              <Card title="Audio Device Selection / Settings">
-                {/* TODO: Implement audio device selection/settings */}
-                <Button onClick={() => { /* TODO */ }}>Select Microphone</Button>
-                <Button style={{ marginLeft: 8 }} onClick={() => { /* TODO */ }}>Select Speaker</Button>
-              </Card>
-            </Col>
-            <Col xs={24} md={12}>
-              <Card title="Agent Profile / Settings">
-                {/* TODO: Implement agent profile/settings management */}
-                <Button type="primary" onClick={() => { /* TODO */ }}>Edit Profile</Button>
-              </Card>
-            </Col>
-          </Row>
-        </Tabs.TabPane>
-        <Tabs.TabPane tab="Notifications" key="notifications">
-          {/* Notifications panel */}
-          <Card title="Notifications" extra={<BellOutlined />}>
+              </div>
+            </div>
+          </Modal>
+          <Button onClick={() => {
+            if (activeChat) {
+              handleEndChat(activeChat);
+            }
+          }} style={{ position: 'absolute', right: 32, bottom: 32, borderRadius: 8, fontWeight: 600, zIndex: 10 }}>End Chat & Rate (Demo)</Button>
+        </>
+      )}
+      {activeTab === 'notifications' && (
+        <>
+          {/* Notifications Section */}
+          <Card style={{ borderRadius: 20, boxShadow: '0 4px 24px #F6C23E22', padding: 24 }} title={<span style={{ fontWeight: 700, fontSize: 18 }}>Notifications</span>} extra={<BellOutlined style={{ fontSize: 20, color: '#F6C23E' }} />}>
             {/* TODO: Connect to real notifications */}
-            <ul style={{ paddingLeft: 16 }}>
+            <ul style={{ paddingLeft: 16, fontSize: 16, color: '#213547' }}>
               <li>Incoming call from visitor (demo)</li>
               <li>Missed call (demo)</li>
             </ul>
           </Card>
-        </Tabs.TabPane>
-      </Tabs>
+        </>
+      )}
+      {activeTab === 'settings' && (
+        <>
+          {/* Settings/Profile Section */}
+          <Row gutter={[32, 32]}>
+            <Col xs={24} md={12}>
+              <Card style={{ borderRadius: 20, boxShadow: '0 4px 24px #2E73FF11', padding: 24 }} title={<span style={{ fontWeight: 700, fontSize: 18 }}>Audio Device Selection / Settings</span>}>
+                {/* TODO: Implement audio device selection/settings */}
+                <Button style={{ borderRadius: 8, fontWeight: 600, marginRight: 8 }} onClick={() => { /* TODO */ }}>Select Microphone</Button>
+                <Button style={{ borderRadius: 8, fontWeight: 600 }} onClick={() => { /* TODO */ }}>Select Speaker</Button>
+              </Card>
+            </Col>
+            <Col xs={24} md={12}>
+              <Card style={{ borderRadius: 20, boxShadow: '0 4px 24px #00e6ef22', padding: 24 }} title={<span style={{ fontWeight: 700, fontSize: 18 }}>Agent Profile / Settings</span>}>
+                {/* TODO: Implement agent profile/settings management */}
+                <Button type="primary" style={{ borderRadius: 8, fontWeight: 600 }} onClick={() => { /* TODO */ }}>Edit Profile</Button>
+              </Card>
+            </Col>
+          </Row>
+        </>
+      )}
       <div style={{ marginBottom: 16, textAlign: 'right' }}>
-        <Tag color={chatOnline ? 'green' : 'red'}>{chatOnline ? 'Chat Online' : 'Chat Offline'}</Tag>
+        <Tag color={chatOnline ? 'green' : 'red'} style={{ borderRadius: 8, fontWeight: 600 }}>{chatOnline ? 'Chat Online' : 'Chat Offline'}</Tag>
       </div>
       {webrtcState === 'connecting' && <div style={{ background: '#e8f1ff', color: '#2E73FF', fontWeight: 600, fontSize: 15, padding: '8px 0', textAlign: 'center', borderRadius: 8, margin: '8px 0 0 0' }}>Connecting audio...</div>}
       {webrtcState === 'connected' && <div style={{ background: '#e8f1ff', color: '#1CC88A', fontWeight: 600, fontSize: 15, padding: '8px 0', textAlign: 'center', borderRadius: 8, margin: '8px 0 0 0' }}>Live audio with visitor</div>}
@@ -672,15 +1201,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername 
       {!remoteStream && webrtcState === 'connected' && (
         <div style={{ color: '#E74A3B', fontWeight: 600, textAlign: 'center', marginTop: 8 }}>No remote audio received. Check widget mic and permissions.</div>
       )}
-      <Button onClick={() => {
-        if (localStream) {
-          localStream.getAudioTracks().forEach(track => track.enabled = !track.enabled);
-        }
-      }} style={{ marginLeft: 8 }}>{localStream && localStream.getAudioTracks()[0]?.enabled ? 'Mute' : 'Unmute'}</Button>
       <audio ref={audioRef} src={notificationSound} preload="auto" style={{ display: 'none' }} />
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 24, marginBottom: 8 }}>
-        <img src={logoLight} alt="Calldock Logo" style={{ width: 56, height: 56, marginBottom: 8 }} />
-      </div>
     </DashboardLayout>
   );
 } 

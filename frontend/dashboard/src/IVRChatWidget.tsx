@@ -65,6 +65,12 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
   const [agentTyping, setAgentTyping] = useState(false);
   const [agentsOnline, setAgentsOnline] = useState(true);
 
+  // Form push state
+  const [activeForm, setActiveForm] = useState(null);
+  const [formValues, setFormValues] = useState({});
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [formResponseMsg, setFormResponseMsg] = useState('');
+
   // Check agent online status when widget opens or companyUuid changes
   useEffect(() => {
     if (!open || !companyUuid) return;
@@ -146,6 +152,40 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
     socket.on('queue-update', handler);
     return () => socket.off('queue-update', handler);
   }, [socketRef.current]);
+
+  // Listen for form:push and form:response events
+  useEffect(() => {
+    if (!socketRef.current) return;
+    const socket = socketRef.current;
+    const onFormPush = (form) => {
+      setActiveForm(form);
+      setFormValues({});
+      setFormResponseMsg('');
+    };
+    const onFormResponse = (response) => {
+      setActiveForm(null);
+      setFormResponseMsg('Form submitted!');
+      
+      // Add form response to chat messages
+      const formMessage = {
+        sessionId: response.sessionId,
+        message: `📋 **Form Submitted**\n${Object.entries(response.values).map(([field, value]) => `**${field}:** ${value}`).join('\n')}`,
+        from: 'visitor',
+        timestamp: response.timestamp,
+        type: 'form-response',
+        formData: response
+      };
+      
+      setChatMessages(msgs => [...msgs, formMessage]);
+    };
+    
+    socket.on('form:push', onFormPush);
+    socket.on('form:response', onFormResponse);
+    return () => {
+      socket.off('form:push', onFormPush);
+      socket.off('form:response', onFormResponse);
+    };
+  }, [open, chatSessionId]);
 
   // Scroll to bottom on new message
   useEffect(() => { if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
@@ -345,6 +385,38 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
     return () => socket.off('chat:message', onMsg);
   }, [mode, open]);
 
+  // Load chat messages from backend when chatSessionId changes
+  useEffect(() => {
+    if (!chatSessionId || !companyUuid) return;
+    fetch(`http://localhost:5000/api/chat-messages?companyId=${companyUuid}&sessionId=${chatSessionId}`)
+      .then(res => res.json())
+      .then(messages => {
+        setChatMessages(messages);
+      });
+      
+    // Also fetch form responses
+    fetch(`http://localhost:5000/api/form-response?companyId=${companyUuid}&sessionId=${chatSessionId}`)
+      .then(res => res.json())
+      .then(responses => {
+        // Convert form responses to chat messages
+        const formMessages = responses.map(response => ({
+          sessionId: response.sessionId,
+          message: `📋 **Form Submitted**\n${Object.entries(response.values).map(([field, value]) => `**${field}:** ${value}`).join('\n')}`,
+          from: 'visitor',
+          timestamp: response.timestamp,
+          type: 'form-response',
+          formData: response
+        }));
+        
+        // Combine regular messages and form responses, sorted by timestamp
+        const allMessages = [...messages, ...formMessages].sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+        
+        setChatMessages(allMessages);
+      });
+  }, [chatSessionId, companyUuid]);
+
   // Scroll to bottom on new chat message
   useEffect(() => {
     if (mode === 'chat' && chatWidgetEndRef.current) {
@@ -377,7 +449,7 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
   }, [mode, open]);
 
   // Send chat message
-  const handleSendChat = () => {
+  const handleSendChat = async () => {
     if (!chatInput.trim() || !chatSessionId || !socketRef.current) return;
     const msg = {
       sessionId: chatSessionId,
@@ -385,7 +457,20 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
       from: 'visitor',
       timestamp: new Date().toISOString()
     };
-    console.log('[Widget] emit chat:message', msg);
+    // Persist to backend
+    if (companyUuid) {
+      await fetch('http://localhost:5000/api/chat-messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId: companyUuid,
+          sessionId: chatSessionId,
+          from: 'visitor',
+          message: chatInput.trim(),
+          timestamp: msg.timestamp
+        })
+      });
+    }
     socketRef.current.emit('chat:message', msg);
     setChatMessages(msgs => [...msgs, msg]);
     setChatInput('');
@@ -448,6 +533,35 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
       }
       setLoading(false);
     }, 900);
+  };
+
+  // Handle form field change
+  const handleFormFieldChange = (label, value) => {
+    setFormValues(vals => ({ ...vals, [label]: value }));
+  };
+
+  // Handle form submit
+  const handleFormSubmit = async () => {
+    if (!activeForm || !companyUuid || !chatSessionId) return;
+    setFormSubmitting(true);
+    const res = await fetch('http://localhost:5000/api/form-response', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        companyId: companyUuid,
+        sessionId: chatSessionId,
+        formId: activeForm._id,
+        from: chatSessionId,
+        values: formValues
+      })
+    });
+    if (res.ok) {
+      setActiveForm(null);
+      setFormResponseMsg('Form submitted!');
+    } else {
+      setFormResponseMsg('Failed to submit form.');
+    }
+    setFormSubmitting(false);
   };
 
   // Start call handler
@@ -593,17 +707,19 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
       footer={null}
       width={400}
       centered
-      bodyStyle={{ 
-        padding: 0, 
-        borderRadius: (callState === 'in-call' || callState === 'ringing') ? 32 : 24, 
-        overflow: 'hidden', 
-        background: '#f7fafd',
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        boxShadow: (callState === 'in-call' || callState === 'ringing') 
-          ? '0 20px 40px rgba(46, 115, 255, 0.15), 0 8px 16px rgba(0, 0, 0, 0.1)' 
-          : '0 8px 24px rgba(0, 0, 0, 0.12)',
-        transform: (callState === 'in-call' || callState === 'ringing') ? 'scale(1.02)' : 'scale(1)',
-        border: (callState === 'in-call' || callState === 'ringing') ? '2px solid rgba(46, 115, 255, 0.2)' : 'none'
+      styles={{
+        body: { 
+          padding: 0, 
+          borderRadius: (callState === 'in-call' || callState === 'ringing') ? 32 : 24, 
+          overflow: 'hidden', 
+          background: '#f7fafd',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          boxShadow: (callState === 'in-call' || callState === 'ringing') 
+            ? '0 20px 40px rgba(46, 115, 255, 0.15), 0 8px 16px rgba(0, 0, 0, 0.1)' 
+            : '0 8px 24px rgba(0, 0, 0, 0.12)',
+          transform: (callState === 'in-call' || callState === 'ringing') ? 'scale(1.02)' : 'scale(1)',
+          border: (callState === 'in-call' || callState === 'ringing') ? '2px solid rgba(46, 115, 255, 0.2)' : 'none'
+        }
       }}
       style={{ 
         top: 'auto', 
@@ -911,6 +1027,30 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
                   <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2, textAlign: msg.from === 'visitor' ? 'right' : 'left' }}>{msg.timestamp && new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                 </div>
               ))}
+              {/* Show pushed form as a chat bubble */}
+              {activeForm && (
+                <div style={{ ...agentBubbleStyle, background: '#eaf1ff', color: '#222', margin: '12px 0' }}>
+                  <div style={{ fontWeight: 600, marginBottom: 8 }}>Agent has requested info:</div>
+                  <form onSubmit={e => { e.preventDefault(); handleFormSubmit(); }}>
+                    {activeForm.fields.map((field, idx) => (
+                      <div key={idx} style={{ marginBottom: 10 }}>
+                        <label style={{ fontWeight: 500 }}>{field.label}{field.required && ' *'}</label>
+                        <Input
+                          type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
+                          value={formValues[field.label] || ''}
+                          onChange={e => handleFormFieldChange(field.label, e.target.value)}
+                          required={field.required}
+                          style={{ borderRadius: 8, marginTop: 4 }}
+                        />
+                      </div>
+                    ))}
+                    <Button type="primary" htmlType="submit" loading={formSubmitting} style={{ borderRadius: 8, fontWeight: 600, marginTop: 8 }}>Submit</Button>
+                  </form>
+                </div>
+              )}
+              {formResponseMsg && (
+                <div style={{ ...agentBubbleStyle, background: '#eaf1ff', color: '#222', margin: '12px 0' }}>{formResponseMsg}</div>
+              )}
               {/* Typing indicator */}
               {agentTyping && <div style={{ alignSelf: 'flex-start', margin: '4px 0', fontSize: 13, color: '#2E73FF', background: '#eaf1ff', borderRadius: 12, padding: '4px 12px' }}>Agent is typing...</div>}
               <div ref={chatWidgetEndRef} />

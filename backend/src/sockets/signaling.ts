@@ -185,6 +185,23 @@ export function registerSignalingHandlers(io: Server) {
       if (chatSessions[data.sessionId]) {
         chatSessions[data.sessionId].messages.push(msg);
       }
+      
+      // Also save to backend storage for persistence
+      const chatMessage = {
+        _id: Math.random().toString(36).substr(2, 9),
+        companyId: data.companyId || 'demo-company-001',
+        sessionId: data.sessionId,
+        message: data.message,
+        from: data.from,
+        timestamp: data.timestamp || new Date().toISOString()
+      };
+      
+      // Access the tempStorage from the global scope (we'll need to pass it)
+      if ((global as any).tempStorage) {
+        (global as any).tempStorage.chatMessages.push(chatMessage);
+        console.log('Chat message saved to backend storage:', chatMessage);
+      }
+      
       io.to(data.sessionId).emit('chat:message', { ...msg, sessionId: data.sessionId });
     });
 

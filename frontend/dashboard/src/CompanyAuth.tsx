@@ -8,6 +8,7 @@ const API_URL = 'http://localhost:5000/api/widget';
 export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: string) => void }) {
   const [mode, setMode] = useState<'register' | 'login'>('register');
   const [companyName, setCompanyName] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [adminUsername, setAdminUsername] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [email, setEmail] = useState('');
@@ -24,6 +25,8 @@ export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: 
   const [forgotPwUsername, setForgotPwUsername] = useState('');
   const [forgotPwEmail, setForgotPwEmail] = useState('');
   const [forgotPwMsg, setForgotPwMsg] = useState('');
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState('');
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,13 +36,19 @@ export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: 
       const res = await fetch(`${API_URL}/company/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyName, adminUsername, adminPassword, email })
+        body: JSON.stringify({ 
+          companyName, 
+          displayName: displayName || companyName, // Use companyName as default
+          adminUsername, 
+          adminPassword, 
+          email 
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Registration failed');
-      setCompanyUuid(data.uuid);
-      setWelcomeToken(data.token);
-      setShowWelcome(true);
+      
+      setRegisteredEmail(email);
+      setRegistrationSuccess(true);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -63,6 +72,7 @@ export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Login failed');
+      
       // Fetch companyUuid by email for onAuth
       let uuid = companyUuid;
       if (!uuid && email) {
@@ -76,16 +86,98 @@ export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: 
     }
   };
 
-  const handleForgotUuid = (e: React.FormEvent) => {
+  const handleForgotUuid = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate sending email
-    setForgotUuidMsg('If an account exists for this email, the Company UUID has been sent.');
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/auth/forgot-uuid`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send UUID reminder');
+      setForgotUuidMsg(data.message);
+    } catch (err: any) {
+      setForgotUuidMsg(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleForgotPassword = (e: React.FormEvent) => {
+  const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    setForgotPwMsg('If the information matches our records, a password reset link has been sent to your email.');
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: forgotPwEmail, 
+          companyUuid: forgotPwUuid, 
+          username: forgotPwUsername 
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send password reset');
+      setForgotPwMsg(data.message);
+    } catch (err: any) {
+      setForgotPwMsg(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  if (registrationSuccess) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f7f7f7' }}>
+        <div style={{ background: '#fff', padding: 32, borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', minWidth: 340, maxWidth: 420, textAlign: 'center' }}>
+          <div style={{ marginBottom: 24 }}>
+            <img src={logoLight} alt="CallDocker Logo" style={{ height: 48, width: 'auto', borderRadius: 12 }} />
+          </div>
+          
+          <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
+          <h2 style={{ color: '#2E73FF', marginBottom: 16 }}>Check Your Email!</h2>
+          <p style={{ color: '#666', marginBottom: 24 }}>
+            We've sent a verification email to <strong>{registeredEmail}</strong>.
+          </p>
+          
+          <div style={{ background: '#f0f8ff', borderRadius: 8, padding: 16, marginBottom: 24, textAlign: 'left' }}>
+            <p style={{ margin: '0 0 8px 0', fontWeight: 600, color: '#2E73FF' }}>Next Steps:</p>
+            <ol style={{ margin: 0, paddingLeft: 20, color: '#666', fontSize: 14 }}>
+              <li>Check your email inbox (and spam folder)</li>
+              <li>Click the verification link in the email</li>
+              <li>Complete your account setup</li>
+              <li>Start using CallDocker!</li>
+            </ol>
+          </div>
+          
+          <p style={{ color: '#888', fontSize: 14, marginBottom: 16 }}>
+            Didn't receive the email? Check your spam folder or contact support.
+          </p>
+          
+          <button 
+            onClick={() => {
+              setRegistrationSuccess(false);
+              setRegisteredEmail('');
+              setMode('login');
+            }}
+            style={{ 
+              background: '#f0f0f0', 
+              color: '#666', 
+              border: 'none', 
+              borderRadius: 8, 
+              padding: '12px 24px', 
+              fontWeight: 600, 
+              cursor: 'pointer'
+            }}
+          >
+            Back to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (showWelcome) {
     return (
@@ -107,7 +199,7 @@ export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: 
               <li>Share your Company UUID with agents for login</li>
             </ul>
           </div>
-          <button style={{ width: '100%', padding: 12, background: '#007bff', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 17, marginTop: 8 }} onClick={() => onAuth(welcomeToken, companyUuid)}>
+          <button onClick={() => onAuth(welcomeToken, companyUuid)} style={{ width: '100%', padding: 10, background: '#007bff', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600 }}>
             Go to Dashboard
           </button>
         </div>
@@ -126,9 +218,9 @@ export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: 
                 <input type="email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
               </label>
             </div>
-            {forgotUuidMsg && <div style={{ color: 'green', marginBottom: 12 }}>{forgotUuidMsg}</div>}
-            <button type="submit" style={{ width: '100%', padding: 10, background: '#007bff', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600 }}>
-              Send Company UUID
+            {forgotUuidMsg && <div style={{ color: forgotUuidMsg.includes('error') ? 'red' : 'green', marginBottom: 12 }}>{forgotUuidMsg}</div>}
+            <button type="submit" disabled={loading} style={{ width: '100%', padding: 10, background: '#007bff', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600 }}>
+              {loading ? 'Sending...' : 'Send Company UUID'}
             </button>
           </form>
           <div style={{ marginTop: 16 }}>
@@ -145,24 +237,24 @@ export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: 
         <div style={{ background: '#fff', padding: 32, borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', minWidth: 340, maxWidth: 420, textAlign: 'center' }}>
           <h2>Forgot Password?</h2>
           <form onSubmit={handleForgotPassword}>
-            <div style={{ marginBottom: 12 }}>
-              <label>Company UUID<br />
-                <input value={forgotPwUuid} onChange={e => setForgotPwUuid(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
-              </label>
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <label>Admin Username<br />
-                <input value={forgotPwUsername} onChange={e => setForgotPwUsername(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
-              </label>
-            </div>
             <div style={{ marginBottom: 16 }}>
               <label>Email<br />
                 <input type="email" value={forgotPwEmail} onChange={e => setForgotPwEmail(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
               </label>
             </div>
-            {forgotPwMsg && <div style={{ color: 'green', marginBottom: 12 }}>{forgotPwMsg}</div>}
-            <button type="submit" style={{ width: '100%', padding: 10, background: '#007bff', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600 }}>
-              Send Reset Link
+            <div style={{ marginBottom: 16 }}>
+              <label>Company UUID (optional)<br />
+                <input value={forgotPwUuid} onChange={e => setForgotPwUuid(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} />
+              </label>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label>Username (optional)<br />
+                <input value={forgotPwUsername} onChange={e => setForgotPwUsername(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} />
+              </label>
+            </div>
+            {forgotPwMsg && <div style={{ color: forgotPwMsg.includes('error') ? 'red' : 'green', marginBottom: 12 }}>{forgotPwMsg}</div>}
+            <button type="submit" disabled={loading} style={{ width: '100%', padding: 10, background: '#007bff', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600 }}>
+              {loading ? 'Sending...' : 'Send Password Reset'}
             </button>
           </form>
           <div style={{ marginTop: 16 }}>
@@ -186,12 +278,23 @@ export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: 
           {mode === 'register' && (
             <>
               <div style={{ marginBottom: 12 }}>
-                <label>Company Name<br />
+                <label>Company Name *<br />
                   <input value={companyName} onChange={e => setCompanyName(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
                 </label>
               </div>
               <div style={{ marginBottom: 12 }}>
-                <label>Email<br />
+                <label>Display Name (optional)<br />
+                  <input 
+                    value={displayName} 
+                    onChange={e => setDisplayName(e.target.value)} 
+                    placeholder="e.g., MindFirm, Acme Corp"
+                    style={{ width: '100%', padding: 8, marginTop: 4 }} 
+                  />
+                  <small style={{ color: '#666', fontSize: 12 }}>This will appear in chats and widgets</small>
+                </label>
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label>Email *<br />
                   <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
                 </label>
               </div>
@@ -199,18 +302,18 @@ export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: 
           )}
           {mode === 'login' && (
             <div style={{ marginBottom: 12 }}>
-              <label>Email<br />
+              <label>Email *<br />
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
               </label>
             </div>
           )}
           <div style={{ marginBottom: 12 }}>
-            <label>Admin Username<br />
+            <label>Admin Username *<br />
               <input value={adminUsername} onChange={e => setAdminUsername(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
             </label>
           </div>
           <div style={{ marginBottom: 12 }}>
-            <label>Password<br />
+            <label>Password *<br />
               <input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
             </label>
           </div>
@@ -223,6 +326,7 @@ export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: 
           <button type="button" onClick={() => {
             if (mode === 'register') {
               setCompanyName('Demo Company');
+              setDisplayName('MindFirm');
               setEmail('demo@company.com');
               setAdminUsername(DEMO_ADMIN_USERNAME);
               setAdminPassword(DEMO_ADMIN_PASSWORD);
@@ -240,6 +344,16 @@ export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: 
             <span>Need to register? <button style={{ color: '#007bff', background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setMode('register')}>Register</button></span>
           )}
         </div>
+        {mode === 'login' && (
+          <div style={{ marginTop: 16, textAlign: 'center', fontSize: 14 }}>
+            <button style={{ color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginRight: 16 }} onClick={() => setShowForgotUuid(true)}>
+              Forgot UUID?
+            </button>
+            <button style={{ color: '#007bff', background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setShowForgotPassword(true)}>
+              Forgot Password?
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
