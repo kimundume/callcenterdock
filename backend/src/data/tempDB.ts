@@ -1,5 +1,17 @@
 // In-memory storage for MVP
-export const companies: Record<string, any> = {};
+export const companies: Record<string, {
+  uuid: string;
+  name: string;
+  companyName?: string; // For backward compatibility
+  displayName?: string;
+  email: string;
+  verified: boolean;
+  suspended?: boolean;
+  createdAt: string;
+  lastLogin?: string;
+  updatedAt?: string;
+}> = {};
+
 export const users: Record<string, any> = {};
 export const agents: Record<string, any> = {};
 export const widgetSettings: Record<string, any> = {};

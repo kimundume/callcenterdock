@@ -13,7 +13,7 @@ const emailConfig = {
 };
 
 // Create transporter
-const transporter = nodemailer.createTransporter(emailConfig);
+const transporter = nodemailer.createTransport(emailConfig);
 
 // Store verification tokens (in production, use Redis or database)
 const verificationTokens: Record<string, { token: string; expires: number; type: 'email' | 'password' }> = {};

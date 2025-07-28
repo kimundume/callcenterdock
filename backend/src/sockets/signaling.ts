@@ -1,5 +1,14 @@
 import { Server, Socket } from 'socket.io';
 import { agents, calls, callQueue, chatSessions } from '../data/tempDB';
+import type { TempStorage } from '../server';
+
+declare global {
+  namespace NodeJS {
+    interface Global {
+      tempStorage: TempStorage;
+    }
+  }
+}
 
 export function registerSignalingHandlers(io: Server) {
   io.on('connection', (socket: Socket) => {

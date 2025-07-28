@@ -3,6 +3,7 @@ import http from 'http';
 import cors from 'cors';
 import { Server } from 'socket.io';
 import widgetRoutes from './routes/widget';
+import superAdminRoutes from './routes/superAdmin';
 import { registerSignalingHandlers } from './sockets/signaling';
 import dotenv from 'dotenv';
 import { chatSessions } from './data/tempDB';
@@ -19,6 +20,8 @@ dotenv.config();
 // Helper function to generate IDs
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
+export { generateId };
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
@@ -27,6 +30,8 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 app.use('/api/widget', widgetRoutes);
+app.use('/api/super-admin', superAdminRoutes);
+app.get('/test', (req, res) => res.send('Test OK'));
 
 // --- Chat REST Endpoints (MVP, placeholder) ---
 app.post('/api/chat/send', (req, res) => {
@@ -321,7 +326,9 @@ app.post('/api/form-push', async (req, res) => {
 app.get('/api/form-push', async (req, res) => {
   const { companyId, sessionId } = req.query;
   if (!companyId || !sessionId) return res.status(400).json({ error: 'companyId and sessionId required' });
-  const forms = await FormPush.find({ companyId, sessionId, active: true }).sort({ timestamp: -1 });
+  
+  // Use temporary storage instead of MongoDB
+  const forms = tempStorage.formPushes.filter(f => f.companyId === companyId && f.sessionId === sessionId && f.active).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   res.json(forms);
 });
 
@@ -505,7 +512,31 @@ app.get('/api/agents/:companyUuid', async (req, res) => {
 console.log('Using temporary in-memory storage for development');
 
 // Temporary storage interface
-interface TempStorage {
+export interface TempStorage {
+  companies: Array<{
+    uuid: string;
+    name: string;
+    companyName?: string; // For backward compatibility
+    displayName?: string;
+    email: string;
+    verified: boolean;
+    suspended?: boolean;
+    createdAt: string;
+    lastLogin?: string;
+    updatedAt?: string;
+    status?: 'pending' | 'approved' | 'rejected';
+  }>;
+  agents: Array<{
+    uuid: string;
+    companyUuid: string;
+    username: string;
+    email?: string;
+    status: string; // online/offline
+    // Add registration status for approval flow
+    registrationStatus?: 'pending' | 'approved' | 'rejected';
+    createdAt: string;
+    updatedAt?: string;
+  }>;
   formPushes: Array<{
     _id: string;
     companyId: string;
@@ -543,9 +574,27 @@ interface TempStorage {
     startedAt: string;
     status: string;
     updatedAt?: string;
+    routingType?: 'public' | 'company';
+    assignedAgent?: string;
+    assignedCompany?: string;
   }>;
-  cannedResponses: any[];
-  chatNotes: any[];
+  cannedResponses: Array<{
+    _id: string;
+    companyId: string;
+    category: string;
+    title: string;
+    message: string;
+    createdAt: string;
+    updatedAt?: string;
+  }>;
+  chatNotes: Array<{
+    _id: string;
+    companyId: string;
+    sessionId: string;
+    author: string;
+    text: string;
+    timestamp: string;
+  }>;
   contacts: Array<{
     _id: string;
     companyId: string;
@@ -572,10 +621,217 @@ interface TempStorage {
     createdAt: string;
     updatedAt: string;
   }>;
+  blogPosts: Array<{
+    id: string;
+    title: string;
+    excerpt: string;
+    content: string;
+    published: boolean;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  packages: Array<{
+    id: string;
+    name: string;
+    price: number;
+    features: string[];
+    active: boolean;
+  }>;
+  supportTickets: Array<{
+    id: string;
+    subject: string;
+    customer: string;
+    status: string;
+    priority: string;
+    createdAt: string;
+    description: string;
+  }>;
+  frontpageContent: {
+    heroTitle: string;
+    heroSubtitle: string;
+    features: string[];
+  };
+  // Phase 3: Advanced Analytics & System Management
+  users: Array<{
+    id: string;
+    username: string;
+    email: string;
+    role: string;
+    status: string;
+    lastLogin?: string;
+    createdAt: string;
+  }>;
+  apiKeys: Array<{
+    id: string;
+    name: string;
+    key: string;
+    permissions: string[];
+    createdAt: string;
+    lastUsed?: string;
+    expiresAt?: string;
+  }>;
+  systemConfig: {
+    maintenanceMode: boolean;
+    emailService: string;
+    storageProvider: string;
+    autoBackup: boolean;
+    maxFileSize: number;
+    sessionTimeout: number;
+    updatedAt: string;
+  };
+  contactMessages: Array<{
+    _id: string;
+    name: string;
+    email: string;
+    phone?: string;
+    message: string;
+    timestamp: string;
+    handled?: boolean;
+  }>;
+  pendingAdmins?: Array<{
+    uuid: string;
+    adminUsername: string;
+    adminPassword: string;
+    email: string;
+    createdAt: string;
+  }>;
+  authUsers?: Array<{
+    uuid: string;
+    username: string;
+    password: string;
+    companyUuid: string;
+    role: string;
+    email: string;
+    createdAt: string;
+  }>;
+  pendingAgentCredentials?: Array<{
+    uuid: string;
+    username: string;
+    password: string;
+    email: string;
+    companyUuid: string;
+    createdAt: string;
+  }>;
+  // Call Management System
+  calls: Array<{
+    id: string;
+    visitorId: string;
+    pageUrl: string;
+    status: 'waiting' | 'connecting' | 'active' | 'ended' | 'missed';
+    assignedAgent?: string;
+    startTime: string;
+    endTime?: string;
+    duration?: number;
+    callType: 'chat' | 'voice';
+    priority: 'normal' | 'urgent' | 'vip';
+    routingType: 'public' | 'company';
+    companyId?: string;
+    sessionId?: string;
+    notes?: string;
+  }>;
+  // Agent Management System
+  agentAssignments: Array<{
+    id: string;
+    agentId: string;
+    assignedToPublic: boolean;
+    maxCalls: number;
+    currentCalls: number;
+    skills: string[];
+    availability: 'available' | 'busy' | 'break' | 'offline';
+    lastActivity: string;
+  }>;
+  // Call Analytics
+  callAnalytics: Array<{
+    id: string;
+    agentId: string;
+    callsHandled: number;
+    avgDuration: number;
+    satisfaction: number;
+    responseTime: number;
+    date: string;
+  }>;
 }
 
 // Initialize temporary storage with sample data
 const tempStorage: TempStorage = {
+  companies: [
+    {
+      uuid: 'company-001',
+      name: 'Tech Corp',
+      companyName: 'Tech Corp',
+      displayName: 'Tech Corp',
+      email: 'info@techcorp.com',
+      verified: true,
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+      status: 'approved'
+    },
+    {
+      uuid: 'company-002',
+      name: 'Acme Inc',
+      companyName: 'Acme Inc',
+      displayName: 'Acme Inc',
+      email: 'info@acme.com',
+      verified: true,
+      createdAt: new Date(Date.now() - 172800000).toISOString(),
+      status: 'approved'
+    },
+    {
+      uuid: 'pending-company-001',
+      name: 'Pending Company Ltd',
+      email: 'pending@company.com',
+      verified: false,
+      suspended: false,
+      createdAt: new Date().toISOString(),
+      status: 'pending'
+    },
+    {
+      uuid: 'rejected-company-001',
+      name: 'Rejected Company Inc',
+      email: 'rejected@company.com',
+      verified: false,
+      suspended: false,
+      createdAt: new Date().toISOString(),
+      status: 'rejected'
+    }
+  ],
+  agents: [
+    {
+      uuid: 'agent-001',
+      companyUuid: 'company-001',
+      username: 'agent1',
+      email: 'agent1@techcorp.com',
+      status: 'online',
+      registrationStatus: 'approved',
+      createdAt: new Date(Date.now() - 3600000).toISOString()
+    },
+    {
+      uuid: 'agent-002',
+      companyUuid: 'company-002',
+      username: 'agent2',
+      email: 'agent2@acme.com',
+      status: 'offline',
+      registrationStatus: 'approved',
+      createdAt: new Date(Date.now() - 7200000).toISOString()
+    },
+    {
+      uuid: 'pending-agent-001',
+      companyUuid: 'company-001',
+      username: 'pending_agent',
+      email: 'pending@agent.com',
+      status: 'offline',
+      registrationStatus: 'pending',
+      createdAt: new Date().toISOString()
+    },
+    {
+      uuid: 'rejected-agent-001',
+      companyUuid: 'company-001',
+      username: 'rejected_agent',
+      email: 'rejected@agent.com',
+      status: 'offline',
+      registrationStatus: 'rejected',
+      createdAt: new Date().toISOString()
+    }
+  ],
   formPushes: [],
   formResponses: [],
   chatMessages: [],
@@ -717,8 +973,262 @@ const tempStorage: TempStorage = {
       createdAt: new Date(Date.now() - 172800000).toISOString(),
       updatedAt: new Date(Date.now() - 7200000).toISOString()
     }
-  ]
+  ],
+  blogPosts: [
+    {
+      id: 'post-1',
+      title: 'Welcome to CallDocker',
+      excerpt: 'Learn how CallDocker can transform your customer communication.',
+      content: 'Full blog post content here...',
+      published: true,
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+      updatedAt: new Date(Date.now() - 86400000).toISOString()
+    }
+  ],
+  packages: [
+    {
+      id: 'basic',
+      name: 'Basic',
+      price: 29,
+      features: ['1 Agent', 'Basic Widget', 'Email Support'],
+      active: true
+    },
+    {
+      id: 'pro',
+      name: 'Professional',
+      price: 99,
+      features: ['5 Agents', 'Custom Branding', 'Webhooks', 'Analytics'],
+      active: true
+    },
+    {
+      id: 'enterprise',
+      name: 'Enterprise',
+      price: 299,
+      features: ['Unlimited Agents', 'Priority Support', 'Advanced Analytics', 'Integrations'],
+      active: true
+    }
+  ],
+  supportTickets: [
+    {
+      id: 'TICKET-001',
+      subject: 'Widget not loading',
+      customer: 'john@example.com',
+      status: 'open',
+      priority: 'high',
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+      description: 'The widget is not loading properly on our website.'
+    }
+  ],
+  frontpageContent: {
+    heroTitle: 'Turn Every Click Into a Call',
+    heroSubtitle: 'Calldocker turns your visitors into conversations — instantly.',
+    features: []
+  },
+  // Phase 3: Advanced Analytics & System Management
+  users: [
+    {
+      id: 'user-1',
+      username: 'superadmin',
+      email: 'admin@calldocker.com',
+      role: 'super-admin',
+      status: 'active',
+      lastLogin: new Date().toISOString(),
+      createdAt: new Date(Date.now() - 86400000).toISOString()
+    },
+    {
+      id: 'user-2',
+      username: 'support1',
+      email: 'support@calldocker.com',
+      role: 'support',
+      status: 'active',
+      lastLogin: new Date(Date.now() - 3600000).toISOString(),
+      createdAt: new Date(Date.now() - 172800000).toISOString()
+    }
+  ],
+  apiKeys: [
+    {
+      id: 'key-1',
+      name: 'Production API Key',
+      key: 'prod_sk_1234567890abcdef',
+      permissions: ['read', 'write'],
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+      lastUsed: new Date(Date.now() - 3600000).toISOString(),
+      expiresAt: undefined
+    },
+    {
+      id: 'key-2',
+      name: 'Development API Key',
+      key: 'dev_sk_abcdef1234567890',
+      permissions: ['read'],
+      createdAt: new Date(Date.now() - 172800000).toISOString(),
+      lastUsed: new Date(Date.now() - 7200000).toISOString(),
+      expiresAt: new Date(Date.now() + 86400000 * 30).toISOString()
+    }
+  ],
+  systemConfig: {
+    maintenanceMode: false,
+    emailService: 'smtp',
+    storageProvider: 'local',
+    autoBackup: true,
+    maxFileSize: 10485760,
+    sessionTimeout: 3600,
+    updatedAt: new Date().toISOString()
+  },
+  contactMessages: [
+    {
+      _id: generateId(),
+      name: 'John Doe',
+      email: 'john.doe@example.com',
+      phone: '123-456-7890',
+      message: 'Hello, I have a question about your services.',
+      timestamp: new Date(Date.now() - 3600000).toISOString(),
+      handled: false
+    },
+    {
+      _id: generateId(),
+      name: 'Jane Smith',
+      email: 'jane.smith@acme.com',
+      phone: '098-765-4321',
+      message: 'I need help with my account.',
+      timestamp: new Date(Date.now() - 7200000).toISOString(),
+      handled: false
+    }
+  ],
+  pendingAdmins: [
+    {
+      uuid: 'pending-company-001',
+      adminUsername: 'pending_admin',
+      adminPassword: 'pending_password',
+      email: 'pending@admin.com',
+      createdAt: new Date().toISOString()
+    }
+  ],
+  authUsers: [
+    {
+      uuid: 'company-001',
+      username: 'company-001-admin',
+      password: 'company-001-password', // In a real app, this would be hashed
+      companyUuid: 'company-001',
+      role: 'company-admin',
+      email: 'company-001@example.com',
+      createdAt: new Date(Date.now() - 86400000).toISOString()
+    },
+    {
+      uuid: 'company-002',
+      username: 'company-002-admin',
+      password: 'company-002-password', // In a real app, this would be hashed
+      companyUuid: 'company-002',
+      role: 'company-admin',
+      email: 'company-002@example.com',
+      createdAt: new Date(Date.now() - 172800000).toISOString()
+    }
+  ],
+  pendingAgentCredentials: [
+    {
+      uuid: 'pending-agent-001',
+      username: 'pending_agent',
+      password: 'pending_password',
+      email: 'pending@agent.com',
+      companyUuid: 'company-001',
+      createdAt: new Date().toISOString()
+    }
+  ],
+  // Call Management System
+  calls: [],
+  // Agent Management System
+  agentAssignments: [],
+  // Call Analytics
+  callAnalytics: []
 };
+
+// Add sample data for testing
+tempStorage.calls = [
+  {
+    id: 'call-001',
+    visitorId: 'visitor-123',
+    pageUrl: 'http://localhost:5173/',
+    status: 'waiting',
+    assignedAgent: 'agent-001',
+    startTime: new Date(Date.now() - 300000).toISOString(), // 5 minutes ago
+    callType: 'chat',
+    priority: 'normal',
+    routingType: 'public',
+    companyId: 'company-001',
+    sessionId: 'session-001'
+  },
+  {
+    id: 'call-002',
+    visitorId: 'visitor-456',
+    pageUrl: 'http://localhost:5173/demo',
+    status: 'active',
+    assignedAgent: 'agent-002',
+    startTime: new Date(Date.now() - 600000).toISOString(), // 10 minutes ago
+    callType: 'chat',
+    priority: 'normal',
+    routingType: 'company',
+    companyId: 'company-002',
+    sessionId: 'session-002'
+  },
+  {
+    id: 'call-003',
+    visitorId: 'visitor-789',
+    pageUrl: 'http://localhost:5173/',
+    status: 'ended',
+    assignedAgent: 'agent-001',
+    startTime: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+    endTime: new Date(Date.now() - 3540000).toISOString(), // 59 minutes ago
+    duration: 360, // 6 minutes
+    callType: 'chat',
+    priority: 'normal',
+    routingType: 'public',
+    companyId: 'company-001',
+    sessionId: 'session-003'
+  }
+];
+
+tempStorage.agentAssignments = [
+  {
+    id: 'assignment-001',
+    agentId: 'agent-001',
+    assignedToPublic: true,
+    maxCalls: 5,
+    currentCalls: 1,
+    skills: ['sales', 'support'],
+    availability: 'available',
+    lastActivity: new Date().toISOString()
+  },
+  {
+    id: 'assignment-002',
+    agentId: 'agent-002',
+    assignedToPublic: false,
+    maxCalls: 3,
+    currentCalls: 1,
+    skills: ['technical', 'billing'],
+    availability: 'busy',
+    lastActivity: new Date().toISOString()
+  }
+];
+
+tempStorage.callAnalytics = [
+  {
+    id: 'analytics-001',
+    agentId: 'agent-001',
+    callsHandled: 15,
+    avgDuration: 420, // 7 minutes
+    satisfaction: 4.5,
+    responseTime: 30,
+    date: new Date().toISOString()
+  },
+  {
+    id: 'analytics-002',
+    agentId: 'agent-002',
+    callsHandled: 12,
+    avgDuration: 360, // 6 minutes
+    satisfaction: 4.2,
+    responseTime: 45,
+    date: new Date().toISOString()
+  }
+];
 
 // Make tempStorage globally accessible for socket handlers
 (global as any).tempStorage = tempStorage;
@@ -1042,7 +1552,7 @@ app.put('/api/contacts/:contactId/tags', async (req, res) => {
 
 registerSignalingHandlers(io);
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 }); 
