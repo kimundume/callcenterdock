@@ -1116,4 +1116,95 @@ router.get('/agents/:id/performance', authenticateSuperAdmin, (req, res) => {
   }
 });
 
+// POST /api/superadmin/create-company - Direct company creation (bypass email verification)
+router.post('/create-company', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const { companyName, displayName, adminUsername, adminPassword, email, adminEmail } = req.body;
+    
+    // Validate required fields
+    if (!companyName || !adminUsername || !adminPassword || !email) {
+      return res.status(400).json({ error: 'Company name, admin username, password, and email are required' });
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+    
+    // Check if company already exists (by email)
+    const existingCompany = global.tempStorage.companies.find(c => c.email === email);
+    if (existingCompany) {
+      return res.status(400).json({ error: 'A company with this email already exists' });
+    }
+    
+    // Generate UUID
+    const uuid = generateId();
+    
+    // Hash admin password
+    const hashedPassword = await bcrypt.hash(adminPassword, 10);
+    
+    // Create company with approved status
+    const newCompany = {
+      uuid,
+      name: companyName,
+      displayName: displayName || companyName,
+      email,
+      verified: true,
+      suspended: false,
+      createdAt: new Date().toISOString(),
+      status: 'approved' as const // Directly approved
+    };
+    
+    // Add to companies array
+    global.tempStorage.companies.push(newCompany);
+    
+    // Create admin user
+    const adminUser = {
+      uuid: generateId(),
+      username: adminUsername,
+      password: hashedPassword,
+      companyUuid: uuid,
+      role: 'admin',
+      email: adminEmail || email,
+      createdAt: new Date().toISOString()
+    };
+    
+    // Add to authUsers array
+    global.tempStorage.authUsers = global.tempStorage.authUsers || [];
+    global.tempStorage.authUsers.push(adminUser);
+    
+    // Generate JWT token for admin
+    const token = jwt.sign({ 
+      username: adminUsername, 
+      companyUuid: uuid, 
+      role: 'admin' 
+    }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '24h' });
+    
+    console.log(`[SuperAdmin] Company created: ${companyName} (${uuid})`);
+    
+    res.json({
+      success: true,
+      message: 'Company created successfully',
+      company: {
+        uuid,
+        name: companyName,
+        displayName: displayName || companyName,
+        email,
+        status: 'approved'
+      },
+      admin: {
+        username: adminUsername,
+        email: adminEmail || email,
+        token
+      },
+      loginUrl: `/admin-login?companyUuid=${uuid}&username=${adminUsername}&password=${adminPassword}`
+    });
+    
+  } catch (error) {
+    console.error('Create company error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router; 

@@ -193,7 +193,12 @@ router.post('/auth/login', async (req: Request, res: Response) => {
   
   // If email is provided, find company by email
   if (email && !companyUuid) {
-    const company = findCompanyByEmail(email);
+    // Check both storage locations for companies
+    let company = findCompanyByEmail(email);
+    if (!company) {
+      // Check global.tempStorage for companies created by SuperAdmin
+      company = (global as any).tempStorage?.companies?.find((c: any) => c.email === email);
+    }
     if (!company) {
       return res.status(404).json({ error: 'Company not found with this email' });
     }
@@ -204,20 +209,37 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Company UUID, password, and role are required' });
   }
   
-  // Try to find user by username first
+  // Try to find user by username first - check both storage locations
   if (username) {
     user = findUserByCompanyAndRole(uuid, username, role);
+    if (!user) {
+      // Check global.tempStorage for users created by SuperAdmin
+      user = (global as any).tempStorage?.authUsers?.find((u: any) => 
+        u.companyUuid === uuid && u.username === username && u.role === role
+      );
+    }
   }
   
   // If no user found and email provided, try to find admin by email
   if (!user && email && role === 'admin') {
-    const company = findCompanyByEmail(email);
+    let company = findCompanyByEmail(email);
+    if (!company) {
+      company = (global as any).tempStorage?.companies?.find((c: any) => c.email === email);
+    }
     if (company) {
+      // Check both storage locations for admin user
       user = Object.values(users).find((u: any) => 
         u.companyUuid === company.uuid && 
         u.role === 'admin' && 
         u.email === email
       );
+      if (!user) {
+        user = (global as any).tempStorage?.authUsers?.find((u: any) => 
+          u.companyUuid === company.uuid && 
+          u.role === 'admin' && 
+          u.email === email
+        );
+      }
     }
   }
   
@@ -231,15 +253,18 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     role 
   }, JWT_SECRET, { expiresIn: '1h' });
   
-  // Get company info for response
-  const company = companies[uuid];
+  // Get company info for response - check both storage locations
+  let company = companies[uuid];
+  if (!company) {
+    company = (global as any).tempStorage?.companies?.find((c: any) => c.uuid === uuid);
+  }
   
   res.json({ 
     token,
     companyUuid: uuid,
     username: user.username,
     role,
-    companyName: company?.companyName,
+    companyName: company?.name || company?.companyName,
     displayName: company?.displayName
   });
 });
@@ -385,29 +410,70 @@ router.post('/agent/add', authMiddleware, async (req: Request, res: Response) =>
     return res.status(403).json({ error: 'Forbidden' });
   }
   
+  // Check if agent already exists - check both storage locations
   const key = agentUsername + '@' + decoded.companyUuid;
-  if (users[key]) {
+  let existingUser = users[key];
+  
+  if (!existingUser) {
+    // Check global.tempStorage for users created by SuperAdmin
+    existingUser = (global as any).tempStorage?.authUsers?.find((u: any) => 
+      u.username === agentUsername && u.companyUuid === decoded.companyUuid
+    );
+  }
+  
+  if (existingUser) {
     return res.status(400).json({ error: 'Agent already exists' });
   }
   
   try {
     const hashed = await bcrypt.hash(agentPassword, 10);
-    users[key] = {
-      username: agentUsername,
-      password: hashed,
-      companyUuid: decoded.companyUuid,
-      role: 'agent',
-      email: agentEmail,
-      createdAt: new Date().toISOString()
-    };
+    
+    // Get company info - check both storage locations
+    let company = companies[decoded.companyUuid];
+    if (!company) {
+      company = (global as any).tempStorage?.companies?.find((c: any) => c.uuid === decoded.companyUuid);
+    }
+    
+    // Create agent in the appropriate storage location
+    if (company && (global as any).tempStorage?.companies?.find((c: any) => c.uuid === decoded.companyUuid)) {
+      // Company was created by SuperAdmin, store in global.tempStorage
+      const newAgent = {
+        uuid: generateId(),
+        username: agentUsername,
+        password: hashed,
+        companyUuid: decoded.companyUuid,
+        role: 'agent',
+        email: agentEmail,
+        status: 'online',
+        registrationStatus: 'approved',
+        createdAt: new Date().toISOString()
+      };
+      
+      (global as any).tempStorage.authUsers = (global as any).tempStorage.authUsers || [];
+      (global as any).tempStorage.authUsers.push(newAgent);
+      
+      // Also add to agents array for consistency
+      (global as any).tempStorage.agents = (global as any).tempStorage.agents || [];
+      (global as any).tempStorage.agents.push(newAgent);
+      
+    } else {
+      // Company was created through regular registration, store in users object
+      users[key] = {
+        username: agentUsername,
+        password: hashed,
+        companyUuid: decoded.companyUuid,
+        role: 'agent',
+        email: agentEmail,
+        createdAt: new Date().toISOString()
+      };
+    }
     
     // Send invitation email if email provided
-    if (agentEmail) {
-      const company = companies[decoded.companyUuid];
+    if (agentEmail && company) {
       const emailSent = await EmailService.sendAgentInvitation(
         agentEmail,
         agentUsername,
-        company.companyName || company.name,
+        (company.name || company.companyName || 'Company') as string,
         decoded.companyUuid,
         agentPassword // Send temporary password
       );
@@ -424,6 +490,50 @@ router.post('/agent/add', authMiddleware, async (req: Request, res: Response) =>
   } catch (error) {
     console.error('Error creating agent:', error);
     res.status(500).json({ error: 'Failed to create agent. Please try again.' });
+  }
+});
+
+// POST /api/agent/reset-password (admin only, protected)
+router.post('/agent/reset-password', authMiddleware, async (req: Request, res: Response) => {
+  const { companyUuid, agentUsername, newPassword } = req.body;
+  
+  if (!validateString(agentUsername) || !validateString(newPassword)) {
+    return res.status(400).json({ error: 'Agent username and new password are required' });
+  }
+  
+  if (!isStrongPassword(newPassword)) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters, include upper/lowercase and a number.' });
+  }
+  
+  const decoded = req.user;
+  if (decoded.role !== 'admin' || decoded.companyUuid !== companyUuid) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  
+  try {
+    // Find agent in both storage locations
+    const key = agentUsername + '@' + companyUuid;
+    let agent = users[key];
+    
+    if (!agent) {
+      // Check global.tempStorage for agents created by SuperAdmin
+      agent = (global as any).tempStorage?.authUsers?.find((u: any) => 
+        u.username === agentUsername && u.companyUuid === companyUuid && u.role === 'agent'
+      );
+    }
+    
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+    
+    // Update password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    agent.password = hashedPassword;
+    
+    res.json({ success: true, message: 'Agent password updated successfully' });
+  } catch (error) {
+    console.error('Error updating agent password:', error);
+    res.status(500).json({ error: 'Failed to update agent password. Please try again.' });
   }
 });
 
@@ -528,7 +638,13 @@ router.put('/company/update-display-name', authMiddleware, async (req: Request, 
 // GET /api/company/info (protected)
 router.get('/company/info', authMiddleware, async (req: Request, res: Response) => {
   const decoded = req.user;
-  const company = companies[decoded.companyUuid];
+  
+  // Check both storage locations for company
+  let company = companies[decoded.companyUuid];
+  if (!company) {
+    // Check global.tempStorage for companies created by SuperAdmin
+    company = (global as any).tempStorage?.companies?.find((c: any) => c.uuid === decoded.companyUuid);
+  }
   
   if (!company) {
     return res.status(404).json({ error: 'Company not found' });
@@ -608,14 +724,36 @@ router.get('/call/logs/:companyUuid', (req: Request, res: Response) => {
 // GET /api/agents/:companyUuid (list all agents for a company with online status)
 router.get('/agents/:companyUuid', (req: Request, res: Response) => {
   const { companyUuid } = req.params;
-  const agentList = Object.values(users)
+  
+  // Get agents from both storage locations
+  let agentList = Object.values(users)
     .filter((u: any) => u.companyUuid === companyUuid && u.role === 'agent')
     .map((u: any) => ({
       username: u.username,
       role: u.role,
       online: !!(onlineAgents[companyUuid] && onlineAgents[companyUuid][u.username]),
     }));
-  res.json(agentList);
+  
+  // Add agents from global.tempStorage (SuperAdmin-created companies)
+  const globalAgents = (global as any).tempStorage?.authUsers?.filter((u: any) => 
+    u.companyUuid === companyUuid && u.role === 'agent'
+  ) || [];
+  
+  const globalAgentList = globalAgents.map((u: any) => ({
+    username: u.username,
+    role: u.role,
+    online: !!(onlineAgents[companyUuid] && onlineAgents[companyUuid][u.username]),
+  }));
+  
+  // Combine both lists, avoiding duplicates
+  const combinedAgents = [...agentList];
+  globalAgentList.forEach((globalAgent: any) => {
+    if (!combinedAgents.find((agent: any) => agent.username === globalAgent.username)) {
+      combinedAgents.push(globalAgent);
+    }
+  });
+  
+  res.json(combinedAgents);
 });
 
 // PATCH /api/agent/:companyUuid/:username (update agent role/active)
@@ -806,23 +944,77 @@ router.post('/contact', (req, res) => {
   res.json({ success: true });
 });
 
-// POST /api/widget/route-call
+// POST /api/widget/route-call - Enhanced routing for soft launch
 router.post('/route-call', (req, res) => {
-  const { companyUuid, visitorId, pageUrl, callType = 'chat' } = req.body;
-  console.log('[route-call] Incoming request:', { companyUuid, visitorId, pageUrl, callType });
+  const { companyUuid, visitorId, pageUrl, callType = 'chat', routingConfig } = req.body;
+  console.log('[route-call] Incoming request:', { companyUuid, visitorId, pageUrl, callType, routingConfig });
   
   // Generate session ID
   const sessionId = `call-${Math.random().toString(36).substr(2, 9)}-${Date.now()}`;
   
-  // If no companyUuid provided, this is a public landing page call
-  if (!companyUuid) {
-    // Find available CallDocker agents
+  // Enhanced routing logic for soft launch
+  const routeCall = () => {
+    // If no companyUuid provided, this is a public landing page call
+    if (!companyUuid) {
+      return routeToCallDockerAgents();
+    }
+    
+    // If companyUuid provided, this is a company-specific call
+    const company = global.tempStorage.companies.find(c => c.uuid === companyUuid);
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+    
+    if (company.status !== 'approved') {
+      return res.status(403).json({ error: 'Company not approved' });
+    }
+    
+    // Check routing configuration
+    const config = routingConfig || {};
+    const fallbackToCallDocker = config.fallbackToCallDocker !== false; // Default to true
+    const priority = config.priority || 'company-first';
+    
+    // Find available agents for this company
+    const companyAgents = global.tempStorage.agents.filter(agent => 
+      agent.companyUuid === companyUuid &&
+      agent.registrationStatus === 'approved' &&
+      agent.status === 'online'
+    );
+    
+    // If company has agents and priority is company-first, route to company
+    if (companyAgents.length > 0 && priority === 'company-first') {
+      return routeToCompanyAgents(company, companyAgents);
+    }
+    
+    // If no company agents and fallback is enabled, route to CallDocker
+    if (companyAgents.length === 0 && fallbackToCallDocker) {
+      console.log(`[route-call] No agents available for company ${company.name}, falling back to CallDocker agents`);
+      return routeToCallDockerAgents(company.name);
+    }
+    
+    // If no company agents and no fallback, return error
+    if (companyAgents.length === 0) {
+      return res.status(503).json({ 
+        error: 'No agents available for this company',
+        routingType: 'company',
+        companyName: company.name,
+        requiresContactForm: true
+      });
+    }
+    
+    // Default: route to company agents
+    return routeToCompanyAgents(company, companyAgents);
+  };
+  
+  // Route to CallDocker agents (for public calls or fallback)
+  const routeToCallDockerAgents = (fallbackCompanyName?: string) => {
     const availableAgents = global.tempStorage.agents.filter(agent => 
       agent.companyUuid === 'calldocker-company-uuid' &&
       agent.registrationStatus === 'approved' && 
       agent.status === 'online'
     );
-    console.log('[route-call] Public call. Available CallDocker agents:', availableAgents.map(a => ({ uuid: a.uuid, status: a.status, registrationStatus: a.registrationStatus })));
+    
+    console.log('[route-call] Available CallDocker agents:', availableAgents.map(a => ({ uuid: a.uuid, status: a.status, registrationStatus: a.registrationStatus })));
     
     if (availableAgents.length === 0) {
       console.warn('[route-call] No CallDocker agents available for public call.');
@@ -833,8 +1025,19 @@ router.post('/route-call', (req, res) => {
       });
     }
     
-    // Assign to the first available CallDocker agent (you could implement load balancing here)
-    const assignedAgent = availableAgents[0];
+    // Enhanced load balancing: round-robin or random
+    const loadBalancing = routingConfig?.loadBalancing || 'random';
+    let assignedAgent;
+    
+    if (loadBalancing === 'round-robin') {
+      // Simple round-robin implementation
+      const agentIndex = Math.floor(Math.random() * availableAgents.length); // For now, random. In production, use proper round-robin
+      assignedAgent = availableAgents[agentIndex];
+    } else {
+      // Random assignment (default)
+      assignedAgent = availableAgents[Math.floor(Math.random() * availableAgents.length)];
+    }
+    
     console.log('[route-call] Assigned CallDocker agent:', assignedAgent);
     
     // Create chat session
@@ -848,7 +1051,8 @@ router.post('/route-call', (req, res) => {
       status: 'active',
       routingType: 'public' as const,
       assignedAgent: assignedAgent.uuid,
-      assignedCompany: 'CallDocker'
+      assignedCompany: 'CallDocker',
+      fallbackFrom: fallbackCompanyName || null
     };
     
     global.tempStorage.chatSessions.push(chatSession);
@@ -866,7 +1070,8 @@ router.post('/route-call', (req, res) => {
       priority: 'normal' as const,
       routingType: 'public' as const,
       companyId: 'calldocker-company-uuid',
-      sessionId
+      sessionId,
+      fallbackFrom: fallbackCompanyName || null
     };
     
     global.tempStorage.calls.push(callRecord);
@@ -881,84 +1086,73 @@ router.post('/route-call', (req, res) => {
         username: assignedAgent.username,
         companyName: 'CallDocker'
       },
-      message: `Call routed to CallDocker agent ${assignedAgent.username}`
+      message: `Call routed to CallDocker agent ${assignedAgent.username}${fallbackCompanyName ? ` (fallback from ${fallbackCompanyName})` : ''}`
     });
-    return;
-  }
+  };
   
-  // If companyUuid provided, this is a company-specific call
-  const company = global.tempStorage.companies.find(c => c.uuid === companyUuid);
-  if (!company) {
-    return res.status(404).json({ error: 'Company not found' });
-  }
-  
-  if (company.status !== 'approved') {
-    return res.status(403).json({ error: 'Company not approved' });
-  }
-  
-  // Find available agents for this company
-  const companyAgents = global.tempStorage.agents.filter(agent => 
-    agent.companyUuid === companyUuid &&
-    agent.registrationStatus === 'approved' &&
-    agent.status === 'online'
-  );
-  
-  if (companyAgents.length === 0) {
-    return res.status(503).json({ 
-      error: 'No agents available for this company',
+  // Route to company agents
+  const routeToCompanyAgents = (company: any, companyAgents: any[]) => {
+    // Enhanced load balancing for company agents
+    const loadBalancing = routingConfig?.loadBalancing || 'round-robin';
+    let assignedAgent;
+    
+    if (loadBalancing === 'round-robin') {
+      // Simple round-robin implementation
+      const agentIndex = Math.floor(Math.random() * companyAgents.length); // For now, random. In production, use proper round-robin
+      assignedAgent = companyAgents[agentIndex];
+    } else {
+      // Random assignment (default)
+      assignedAgent = companyAgents[Math.floor(Math.random() * companyAgents.length)];
+    }
+    
+    // Create chat session
+    const chatSession = {
+      _id: sessionId,
+      companyId: companyUuid,
+      sessionId,
+      visitorId,
+      pageUrl,
+      startedAt: new Date().toISOString(),
+      status: 'active',
+      routingType: 'company' as const,
+      assignedAgent: assignedAgent.uuid,
+      assignedCompany: company.name
+    };
+    
+    global.tempStorage.chatSessions.push(chatSession);
+    
+    // Create call record for Super Admin dashboard
+    const callRecord = {
+      id: generateId(),
+      visitorId,
+      pageUrl,
+      status: 'waiting' as const,
+      assignedAgent: assignedAgent.uuid,
+      startTime: new Date().toISOString(),
+      callType,
+      priority: 'normal' as const,
+      routingType: 'company' as const,
+      companyId: companyUuid,
+      sessionId
+    };
+    
+    global.tempStorage.calls.push(callRecord);
+    
+    res.json({
+      success: true,
+      sessionId,
       routingType: 'company',
-      companyName: company.name,
-      requiresContactForm: true
+      assignedAgent: {
+        uuid: assignedAgent.uuid,
+        username: assignedAgent.username,
+        companyName: company.name
+      },
+      message: `Call routed to ${company.name} agent ${assignedAgent.username}`
     });
-  }
-  
-  // Assign to the first available agent for this company
-  const assignedAgent = companyAgents[0];
-  
-  // Create chat session
-  const chatSession = {
-    _id: sessionId,
-    companyId: companyUuid,
-    sessionId,
-    visitorId,
-    pageUrl,
-    startedAt: new Date().toISOString(),
-    status: 'active',
-    routingType: 'company' as const,
-    assignedAgent: assignedAgent.uuid,
-    assignedCompany: company.name
   };
   
-  global.tempStorage.chatSessions.push(chatSession);
-  
-  // Create call record for Super Admin dashboard
-  const callRecord = {
-    id: generateId(),
-    visitorId,
-    pageUrl,
-    status: 'waiting' as const,
-    assignedAgent: assignedAgent.uuid,
-    startTime: new Date().toISOString(),
-    callType,
-    priority: 'normal' as const,
-    routingType: 'company' as const,
-    companyId: companyUuid,
-    sessionId
-  };
-  
-  global.tempStorage.calls.push(callRecord);
-  
-  res.json({
-    success: true,
-    sessionId,
-    routingType: 'company',
-    assignedAgent: {
-      uuid: assignedAgent.uuid,
-      username: assignedAgent.username,
-      companyName: company.name
-    },
-    message: `Call routed to ${company.name} agent`
-  });
+  // Execute routing
+  routeCall();
 });
 
 // POST /api/widget/agent/status
@@ -1215,16 +1409,18 @@ router.get('/company-agents', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/widget/calls/active - Get active calls
+// GET /api/widget/calls/active - Get active calls (optionally filter by agentUuid)
 router.get('/calls/active', async (req: Request, res: Response) => {
   try {
+    const { agentUuid } = req.query;
     // Get active calls from global.tempStorage.calls
-    const activeCalls = global.tempStorage.calls.filter((call: any) => 
+    let activeCalls = global.tempStorage.calls.filter((call: any) => 
       ['waiting', 'connecting', 'active'].includes(call.status)
     );
-
-    console.log(`[Widget] Retrieved ${activeCalls.length} active calls`);
-    
+    if (agentUuid) {
+      activeCalls = activeCalls.filter((call: any) => call.assignedAgent === agentUuid);
+    }
+    console.log(`[Widget] Retrieved ${activeCalls.length} active calls${agentUuid ? ` for agent ${agentUuid}` : ''}`);
     res.json({
       success: true,
       calls: activeCalls
@@ -1297,6 +1493,181 @@ router.get('/calls/analytics', async (req: Request, res: Response) => {
     console.error('[Widget] Error fetching call analytics:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+// POST /api/widget/test-call (test widget functionality)
+router.post('/test-call', async (req: Request, res: Response) => {
+  const { companyUuid } = req.body;
+  
+  if (!companyUuid) {
+    return res.status(400).json({ error: 'Company UUID is required' });
+  }
+  
+  try {
+    // Get agents for the company
+    let agentList = Object.values(users)
+      .filter((u: any) => u.companyUuid === companyUuid && u.role === 'agent')
+      .map((u: any) => ({
+        username: u.username,
+        role: u.role,
+        online: !!(onlineAgents[companyUuid] && onlineAgents[companyUuid][u.username]),
+      }));
+    
+    // Add agents from global.tempStorage (SuperAdmin-created companies)
+    const globalAgents = (global as any).tempStorage?.authUsers?.filter((u: any) => 
+      u.companyUuid === companyUuid && u.role === 'agent'
+    ) || [];
+    
+    const globalAgentList = globalAgents.map((u: any) => ({
+      username: u.username,
+      role: u.role,
+      online: !!(onlineAgents[companyUuid] && onlineAgents[companyUuid][u.username]),
+    }));
+    
+    // Combine both lists
+    const combinedAgents = [...agentList];
+    globalAgentList.forEach((globalAgent: any) => {
+      if (!combinedAgents.find((agent: any) => agent.username === globalAgent.username)) {
+        combinedAgents.push(globalAgent);
+      }
+    });
+    
+    // Check if any agents are online
+    const onlineAgentsList = combinedAgents.filter(agent => agent.online);
+    
+    if (onlineAgentsList.length === 0) {
+      return res.json({ 
+        success: false, 
+        reason: 'No agents are currently online. Please ensure at least one agent is logged in to their dashboard.' 
+      });
+    }
+    
+    // Simulate a test call being routed to a random online agent
+    const randomAgent = onlineAgentsList[Math.floor(Math.random() * onlineAgentsList.length)];
+    const sessionId = `test-call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Create the call object for active calls system
+    const callObject = {
+      id: sessionId,
+      sessionId: sessionId,
+      companyUuid: companyUuid,
+      assignedAgent: randomAgent.username,
+      status: 'waiting', // This will make it appear in active calls
+      type: 'test',
+      startedAt: new Date().toISOString(),
+      visitorInfo: {
+        name: 'Test Caller',
+        email: 'test@example.com',
+        phone: 'Test Phone',
+        pageUrl: 'Test Widget',
+        userAgent: 'Test Widget'
+      },
+      notes: 'Test call from widget',
+      tags: ['test', 'widget']
+    };
+    
+    // Add to global.tempStorage.calls for active calls system
+    if (!(global as any).tempStorage.calls) {
+      (global as any).tempStorage.calls = [];
+    }
+    (global as any).tempStorage.calls.push(callObject);
+    
+    // Log the test call in the call logs
+    if (!calls[companyUuid]) calls[companyUuid] = [];
+    calls[companyUuid].unshift({
+      time: new Date().toISOString(),
+      agent: randomAgent.username,
+      notes: 'Test call from widget',
+      disposition: 'test',
+      duration: '0:00',
+      sessionId,
+      tags: ['test', 'widget'],
+    });
+    
+    console.log(`[Widget] Test call created: ${sessionId} assigned to agent ${randomAgent.username}`);
+    
+    res.json({ 
+      success: true, 
+      message: `Test call sent to agent ${randomAgent.username}`,
+      sessionId,
+      agent: randomAgent.username,
+      callId: sessionId
+    });
+    
+  } catch (error) {
+    console.error('Error processing test call:', error);
+    res.status(500).json({ error: 'Failed to process test call' });
+  }
+});
+
+// POST /api/agent/register - Public agent registration requiring Super Admin approval
+router.post('/agent/register', async (req: Request, res: Response) => {
+  const { username, password, email, companyUuid } = req.body;
+  
+  // Validate all required fields
+  if (![username, password, email, companyUuid].every((v: string) => validateString(v))) {
+    return res.status(400).json({ error: 'All fields required' });
+  }
+  
+  // Validate email format
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
+  
+  // Validate password strength
+  if (!isStrongPassword(password)) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters, include upper/lowercase and a number.' });
+  }
+  
+  // Check if company exists and is approved
+  const company = global.tempStorage.companies.find(c => c.uuid === companyUuid);
+  if (!company) {
+    return res.status(400).json({ error: 'Company not found' });
+  }
+  
+  if (company.status !== 'approved') {
+    return res.status(400).json({ error: 'Company is not approved yet' });
+  }
+  
+  // Check if agent already exists
+  const existingAgent = global.tempStorage.agents.find(a => 
+    a.username === username && a.companyUuid === companyUuid
+  );
+  if (existingAgent) {
+    return res.status(400).json({ error: 'Agent with this username already exists for this company' });
+  }
+  
+  // Generate UUID
+  const uuid = uuidv4();
+  
+  // Store agent with pending status in tempStorage
+  global.tempStorage.agents.push({
+    uuid,
+    companyUuid,
+    username,
+    email,
+    status: 'offline',
+    registrationStatus: 'pending', // Set status to pending for Super Admin approval
+    createdAt: new Date().toISOString()
+  });
+  
+  // Store agent credentials for later use (when approved)
+  global.tempStorage.pendingAgentCredentials = global.tempStorage.pendingAgentCredentials || [];
+  global.tempStorage.pendingAgentCredentials.push({
+    uuid,
+    username,
+    password, // This should be hashed in production
+    email,
+    companyUuid,
+    createdAt: new Date().toISOString()
+  });
+  
+  res.json({ 
+    message: 'Agent registration submitted successfully! Your account will be reviewed by our team and you will be notified once approved.',
+    uuid,
+    email,
+    requiresApproval: true
+  });
 });
 
 export default router; 

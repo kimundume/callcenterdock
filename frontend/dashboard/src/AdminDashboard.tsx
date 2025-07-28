@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import DashboardLayout from './DashboardLayout';
 import { Card, Row, Col, Empty, Table, Button, Modal, Form, Input, Select, Switch, message, Popconfirm, Tabs, Spin, Upload, Tooltip, Switch as AntSwitch, Select as AntSelect, Slider, List, Avatar, Badge, Divider, Statistic, Tag, Modal as AntModal, Form as AntForm, Input as AntInput, Space, Tag as AntTag, Dropdown, DatePicker } from 'antd';
 import { Line } from 'react-chartjs-2'; // For analytics chart stub
-import { BellOutlined, ReloadOutlined, StopOutlined, BarChartOutlined, TeamOutlined, UserOutlined, PhoneOutlined, PlusOutlined, EditOutlined, DeleteOutlined, SaveOutlined, InboxOutlined, PlayCircleOutlined, PauseCircleOutlined, AudioOutlined, UserSwitchOutlined, BranchesOutlined, FileTextOutlined, PoweroffOutlined, PlusCircleOutlined, DownloadOutlined, CopyOutlined, CheckCircleOutlined, InfoCircleOutlined, SettingOutlined, QuestionCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, TagOutlined, RadarChartOutlined, MessageOutlined, SearchOutlined, DownloadOutlined as DownloadIcon, MoreOutlined, MailOutlined, PhoneFilled, UploadOutlined, FilterOutlined } from '@ant-design/icons'; // For notifications and controls
+import { BellOutlined, ReloadOutlined, StopOutlined, BarChartOutlined, TeamOutlined, UserOutlined, PhoneOutlined, PlusOutlined, EditOutlined, DeleteOutlined, SaveOutlined, InboxOutlined, PlayCircleOutlined, PauseCircleOutlined, AudioOutlined, UserSwitchOutlined, BranchesOutlined, FileTextOutlined, PoweroffOutlined, PlusCircleOutlined, DownloadOutlined, CopyOutlined, CheckCircleOutlined, InfoCircleOutlined, SettingOutlined, QuestionCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, TagOutlined, RadarChartOutlined, MessageOutlined, SearchOutlined, DownloadOutlined as DownloadIcon, MoreOutlined, MailOutlined, PhoneFilled, UploadOutlined, FilterOutlined, ExclamationCircleOutlined } from '@ant-design/icons'; // For notifications and controls
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -27,7 +27,7 @@ ChartJS.register(
   ChartTooltip,
 );
 
-const API_URL = 'http://localhost:5000/api/widget';
+const API_URL = 'http://localhost:5001/api/widget';
 
 const roleOptions = [
   { label: 'Agent', value: 'agent' },
@@ -35,7 +35,7 @@ const roleOptions = [
   { label: 'Admin', value: 'admin' },
 ];
 
-export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, activeTab = 'analytics', onTabChange, onLogout }) {
+export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, activeTab = 'analytics', onTabChange, onLogout }: any) {
   const location = useLocation();
   const navigate = useNavigate();
   const [agents, setAgents] = useState([]);
@@ -101,7 +101,7 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
   const [allowVoiceInput, setAllowVoiceInput] = useState(false);
   const [publishStatus, setPublishStatus] = useState('Draft');
   // Audio upload handlers
-  const handleAudioUpload = info => {
+  const handleAudioUpload = (info: any) => {
     if (info.file.status === 'done' || info.file.status === 'uploading') {
       const url = URL.createObjectURL(info.file.originFileObj);
       setAudioFile(info.file.originFileObj);
@@ -118,16 +118,17 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
     setNewStep({ digit: '', label: '', action: '', type: 'route' });
   };
   // IVR handlers
-  const handleEditIvrStep = (step) => setEditingStep(step);
+  const handleEditIvrStep = (step: any) => setEditingStep(step);
   const handleSaveEditIvrStep = () => {
+    if (!editingStep) return;
     setIvrSteps(ivrSteps.map(s => s.key === editingStep.key ? editingStep : s));
     setEditingStep(null);
   };
-  const handleDeleteIvrStep = (key) => setIvrSteps(ivrSteps.filter(s => s.key !== key));
+  const handleDeleteIvrStep = (key: any) => setIvrSteps(ivrSteps.filter((s: any) => s.key !== key));
 
   const socketRef = useRef(null);
   useEffect(() => {
-    socketRef.current = io('http://localhost:5000');
+    socketRef.current = io('http://localhost:5001');
     return () => {
       if (socketRef.current) socketRef.current.disconnect();
     };
@@ -142,18 +143,34 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
     }
     setTestCallLoading(true);
     setTestCallResult(null);
-    console.log('Test call: emitting to backend...');
-    socketRef.current.emit('test-call-request', { uuid: companyUuid });
-    socketRef.current.once('test-call-result', (result) => {
+    console.log('Test call: sending to backend...');
+    
+    try {
+      const response = await fetch(`${API_URL}/test-call`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminToken}`
+        },
+        body: JSON.stringify({ companyUuid })
+      });
+      
+      const result = await response.json();
       console.log('Test call result:', result);
       setTestCallLoading(false);
       setTestCallResult(result);
+      
       if (result.success) {
-        message.success('Test call sent to agent!');
+        message.success(`Test call sent to agent ${result.agent}!`);
       } else {
         message.error(result.reason || 'Test call failed');
       }
-    });
+    } catch (error) {
+      console.error('Error sending test call:', error);
+      setTestCallLoading(false);
+      setTestCallResult({ success: false, reason: 'Network error' });
+      message.error('Failed to send test call. Please try again.');
+    }
   };
 
   const handleCloseTestModal = () => {
@@ -203,9 +220,11 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
     try {
       const res = await fetch(`${API_URL}/settings/${companyUuid}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminToken}`
+        },
         body: JSON.stringify({
-          token: adminToken,
           text: widgetText,
           color: widgetColor,
           shape: widgetShape,
@@ -239,8 +258,54 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
     return 'https://calldocker.com';
   };
 
-  // Generate widget script with customization and dynamic base URL
-  const script = `<script src=\"${getWidgetBaseUrl()}/widget.js?uuid=${companyUuid || 'YOUR_COMPANY_UUID'}&text=${encodeURIComponent(widgetText)}&color=${encodeURIComponent(widgetColor)}&shape=${widgetShape}${widgetImage ? `&img=${encodeURIComponent(widgetImageUrl)}` : ''}&position=${widgetPosition}&animation=${widgetAnimation}&dark=${widgetDarkMode ? '1' : '0'}\"></script>`;
+  // Generate widget script with enhanced customization and unique routing
+  const script = `<script>
+(function() {
+  // CallDocker Widget Loader - Enhanced for Soft Launch
+  window.CallDockerWidget = window.CallDockerWidget || {};
+  
+  // Widget configuration with unique routing
+  var config = {
+    uuid: '${companyUuid || 'YOUR_COMPANY_UUID'}',
+    uniqueId: '${companyUuid}-${Date.now()}',
+    text: '${encodeURIComponent(widgetText)}',
+    color: '${encodeURIComponent(widgetColor)}',
+    shape: '${widgetShape}',
+    position: '${widgetPosition}',
+    animation: '${widgetAnimation}',
+    dark: ${widgetDarkMode ? 'true' : 'false'},
+    image: '${widgetImage ? encodeURIComponent(widgetImageUrl) : ''}',
+    // Enhanced routing for soft launch
+    routing: {
+      type: 'company',
+      fallbackToCallDocker: true,
+      priority: 'company-first',
+      loadBalancing: 'round-robin'
+    },
+    // Analytics and tracking
+    analytics: {
+      enabled: true,
+      trackPageViews: true,
+      trackInteractions: true,
+      companyId: '${companyUuid}'
+    }
+  };
+  
+  // Create unique widget instance
+  var widgetId = 'calldocker-widget-' + config.uniqueId;
+  
+  // Load widget script
+  var script = document.createElement('script');
+  script.src = '${getWidgetBaseUrl()}/widget.js';
+  script.async = true;
+  script.onload = function() {
+    if (window.CallDockerWidget.init) {
+      window.CallDockerWidget.init(config, widgetId);
+    }
+  };
+  document.head.appendChild(script);
+})();
+</script>`;
 
   // Copy to clipboard
   const handleCopy = () => {
@@ -266,8 +331,11 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
     try {
       const res = await fetch(`${API_URL}/agent/add`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: adminToken, agentUsername: values.username, agentPassword: values.password })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminToken}`
+        },
+        body: JSON.stringify({ agentUsername: values.username, agentPassword: values.password })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to add agent');
@@ -305,8 +373,11 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
     try {
       const res = await fetch(`${API_URL}/agent/reset-password`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: adminToken, companyUuid, agentUsername: resetAgent.username, newPassword: resetPassword })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminToken}`
+        },
+        body: JSON.stringify({ companyUuid, agentUsername: resetAgent.username, newPassword: resetPassword })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to reset password');
@@ -516,7 +587,7 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
 
   // Chat assignment handler
   const handleAssignAgent = async (sessionId: string, agent: string) => {
-    await fetch(`http://localhost:5000/api/chat-sessions/${sessionId}`, {
+    await fetch(`http://localhost:5001/api/chat-sessions/${sessionId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ assignedAgent: agent })
@@ -528,7 +599,7 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
   const handleAddNote = async () => {
     if (!activeChat || !noteInput.trim()) return;
     const note = { text: noteInput.trim(), author: 'Admin', timestamp: new Date().toISOString() };
-    await fetch(`http://localhost:5000/api/chat-notes/${activeChat}`, {
+    await fetch(`http://localhost:5001/api/chat-notes/${activeChat}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ companyId, ...note })
@@ -542,7 +613,7 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
 
   const handleTagChange = async (newTags: string[]) => {
     if (!activeChat) return;
-    await fetch(`http://localhost:5000/api/chat-sessions/${activeChat}`, {
+    await fetch(`http://localhost:5001/api/chat-sessions/${activeChat}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tags: newTags })
@@ -560,7 +631,7 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
 
   // Fetch chat sessions on mount
   useEffect(() => {
-    fetch(`http://localhost:5000/api/chat-sessions?companyId=${companyId}`)
+    fetch(`http://localhost:5001/api/chat-sessions?companyId=${companyId}`)
       .then(res => res.json())
       .then(sessions => {
         setChatSessions(sessions);
@@ -614,7 +685,7 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
   // Fetch canned responses function
   const fetchCannedResponses = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/canned-responses?companyId=${companyId}`);
+      const response = await fetch(`http://localhost:5001/api/canned-responses?companyId=${companyId}`);
       if (response.ok) {
         const data = await response.json();
         setCannedResponses(data);
@@ -641,7 +712,7 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
     setShowCannedModal(true);
   };
   const handleDeleteCanned = async (id) => {
-    await fetch(`http://localhost:5000/api/canned-responses/${id}`, { method: 'DELETE' });
+    await fetch(`http://localhost:5001/api/canned-responses/${id}`, { method: 'DELETE' });
     setCannedResponses(list => list.filter(r => r._id !== id));
   };
   const handleSaveCanned = async () => {
@@ -651,7 +722,7 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
     }
 
     try {
-      const response = await fetch('http://localhost:5000/api/canned-responses', {
+      const response = await fetch('http://localhost:5001/api/canned-responses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -730,7 +801,7 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
         params.append('search', search);
       }
       
-      const response = await fetch(`http://localhost:5000/api/contacts?${params}`);
+      const response = await fetch(`http://localhost:5001/api/contacts?${params}`);
       if (response.ok) {
         const data = await response.json();
         setContacts(data);
@@ -752,7 +823,7 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
     if (!selectedContact || !noteContent.trim()) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/contacts/${selectedContact._id}/notes`, {
+      const response = await fetch(`http://localhost:5001/api/contacts/${selectedContact._id}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1795,7 +1866,7 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
             <Button type="primary" icon={<SaveOutlined />} size="large" style={{ borderRadius: 8 }} onClick={async () => {
               setIvrSaving(true);
               try {
-                const res = await fetch(`http://localhost:5000/api/widget/ivr/${companyUuid}`, {
+                const res = await fetch(`http://localhost:5001/api/widget/ivr/${companyUuid}`, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
@@ -2298,6 +2369,38 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
                 : <span>Click the widget to simulate a test call.</span>
             }
           </div>
+        </div>
+      </Modal>
+
+      {/* Warning Modal for No Online Agents */}
+      <Modal 
+        open={testCallWarning} 
+        onCancel={() => setTestCallWarning(false)} 
+        title="No Agents Online" 
+        width={400}
+        footer={[
+          <Button key="cancel" onClick={() => setTestCallWarning(false)}>
+            Cancel
+          </Button>,
+          <Button key="agents" type="primary" onClick={() => {
+            setTestCallWarning(false);
+            onTabChange('agents');
+          }}>
+            Go to Agents
+          </Button>
+        ]}
+      >
+        <div style={{ textAlign: 'center', margin: '24px 0' }}>
+          <ExclamationCircleOutlined style={{ fontSize: 48, color: '#F6C23E', marginBottom: 16 }} />
+          <p style={{ fontSize: 16, marginBottom: 8 }}>
+            <strong>No agents are currently online</strong>
+          </p>
+          <p style={{ color: '#666', marginBottom: 16 }}>
+            To test the widget, you need at least one agent to be logged in to their dashboard.
+          </p>
+          <p style={{ color: '#888', fontSize: 14 }}>
+            Go to the <strong>Agents</strong> tab to create agents and ensure they are online.
+          </p>
         </div>
       </Modal>
 

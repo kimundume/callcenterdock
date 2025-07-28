@@ -9,8 +9,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import notificationSound from '/notification.mp3';
 import ChatSessionsLayout from './ChatSessionsLayout';
 
-const API_URL = 'http://localhost:5000/api/widget';
-const SOCKET_URL = 'http://localhost:5000';
+const API_URL = 'http://localhost:5001/api/widget';
+const SOCKET_URL = 'http://localhost:5001';
 const DISPOSITIONS = [
   'Resolved', 'Escalated', 'Follow-up required', 'Wrong number', 'Spam / Abuse', 'Other',
 ];
@@ -18,7 +18,12 @@ const TAG_OPTIONS = [
   '#VIP', '#complaint', '#technical', '#pricing', '#followup', '#sales', '#support', '#escalated', '#spam', '#other'
 ];
 
-export default function AgentDashboard({ agentToken, companyUuid, agentUsername, onLogout }) {
+export default function AgentDashboard({ agentToken, companyUuid, agentUsername, onLogout }: {
+  agentToken: string;
+  companyUuid: string;
+  agentUsername: string;
+  onLogout: () => void;
+}) {
   const location = useLocation();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -58,12 +63,48 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
   const [unreadChats, setUnreadChats] = useState({}); // sessionId -> count
   const audioRef = useRef(null);
   const [chatOnline, setChatOnline] = useState(true);
+  // Add state for active calls
+  const [activeCalls, setActiveCalls] = useState([]);
+  const [agentUuid, setAgentUuid] = useState<string | null>(null);
+
+  // Fetch agent UUID and active calls
+  const fetchAgentData = async () => {
+    try {
+      // Get all agents for the company to find this agent's UUID
+      const agentResponse = await fetch(`${API_URL}/agents/${companyUuid}`);
+      const agentData = await agentResponse.json();
+      const agent = agentData.find((a: any) => a.username === agentUsername);
+      
+      if (agent) {
+        // For now, use username as UUID since that's what the backend uses
+        setAgentUuid(agentUsername);
+        
+        // Then fetch active calls for this agent
+        const callsResponse = await fetch(`${API_URL}/calls/active?agentUuid=${agentUsername}`);
+        const callsData = await callsResponse.json();
+        if (callsData.success) {
+          setActiveCalls(callsData.calls || []);
+          console.log('Active calls for agent:', callsData.calls);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching agent data:', error);
+    }
+  };
+
+  // Fetch agent data on mount and periodically
+  useEffect(() => {
+    fetchAgentData();
+    const interval = setInterval(fetchAgentData, 5000); // Refresh every 5 seconds
+    return () => clearInterval(interval);
+  }, [companyUuid, agentUsername]);
+
   // Poll agent online status every 10s
   useEffect(() => {
     if (!companyUuid) return;
     let isMounted = true;
     const fetchStatus = () => {
-      fetch(`http://localhost:5000/api/agents/${companyUuid}`)
+      fetch(`http://localhost:5001/api/agents/${companyUuid}`)
         .then(res => {
           if (!res.ok) throw new Error('Not found');
           return res.json();
@@ -104,6 +145,33 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
     const socket = io(SOCKET_URL);
     socketRef.current = socket;
     socket.emit('register-agent', { uuid: companyUuid, agentId: agentUsername });
+    
+    // Set agent status to online when connecting
+    const setAgentOnline = async () => {
+      try {
+        // Find the agent UUID from the agents list
+        const agentResponse = await fetch(`${API_URL}/agents/online?companyUuid=${companyUuid}`);
+        const agentData = await agentResponse.json();
+        const agent = agentData.agents?.find(a => a.username === agentUsername);
+        
+        if (agent) {
+          await fetch(`${API_URL}/agent/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentUuid: agent.uuid,
+              status: 'online'
+            })
+          });
+          console.log('[AgentDashboard] Agent status set to online');
+        }
+      } catch (error) {
+        console.error('[AgentDashboard] Error setting agent online:', error);
+      }
+    };
+    
+    setAgentOnline();
+    
     socket.on('incoming-call', (data) => {
       console.log('Received incoming-call event:', data);
       console.log('Setting callStatus to "Ringing"');
@@ -124,7 +192,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
           pageUrl: data.pageUrl,
           startedAt: data.startedAt || new Date().toISOString()
         };
-        fetch('http://localhost:5000/api/chat-sessions', {
+        fetch('http://localhost:5001/api/chat-sessions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newSession)
@@ -155,7 +223,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
           pageUrl: window.location.href,
           startedAt: new Date().toISOString()
         };
-        fetch('http://localhost:5000/api/chat-sessions', {
+        fetch('http://localhost:5001/api/chat-sessions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newSession)
@@ -207,6 +275,30 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
       setTimeout(() => setVisitorTyping(prev => ({ ...prev, [sessionId]: false })), 2000);
     });
     return () => {
+      // Set agent status to offline when disconnecting
+      const setAgentOffline = async () => {
+        try {
+          const agentResponse = await fetch(`${API_URL}/agents/online?companyUuid=${companyUuid}`);
+          const agentData = await agentResponse.json();
+          const agent = agentData.agents?.find(a => a.username === agentUsername);
+          
+          if (agent) {
+            await fetch(`${API_URL}/agent/status`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                agentUuid: agent.uuid,
+                status: 'offline'
+              })
+            });
+            console.log('[AgentDashboard] Agent status set to offline');
+          }
+        } catch (error) {
+          console.error('[AgentDashboard] Error setting agent offline:', error);
+        }
+      };
+      
+      setAgentOffline();
       socket.disconnect();
       clearInterval(timerRef.current);
     };
@@ -314,7 +406,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
           };
           
           // Create chat session in backend
-          fetch('http://localhost:5000/api/chat-sessions', {
+          fetch('http://localhost:5001/api/chat-sessions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newSession)
@@ -503,7 +595,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
     };
     // Persist to backend
     const companyId = 'demo-company-001'; // Hardcoded for dev
-    await fetch('http://localhost:5000/api/chat-messages', {
+    await fetch('http://localhost:5001/api/chat-messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -533,14 +625,14 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
   // Fetch chat messages when activeChat changes
   useEffect(() => {
     if (!activeChat) return;
-    fetch(`http://localhost:5000/api/chat-messages?companyId=demo-company-001&sessionId=${activeChat}`)
+    fetch(`http://localhost:5001/api/chat-messages?companyId=demo-company-001&sessionId=${activeChat}`)
       .then(res => res.json())
       .then(messages => {
         setChatMessages(prev => ({ ...prev, [activeChat]: messages }));
       });
       
     // Also fetch form responses
-    fetch(`http://localhost:5000/api/form-response?companyId=demo-company-001&sessionId=${activeChat}`)
+    fetch(`http://localhost:5001/api/form-response?companyId=demo-company-001&sessionId=${activeChat}`)
       .then(res => res.json())
       .then(responses => {
         // Convert form responses to chat messages
@@ -568,7 +660,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
   const [escalatedChats, setEscalatedChats] = useState<Record<string, boolean>>({});
   // Chat escalation handler
   const handleEscalateChat = async (sessionId: string) => {
-    await fetch(`http://localhost:5000/api/chat-sessions/${sessionId}`, {
+    await fetch(`http://localhost:5001/api/chat-sessions/${sessionId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ escalated: true })
@@ -589,14 +681,14 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
 
   // Fetch canned responses on mount
   useEffect(() => {
-    fetch(`http://localhost:5000/api/canned-responses?companyId=${companyId}`)
+    fetch(`http://localhost:5001/api/canned-responses?companyId=${companyId}`)
       .then(res => res.json())
       .then(setCannedResponses);
   }, []);
 
   // Fetch chat sessions on mount
   useEffect(() => {
-    fetch(`http://localhost:5000/api/chat-sessions?companyId=${companyId}`)
+    fetch(`http://localhost:5001/api/chat-sessions?companyId=${companyId}`)
       .then(res => res.json())
       .then(sessions => {
         setChatSessions(sessions);
@@ -617,7 +709,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
 
   const handleSubmitRating = async () => {
     if (!pendingRatingSession || ratingValue === 0) return;
-    await fetch(`http://localhost:5000/api/chat-sessions/${pendingRatingSession}`, {
+    await fetch(`http://localhost:5001/api/chat-sessions/${pendingRatingSession}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ rating: ratingValue })
@@ -872,7 +964,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                       ]
                     };
                     console.log('Pushing email form:', formData);
-                    fetch('http://localhost:5000/api/form-push', {
+                    fetch('http://localhost:5001/api/form-push', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(formData)
@@ -917,7 +1009,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                       ]
                     };
                     console.log('Pushing phone form:', formData);
-                    fetch('http://localhost:5000/api/form-push', {
+                    fetch('http://localhost:5001/api/form-push', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(formData)
@@ -964,7 +1056,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                       ]
                     };
                     console.log('Pushing custom form:', formData);
-                    fetch('http://localhost:5000/api/form-push', {
+                    fetch('http://localhost:5001/api/form-push', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(formData)
@@ -1033,37 +1125,12 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                 <div style={{ fontSize: 28, fontWeight: 900 }}>{callLog.filter(l => (l.disposition || l.status || '').toLowerCase().includes('miss') || (l.status || '').toLowerCase() === 'rejected').length}</div>
               </div>
             </Card>
+            
             <Card className="card" style={{ borderRadius: 20, boxShadow: '0 4px 24px #00e6ef22', background: 'linear-gradient(120deg, #00e6ef 0%, #2E73FF 100%)', color: '#fff', display: 'flex', alignItems: 'center', gap: 16 }}>
-              <ClockCircleOutlined style={{ fontSize: 36, color: '#fff' }} />
+              <PhoneOutlined style={{ fontSize: 36, color: '#fff' }} />
               <div>
-                <div style={{ fontWeight: 600, fontSize: 16 }}>Average Duration</div>
-                <div style={{ fontSize: 28, fontWeight: 900 }}>{(() => {
-                  if (!callLog.length) return '00:00';
-                  const toSec = d => {
-                    if (!d) return 0;
-                    if (typeof d === 'number') return d;
-                    if (typeof d === 'string' && d.includes(':')) {
-                      const [min, sec] = d.split(':').map(Number);
-                      return min * 60 + sec;
-                    }
-                    return Number(d) || 0;
-                  };
-                  const avg = Math.round(callLog.reduce((a, l) => a + toSec(l.duration), 0) / callLog.length);
-                  const mm = String(Math.floor(avg / 60)).padStart(2, '0');
-                  const ss = String(avg % 60).padStart(2, '0');
-                  return `${mm}:${ss}`;
-                })()}</div>
-              </div>
-            </Card>
-            <Card className="card" style={{ borderRadius: 20, boxShadow: '0 4px 24px #F6C23E22', background: 'linear-gradient(120deg, #F6C23E 0%, #2E73FF 100%)', color: '#fff', display: 'flex', alignItems: 'center', gap: 16 }}>
-              <TagOutlined style={{ fontSize: 36, color: '#fff' }} />
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 16 }}>Call Tags</div>
-                <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                  {[...new Set(callLog.flatMap(l => l.tags || []))].map(tag => (
-                    <span key={tag} style={{ background: 'rgba(255, 255, 255, 0.2)', color: '#fff', borderRadius: 4, padding: '2px 8px', fontSize: 14 }}>{tag}</span>
-                  ))}
-                </div>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>Active Calls</div>
+                <div style={{ fontSize: 28, fontWeight: 900 }}>{activeCalls.length}</div>
               </div>
             </Card>
           </div>
