@@ -26,8 +26,8 @@ const BackendConnectionTest: React.FC = () => {
 
   const testRenderBackend = async () => {
     try {
-      // Test Render backend (if deployed)
-      const renderResponse = await fetch('https://calldocker-backend.onrender.com/api/agents/demo-company-uuid');
+      // Test Render backend (your actual URL)
+      const renderResponse = await fetch('https://callcenterdock.onrender.com/api/agents/demo-company-uuid');
       if (renderResponse.ok) {
         setStatus('✅ Render Backend Connected');
       } else {
@@ -72,7 +72,7 @@ const BackendConnectionTest: React.FC = () => {
         <h4>What to check:</h4>
         <ul>
           <li>✅ <strong>Local Backend</strong>: Should work if running locally on port 5001</li>
-          <li>✅ <strong>Render Backend</strong>: Should work if deployed to Render</li>
+          <li>✅ <strong>Render Backend</strong>: Should work if deployed to Render at https://callcenterdock.onrender.com</li>
           <li>❌ <strong>CORS Issues</strong>: If you see CORS errors, backend needs CORS configuration</li>
           <li>❌ <strong>Network Errors</strong>: If you see network errors, backend might be down</li>
         </ul>

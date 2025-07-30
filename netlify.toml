@@ -4,8 +4,9 @@
   publish = "dist"
 
 [build.environment]
-  NODE_VERSION = "20"
-  NPM_VERSION = "10"
+  VITE_BACKEND_URL = "https://callcenterdock.onrender.com"
+  VITE_APP_NAME = "CallDocker"
+  VITE_WIDGET_BASE_URL = "https://callcenterdock.onrender.com"
 
 [[redirects]]
   from = "/*"

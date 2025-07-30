@@ -4,6 +4,15 @@ import './style.css';
 import AppRoutes from './AppRoutes';
 import BackendConnectionTest from './BackendConnectionTest';
 
+// Set the backend URL based on environment
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+    ? 'http://localhost:5001' 
+    : 'https://callcenterdock.onrender.com');
+
+// Make it available globally
+(window as any).BACKEND_URL = BACKEND_URL;
+
 function App() {
   const [companyUuid, setCompanyUuid] = useState<string | null>(null);
   const [showBackendTest, setShowBackendTest] = useState<boolean>(true); // Set to true to show test
