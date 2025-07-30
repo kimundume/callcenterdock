@@ -24,6 +24,7 @@ import ChatNote from './models/ChatNote';
 import ChatMessage from './models/ChatMessage';
 import FormPush from './models/FormPush';
 import FormResponse from './models/FormResponse';
+import path from 'path'; // Added for serving static files
 
 dotenv.config();
 
@@ -1668,6 +1669,19 @@ app.put('/api/contacts/:contactId/tags', async (req, res) => {
 });
 
 registerSignalingHandlers(io);
+
+// Serve widget files
+app.get('/widget.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.sendFile(path.join(__dirname, '../../frontend/widget/widget.js'));
+});
+
+app.get('/widget-config.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.sendFile(path.join(__dirname, '../../frontend/widget/widget-config.js'));
+});
 
 const PORT = process.env.PORT || 5001;
 server.listen(PORT, () => {

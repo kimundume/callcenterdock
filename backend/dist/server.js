@@ -22,6 +22,7 @@ const superAdmin_1 = __importDefault(require("./routes/superAdmin"));
 const signaling_1 = require("./sockets/signaling");
 const dotenv_1 = __importDefault(require("dotenv"));
 const persistentStorage_1 = require("./data/persistentStorage");
+const path_1 = __importDefault(require("path")); // Added for serving static files
 dotenv_1.default.config();
 global.tempStorage = {
     callQueue: {},
@@ -1304,6 +1305,17 @@ app.put('/api/contacts/:contactId/tags', (req, res) => __awaiter(void 0, void 0,
     }
 }));
 (0, signaling_1.registerSignalingHandlers)(io);
+// Serve widget files
+app.get('/widget.js', (req, res) => {
+    res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.sendFile(path_1.default.join(__dirname, '../../frontend/widget/widget.js'));
+});
+app.get('/widget-config.js', (req, res) => {
+    res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.sendFile(path_1.default.join(__dirname, '../../frontend/widget/widget-config.js'));
+});
 const PORT = process.env.PORT || 5001;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
