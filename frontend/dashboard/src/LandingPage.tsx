@@ -167,7 +167,7 @@ export default function LandingPage() {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 32 }}>
           {features.map(f => (
-            <div key={f.title} className="feature-card" style={{ background: '#fff', borderRadius: 20, padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', transition: 'transform 0.2s', fontWeight: 600, fontSize: 18, border: '2px solid #F6C23E33', boxShadow: '0 4px 24px #F6C23E22, 0 2px 8px #00e6ef22' }}>
+            <div key={f.title} className="feature-card" style={{ background: '#fff', borderRadius: 20, boxShadow: '0 4px 24px #F6C23E22, 0 2px 8px #00e6ef22', padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', transition: 'transform 0.2s', fontWeight: 600, fontSize: 18, border: '2px solid #F6C23E33' }}>
               <FeatureIcon>{f.icon}</FeatureIcon>
               <div style={{ marginTop: 16 }}>{f.title}</div>
             </div>

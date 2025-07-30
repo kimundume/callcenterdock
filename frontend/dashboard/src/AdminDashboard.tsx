@@ -1417,7 +1417,7 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
                 <div style={{ fontSize: 28, fontWeight: 900 }}>6,750</div>
               </div>
             </Card>
-            <Card className="card" style={{ borderRadius: 20, boxShadow: '0 4px 24px #00e6ef22', background: 'linear-gradient(120deg, #00e6ef 0%, #2E73FF 100%)', color: '#fff', display: 'flex', gap: 16, flexDirection: 'column', alignItems: 'flex-start' }}>
+            <Card className="card" style={{ borderRadius: 20, boxShadow: '0 4px 24px #00e6ef22', background: 'linear-gradient(120deg, #00e6ef 0%, #2E73FF 100%)', color: '#fff', display: 'flex', alignItems: 'center', gap: 16, flexDirection: 'column' }}>
               <ClockCircleOutlined style={{ fontSize: 36, color: '#fff' }} />
               <div>
                 <div style={{ fontWeight: 600, fontSize: 16 }}>Average Duration</div>
@@ -1447,7 +1447,7 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
                 <div style={{ fontSize: 28, fontWeight: 900 }}>{agents.length}</div>
               </div>
             </Card>
-            <Card className="card" style={{ borderRadius: 20, boxShadow: '0 4px 24px #F6C23E22', background: 'linear-gradient(120deg, #F6C23E 0%, #2E73FF 100%)', color: '#fff', display: 'flex', gap: 16, flexDirection: 'column', alignItems: 'flex-start' }}>
+            <Card className="card" style={{ borderRadius: 20, boxShadow: '0 4px 24px #F6C23E22', background: 'linear-gradient(120deg, #F6C23E 0%, #2E73FF 100%)', color: '#fff', display: 'flex', alignItems: 'center', gap: 16, flexDirection: 'column' }}>
               <TagOutlined style={{ fontSize: 36, color: '#fff' }} />
               <div>
                 <div style={{ fontWeight: 600, fontSize: 16 }}>Call Tags</div>
