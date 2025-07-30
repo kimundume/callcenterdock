@@ -1,62 +1,172 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Statistic, Table, Button, Modal, Form, Input, Select, Switch, message, Popconfirm, Tabs, Spin, Upload, Tooltip, List, Avatar, Badge, Divider, Tag, Space, Typography, DatePicker, InputNumber, Slider, Dropdown, Menu, Progress, Layout } from 'antd';
 import { 
-  UserOutlined, 
-  TeamOutlined, 
-  PhoneOutlined, 
-  BarChartOutlined, 
-  SettingOutlined, 
-  LogoutOutlined, 
-  FileTextOutlined, 
-  ShoppingOutlined, 
-  CustomerServiceOutlined, 
-  CrownOutlined, 
-  KeyOutlined, 
-  BellOutlined,
-  MessageOutlined,
-  DatabaseOutlined,
+  Layout, 
+  Menu, 
+  Card, 
+  Table, 
+  Button, 
+  Modal, 
+  Form, 
+  Input, 
+  Select, 
+  message, 
+  Typography, 
+  Row, 
+  Col, 
+  Statistic, 
+  Progress, 
+  Tag, 
+  Space,
+  Tabs,
+  List,
+  Avatar,
+  Badge,
+  Tooltip,
+  Switch,
+  InputNumber,
+  DatePicker,
+  Divider,
+  Alert,
+  Descriptions,
+  Steps,
+  Timeline,
+  Rate,
+  Upload,
+  Image,
+  Carousel,
+  Collapse,
+  Tree,
+  Transfer,
+  Cascader,
+  Slider,
+  Radio,
+  Checkbox,
+  TimePicker,
+  Calendar,
+  Mentions,
+  AutoComplete,
+  Transfer,
+  TreeSelect,
+  Upload,
+  Drawer,
+  Popconfirm,
+  Skeleton,
+  Empty,
+  Result,
+  PageHeader,
+  Breadcrumb,
+  Dropdown,
+  notification,
+  ConfigProvider,
+  theme,
+  App
+} from 'antd';
+import {
+  DashboardOutlined,
+  UserOutlined,
+  TeamOutlined,
+  SettingOutlined,
+  BarChartOutlined,
+  FileTextOutlined,
+  MailOutlined,
+  PhoneOutlined,
   GlobalOutlined,
+  KeyOutlined,
+  CrownOutlined,
+  LogoutOutlined,
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   EyeOutlined,
-  CheckOutlined,
-  CloseOutlined,
-  ClockCircleOutlined,
-  TagOutlined,
+  SearchOutlined,
+  FilterOutlined,
+  DownloadOutlined,
+  UploadOutlined,
+  SyncOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  ExclamationCircleOutlined,
   InfoCircleOutlined,
-  UserAddOutlined
+  ClockCircleOutlined,
+  StarOutlined,
+  HeartOutlined,
+  LikeOutlined,
+  DislikeOutlined,
+  MessageOutlined,
+  BellOutlined,
+  CalendarOutlined,
+  HomeOutlined,
+  ShopOutlined,
+  GiftOutlined,
+  TrophyOutlined,
+  FireOutlined,
+  ThunderboltOutlined,
+  RocketOutlined,
+  BulbOutlined,
+  ExperimentOutlined,
+  SafetyOutlined,
+  SecurityScanOutlined,
+  LockOutlined,
+  UnlockOutlined,
+  KeyOutlined,
+  DatabaseOutlined,
+  CloudOutlined,
+  ApiOutlined,
+  CodeOutlined,
+  BugOutlined,
+  ToolOutlined,
+  BuildOutlined,
+  ExperimentOutlined,
+  CompassOutlined,
+  AimOutlined,
+  TargetOutlined,
+  FlagOutlined,
+  TrophyOutlined,
+  MedalOutlined,
+  CrownOutlined,
+  StarOutlined,
+  HeartOutlined,
+  LikeOutlined,
+  DislikeOutlined,
+  MessageOutlined,
+  BellOutlined,
+  CalendarOutlined,
+  HomeOutlined,
+  ShopOutlined,
+  GiftOutlined,
+  FireOutlined,
+  ThunderboltOutlined,
+  RocketOutlined,
+  BulbOutlined,
+  ExperimentOutlined,
+  SafetyOutlined,
+  SecurityScanOutlined,
+  LockOutlined,
+  UnlockOutlined,
+  DatabaseOutlined,
+  CloudOutlined,
+  ApiOutlined,
+  CodeOutlined,
+  BugOutlined,
+  ToolOutlined,
+  BuildOutlined,
+  CompassOutlined,
+  AimOutlined,
+  TargetOutlined,
+  FlagOutlined,
+  MedalOutlined
 } from '@ant-design/icons';
-import { Bar, Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  Title as ChartTitle,
-  Tooltip as ChartTooltip,
-  Legend,
-  PointElement,
-} from 'chart.js';
+import { API_ENDPOINTS, getBackendUrl } from './config';
 import SuperAdminSidebar from './SuperAdminSidebar';
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  ChartTitle,
-  ChartTooltip,
-  Legend
-);
-
+const { Header, Sider, Content } = Layout;
+const { Title, Text, Paragraph } = Typography;
 const { TabPane } = Tabs;
+const { Step } = Steps;
+const { Panel } = Collapse;
+const { RangePicker } = DatePicker;
+const { TextArea } = Input;
 const { Option } = Select;
-const { Text, Title } = Typography;
-const { Header, Content } = Layout;
-const API_URL = 'http://localhost:5001/api/super-admin';
 
 interface Account {
   id: string;
@@ -244,7 +354,7 @@ const OverviewTab = ({ onCreateCompany }: { onCreateCompany: () => void }) => {
           <Col span={6}>
             <Button 
               type="default" 
-              icon={<UserAddOutlined />}
+              icon={<UserOutlined />}
               style={{ width: '100%', height: 80, borderRadius: 8 }}
             >
               <div style={{ fontSize: 12, marginTop: 4 }}>Add Agent</div>
@@ -2621,207 +2731,207 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
     ]);
   }, []);
 
+  // Fetch accounts data
   const fetchAccounts = async () => {
-    setLoading(true);
     try {
-      const token = localStorage.getItem('superAdminToken');
-      const response = await fetch(`${API_URL}/accounts`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/accounts`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
-      
-      if (!response.ok) throw new Error('Failed to fetch accounts');
-      
-      const data = await response.json();
-      setAccounts(data.accounts);
-    } catch (error: any) {
-      message.error(error.message);
-    } finally {
-      setLoading(false);
+      if (response.ok) {
+        const data = await response.json();
+        setAccounts(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch accounts:', error);
     }
   };
 
+  // Fetch blog posts
   const fetchBlogPosts = async () => {
     try {
-      const token = localStorage.getItem('superAdminToken');
-      const response = await fetch(`${API_URL}/content/blog-posts`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/content/blog-posts`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
-      
-      if (!response.ok) throw new Error('Failed to fetch blog posts');
-      
-      const data = await response.json();
-      setBlogPosts(data.posts);
-    } catch (error: any) {
+      if (response.ok) {
+        const data = await response.json();
+        setBlogPosts(data);
+      }
+    } catch (error) {
       console.error('Failed to fetch blog posts:', error);
     }
   };
 
+  // Fetch packages
   const fetchPackages = async () => {
     try {
-      const token = localStorage.getItem('superAdminToken');
-      const response = await fetch(`${API_URL}/packages`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/packages`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
-      
-      if (!response.ok) throw new Error('Failed to fetch packages');
-      
-      const data = await response.json();
-      setPackages(data.packages);
-    } catch (error: any) {
+      if (response.ok) {
+        const data = await response.json();
+        setPackages(data);
+      }
+    } catch (error) {
       console.error('Failed to fetch packages:', error);
     }
   };
 
+  // Fetch support tickets
   const fetchSupportTickets = async () => {
     try {
-      const token = localStorage.getItem('superAdminToken');
-      const response = await fetch(`${API_URL}/support/tickets`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/support/tickets`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
-      
-      if (!response.ok) throw new Error('Failed to fetch support tickets');
-      
-      const data = await response.json();
-      setSupportTickets(data.tickets);
-    } catch (error: any) {
+      if (response.ok) {
+        const data = await response.json();
+        setSupportTickets(data);
+      }
+    } catch (error) {
       console.error('Failed to fetch support tickets:', error);
     }
   };
 
+  // Fetch frontpage content
   const fetchFrontpageContent = async () => {
     try {
-      const token = localStorage.getItem('superAdminToken');
-      const response = await fetch(`${API_URL}/content/frontpage`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/content/frontpage`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
-      
-      if (!response.ok) throw new Error('Failed to fetch frontpage content');
-      
-      const data = await response.json();
-      setFrontpageContent(data.content);
-    } catch (error: any) {
+      if (response.ok) {
+        const data = await response.json();
+        setFrontpageContent(data);
+      }
+    } catch (error) {
       console.error('Failed to fetch frontpage content:', error);
     }
   };
 
+  // Fetch analytics
   const fetchAnalytics = async () => {
-    setAnalyticsLoading(true);
     try {
-      const token = localStorage.getItem('superAdminToken');
-      const response = await fetch(`${API_URL}/analytics/advanced`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/analytics/advanced`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
-      
-      if (!response.ok) throw new Error('Failed to fetch analytics');
-      
-      const data = await response.json();
-      setAnalyticsData(data);
-    } catch (error: any) {
+      if (response.ok) {
+        const data = await response.json();
+        setAnalytics(data);
+      }
+    } catch (error) {
       console.error('Failed to fetch analytics:', error);
-    } finally {
-      setAnalyticsLoading(false);
     }
   };
 
+  // Fetch system config
   const fetchSystemConfig = async () => {
     try {
-      const token = localStorage.getItem('superAdminToken');
-      const response = await fetch(`${API_URL}/system/config`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/system/config`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
-      
-      if (!response.ok) throw new Error('Failed to fetch system config');
-      
-      const data = await response.json();
-      setSystemConfig(data.config);
-    } catch (error: any) {
+      if (response.ok) {
+        const data = await response.json();
+        setSystemConfig(data);
+      }
+    } catch (error) {
       console.error('Failed to fetch system config:', error);
     }
   };
 
-  const fetchUsers = async () => {
-    try {
-      const token = localStorage.getItem('superAdminToken');
-      const response = await fetch(`${API_URL}/users`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (!response.ok) throw new Error('Failed to fetch users');
-      
-      const data = await response.json();
-      setUsers(data.users);
-    } catch (error: any) {
-      console.error('Failed to fetch users:', error);
-    }
-  };
-
+  // Fetch API keys
   const fetchApiKeys = async () => {
     try {
-      const response = await fetch(`${API_URL}/api-keys`);
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/api-keys`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         setApiKeys(data);
       }
     } catch (error) {
       console.error('Error fetching API keys:', error);
-      message.error('Failed to fetch API keys');
     }
   };
 
   // Fetch pending registrations
   const fetchPendingRegistrations = async () => {
-    setPendingLoading(true);
     try {
-      const response = await fetch(`${API_URL}/pending-registrations`);
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/pending-registrations`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
       if (response.ok) {
         const data = await response.json();
-        setPendingCompanies(data.companies || []);
-        setPendingAgents(data.agents || []);
+        setPendingRegistrations(data);
       }
     } catch (error) {
       console.error('Error fetching pending registrations:', error);
-      message.error('Failed to fetch pending registrations');
-    } finally {
-      setPendingLoading(false);
+    }
+  };
+
+  // Fetch users
+  const fetchUsers = async () => {
+    try {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/users`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUsers(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch users:', error);
     }
   };
 
   // Fetch contact messages
   const fetchContactMessages = async () => {
-    setContactLoading(true);
     try {
-      const response = await fetch(`${API_URL}/contact-messages`);
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/contact-messages`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
       if (response.ok) {
         const data = await response.json();
-        setContactMessages(data || []);
+        setContactMessages(data);
       }
     } catch (error) {
       console.error('Error fetching contact messages:', error);
-      message.error('Failed to fetch contact messages');
-    } finally {
-      setContactLoading(false);
     }
   };
 
   const handleAccountAction = async (accountId: string, action: 'suspend' | 'activate' | 'delete') => {
     try {
-      const response = await fetch(`${API_URL}/accounts/${accountId}/${action}`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/accounts/${accountId}/${action}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -2841,7 +2951,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Handle pending registration approval/rejection
   const handlePendingAction = async (type: 'company' | 'agent', id: string, action: 'approve' | 'reject') => {
     try {
-      const response = await fetch(`${API_URL}/${action}`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/${action}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, id })
@@ -2862,7 +2972,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Handle contact message actions
   const handleContactMessageAction = async (messageId: string, action: 'mark-handled' | 'delete') => {
     try {
-      const response = await fetch(`${API_URL}/contact-messages/${messageId}/${action}`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/contact-messages/${messageId}/${action}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -2882,7 +2992,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Handle API key actions
   const handleApiKeyAction = async (keyId: string, action: 'revoke' | 'regenerate') => {
     try {
-      const response = await fetch(`${API_URL}/api-keys/${keyId}/${action}`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/api-keys/${keyId}/${action}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -2902,7 +3012,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Handle blog post actions
   const handleBlogPostAction = async (postId: string, action: 'publish' | 'unpublish' | 'delete') => {
     try {
-      const response = await fetch(`${API_URL}/blog-posts/${postId}/${action}`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/blog-posts/${postId}/${action}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -2922,7 +3032,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Handle package actions
   const handlePackageAction = async (packageId: string, action: 'activate' | 'deactivate' | 'delete') => {
     try {
-      const response = await fetch(`${API_URL}/packages/${packageId}/${action}`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/packages/${packageId}/${action}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -2942,7 +3052,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Handle support ticket actions
   const handleSupportTicketAction = async (ticketId: string, action: 'resolve' | 'close' | 'delete') => {
     try {
-      const response = await fetch(`${API_URL}/support-tickets/${ticketId}/${action}`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/support-tickets/${ticketId}/${action}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -2962,7 +3072,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Handle frontpage content actions
   const handleFrontpageContentAction = async (contentId: string, action: 'update' | 'delete') => {
     try {
-      const response = await fetch(`${API_URL}/frontpage-content/${contentId}/${action}`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/frontpage-content/${contentId}/${action}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -2982,7 +3092,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Handle system config actions
   const handleSystemConfigAction = async (configKey: string, action: 'update' | 'reset') => {
     try {
-      const response = await fetch(`${API_URL}/system-config/${configKey}/${action}`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/system-config/${configKey}/${action}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -3002,7 +3112,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Handle user actions
   const handleUserAction = async (userId: string, action: 'suspend' | 'activate' | 'delete') => {
     try {
-      const response = await fetch(`${API_URL}/users/${userId}/${action}`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/users/${userId}/${action}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       });
