@@ -8,9 +8,10 @@ import logoDark from '/logo-dark.png';
 import { useLocation, useNavigate } from 'react-router-dom';
 import notificationSound from '/notification.mp3';
 import ChatSessionsLayout from './ChatSessionsLayout';
+import { getBackendUrl, getSocketUrl } from './config';
 
-const API_URL = 'http://localhost:5001/api/widget';
-const SOCKET_URL = 'http://localhost:5001';
+const API_URL = `${getBackendUrl()}/api/widget`;
+const SOCKET_URL = getSocketUrl();
 const DISPOSITIONS = [
   'Resolved', 'Escalated', 'Follow-up required', 'Wrong number', 'Spam / Abuse', 'Other',
 ];
@@ -104,7 +105,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
     if (!companyUuid) return;
     let isMounted = true;
     const fetchStatus = () => {
-      fetch(`http://localhost:5001/api/agents/${companyUuid}`)
+      fetch(`${getSocketUrl()}/api/agents/${companyUuid}`)
         .then(res => {
           if (!res.ok) throw new Error('Not found');
           return res.json();
@@ -186,13 +187,13 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
         if (sessions.some(s => s.sessionId === data.sessionId)) return sessions;
         // Create new chat session in backend
         const newSession = {
-          companyId: 'demo-company-001', // Hardcoded for dev
+          companyId: companyUuid,
           sessionId: data.sessionId,
           visitorId: data.visitorId,
           pageUrl: data.pageUrl,
           startedAt: data.startedAt || new Date().toISOString()
         };
-        fetch('http://localhost:5001/api/chat-sessions', {
+        fetch(`${getBackendUrl()}/api/chat-sessions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newSession)
@@ -217,13 +218,13 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
         if (sessions.some(s => s.sessionId === msg.sessionId)) return sessions;
         // Create new chat session in backend for new messages
         const newSession = {
-          companyId: 'demo-company-001', // Hardcoded for dev
+          companyId: companyUuid,
           sessionId: msg.sessionId,
           visitorId: `visitor-${msg.sessionId.slice(-4)}`,
           pageUrl: window.location.href,
           startedAt: new Date().toISOString()
         };
-        fetch('http://localhost:5001/api/chat-sessions', {
+        fetch(`${getBackendUrl()}/api/chat-sessions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newSession)
@@ -398,7 +399,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
         if (!existingSession) {
           // Create new session only if it doesn't exist
           const newSession = {
-            companyId: 'demo-company-001',
+            companyId: companyUuid,
             sessionId: chatSessionId,
             visitorId: `visitor-${chatSessionId.slice(-4)}`,
             pageUrl: window.location.href,
@@ -406,7 +407,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
           };
           
           // Create chat session in backend
-          fetch('http://localhost:5001/api/chat-sessions', {
+          fetch(`${getBackendUrl()}/api/chat-sessions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newSession)
@@ -594,8 +595,8 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
       timestamp: new Date().toISOString()
     };
     // Persist to backend
-    const companyId = 'demo-company-001'; // Hardcoded for dev
-    await fetch('http://localhost:5001/api/chat-messages', {
+    const companyId = companyUuid; // Use companyUuid
+    await fetch(`${getBackendUrl()}/api/chat-messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -625,14 +626,14 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
   // Fetch chat messages when activeChat changes
   useEffect(() => {
     if (!activeChat) return;
-    fetch(`http://localhost:5001/api/chat-messages?companyId=demo-company-001&sessionId=${activeChat}`)
+    fetch(`${getBackendUrl()}/api/chat-messages?companyId=${companyUuid}&sessionId=${activeChat}`)
       .then(res => res.json())
       .then(messages => {
         setChatMessages(prev => ({ ...prev, [activeChat]: messages }));
       });
       
     // Also fetch form responses
-    fetch(`http://localhost:5001/api/form-response?companyId=demo-company-001&sessionId=${activeChat}`)
+    fetch(`${getBackendUrl()}/api/form-response?companyId=${companyUuid}&sessionId=${activeChat}`)
       .then(res => res.json())
       .then(responses => {
         // Convert form responses to chat messages
@@ -660,7 +661,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
   const [escalatedChats, setEscalatedChats] = useState<Record<string, boolean>>({});
   // Chat escalation handler
   const handleEscalateChat = async (sessionId: string) => {
-    await fetch(`http://localhost:5001/api/chat-sessions/${sessionId}`, {
+    await fetch(`${getBackendUrl()}/api/chat-sessions/${sessionId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ escalated: true })
@@ -676,19 +677,19 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
   const [ratingValue, setRatingValue] = useState(0);
 
   // Canned responses state
-  const companyId = 'demo-company-001'; // Hardcoded for dev
+  const companyId = companyUuid; // Use companyUuid
   const [cannedResponses, setCannedResponses] = useState([]);
 
   // Fetch canned responses on mount
   useEffect(() => {
-    fetch(`http://localhost:5001/api/canned-responses?companyId=${companyId}`)
+    fetch(`${getBackendUrl()}/api/canned-responses?companyId=${companyId}`)
       .then(res => res.json())
       .then(setCannedResponses);
   }, []);
 
   // Fetch chat sessions on mount
   useEffect(() => {
-    fetch(`http://localhost:5001/api/chat-sessions?companyId=${companyId}`)
+    fetch(`${getBackendUrl()}/api/chat-sessions?companyId=${companyId}`)
       .then(res => res.json())
       .then(sessions => {
         setChatSessions(sessions);
@@ -709,7 +710,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
 
   const handleSubmitRating = async () => {
     if (!pendingRatingSession || ratingValue === 0) return;
-    await fetch(`http://localhost:5001/api/chat-sessions/${pendingRatingSession}`, {
+    await fetch(`${getBackendUrl()}/api/chat-sessions/${pendingRatingSession}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ rating: ratingValue })
@@ -955,7 +956,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                   onClick={() => {
                     // Push email form
                     const formData = {
-                      companyId: 'demo-company-001',
+                      companyId: companyUuid,
                       sessionId: activeChat || 'demo-session', // Use active chat session ID
                       from: agentUsername,
                       type: 'email',
@@ -964,7 +965,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                       ]
                     };
                     console.log('Pushing email form:', formData);
-                    fetch('http://localhost:5001/api/form-push', {
+                    fetch(`${getBackendUrl()}/api/form-push`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(formData)
@@ -1000,7 +1001,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                   onClick={() => {
                     // Push phone form
                     const formData = {
-                      companyId: 'demo-company-001',
+                      companyId: companyUuid,
                       sessionId: activeChat || 'demo-session', // Use active chat session ID
                       from: agentUsername,
                       type: 'phone',
@@ -1009,7 +1010,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                       ]
                     };
                     console.log('Pushing phone form:', formData);
-                    fetch('http://localhost:5001/api/form-push', {
+                    fetch(`${getBackendUrl()}/api/form-push`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(formData)
@@ -1045,7 +1046,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                   onClick={() => {
                     // Push custom form
                     const formData = {
-                      companyId: 'demo-company-001',
+                      companyId: companyUuid,
                       sessionId: activeChat || 'demo-session', // Use active chat session ID
                       from: agentUsername,
                       type: 'custom',
@@ -1056,7 +1057,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                       ]
                     };
                     console.log('Pushing custom form:', formData);
-                    fetch('http://localhost:5001/api/form-push', {
+                    fetch(`${getBackendUrl()}/api/form-push`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(formData)

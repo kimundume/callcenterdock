@@ -16,6 +16,7 @@ import {
 import { io } from 'socket.io-client';
 import logoLight from '/logo-light.png';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { getBackendUrl, getSocketUrl } from './config';
 
 ChartJS.register(
   CategoryScale,
@@ -27,7 +28,7 @@ ChartJS.register(
   ChartTooltip,
 );
 
-const API_URL = 'http://localhost:5001/api/widget';
+const API_URL = `${getBackendUrl()}/api/widget`;
 
 const roleOptions = [
   { label: 'Agent', value: 'agent' },
@@ -128,7 +129,7 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
 
   const socketRef = useRef(null);
   useEffect(() => {
-    socketRef.current = io('http://localhost:5001');
+    socketRef.current = io(getSocketUrl());
     return () => {
       if (socketRef.current) socketRef.current.disconnect();
     };

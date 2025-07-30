@@ -5,8 +5,9 @@ import { io } from 'socket.io-client';
 import logoLight from '/logo-light.png';
 import logoDark from '/logo-dark.png';
 import { v4 as uuidv4 } from 'uuid';
+import { getBackendUrl, getSocketUrl } from './config';
 
-const SOCKET_URL = 'http://localhost:5001';
+const SOCKET_URL = getSocketUrl();
 
 interface IVRStep {
   prompt: string;
@@ -125,7 +126,7 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
   useEffect(() => {
     if (!open || !companyUuid) return;
     console.log('[Widget] companyUuid:', companyUuid);
-    fetch(`http://localhost:5001/api/agents/${companyUuid}`)
+    fetch(`${getBackendUrl()}/api/agents/${companyUuid}`)
       .then(res => res.json())
       .then(list => setAgentsOnline(Array.isArray(list) && list.some(a => a.online)))
       .catch(() => setAgentsOnline(false));
@@ -136,7 +137,7 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
     if (!open) return;
     console.log('[IVRChatWidget] Widget opened. companyUuid:', companyUuid);
     if (companyUuid) {
-      fetch(`http://localhost:5001/api/widget/ivr/${companyUuid}`)
+      fetch(`${getBackendUrl()}/api/widget/ivr/${companyUuid}`)
         .then(res => res.json())
         .then(config => {
           console.log('[IVRChatWidget] IVR config loaded:', config);
@@ -441,14 +442,14 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
   // Load chat messages from backend when chatSessionId changes
   useEffect(() => {
     if (!chatSessionId || !companyUuid) return;
-    fetch(`http://localhost:5001/api/chat-messages?companyId=${companyUuid}&sessionId=${chatSessionId}`)
+    fetch(`${getBackendUrl()}/api/chat-messages?companyId=${companyUuid}&sessionId=${chatSessionId}`)
       .then(res => res.json())
       .then((messages: ChatMessage[]) => {
         setChatMessages(messages);
       });
       
     // Also fetch form responses
-    fetch(`http://localhost:5001/api/form-response?companyId=${companyUuid}&sessionId=${chatSessionId}`)
+    fetch(`${getBackendUrl()}/api/form-response?companyId=${companyUuid}&sessionId=${chatSessionId}`)
       .then(res => res.json())
       .then((responses: any[]) => {
         // Convert form responses to chat messages
@@ -569,7 +570,7 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
   const handleFormSubmit = async () => {
     if (!activeForm || !companyUuid || !chatSessionId) return;
     setFormSubmitting(true);
-    const res = await fetch('http://localhost:5001/api/form-response', {
+    const res = await fetch(`${getBackendUrl()}/api/form-response`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -599,7 +600,7 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
       const visitorId = uuidv4();
       const pageUrl = window.location.href;
       console.log('[IVRChatWidget] Starting call. Params:', { companyUuid, visitorId, pageUrl });
-      const response = await fetch('http://localhost:5001/api/widget/route-call', {
+      const response = await fetch(`${getBackendUrl()}/api/widget/route-call`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyUuid, visitorId, pageUrl, callType: 'chat' }),
@@ -755,7 +756,7 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
   const handleContactFormSubmit = async () => {
     setContactLoading(true);
     try {
-      const res = await fetch('/api/widget/contact', {
+      const res = await fetch(`${getBackendUrl()}/api/widget/contact`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(contactForm)

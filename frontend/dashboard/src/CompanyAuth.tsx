@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
+import { getBackendUrl } from './config';
 import { DEMO_COMPANY_UUID, DEMO_ADMIN_USERNAME, DEMO_ADMIN_PASSWORD } from './demoCredentials';
 import logoLight from '/logo-light.png';
 import logoDark from '/logo-dark.png';
 
-const API_URL = 'http://localhost:5001/api/widget';
+const API_URL = `${getBackendUrl()}/api/widget`;
 
 export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: string) => void }) {
   const [mode, setMode] = useState<'register' | 'login'>('register');
