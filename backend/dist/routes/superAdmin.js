@@ -46,10 +46,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const uuid_1 = require("uuid");
+const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const server_1 = require("../server");
 const persistentStorage_1 = require("../data/persistentStorage");
+// In-memory storage for temporary data
+const pendingAdmins = [];
+const pendingAgentCredentials = [];
+const contactMessages = [];
 const router = express_1.default.Router();
 // Super Admin authentication middleware
 const authenticateSuperAdmin = (req, res, next) => {
@@ -88,7 +92,7 @@ router.post('/login', (req, res) => __awaiter(void 0, void 0, void 0, function* 
         if (username !== superAdminCredentials.username) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
-        const isValidPassword = yield bcryptjs_1.default.compare(password, superAdminCredentials.password);
+        const isValidPassword = yield bcrypt_1.default.compare(password, superAdminCredentials.password);
         if (!isValidPassword) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
@@ -614,64 +618,73 @@ router.post('/api-keys', authenticateSuperAdmin, (req, res) => {
 // --- Super Admin: Pending Registrations ---
 // GET /api/superadmin/pending-registrations
 router.get('/pending-registrations', (req, res) => {
-    const pendingCompanies = global.tempStorage.companies.filter(c => c.status === 'pending');
-    const pendingAgents = global.tempStorage.agents.filter(a => a.status === 'pending');
+    const pendingCompanies = Object.values(persistentStorage_1.companies).filter((c) => c.status === 'pending');
+    const pendingAgents = Object.values(persistentStorage_1.agents).filter((a) => a.status === 'pending');
     res.json({ companies: pendingCompanies, agents: pendingAgents });
 });
 // POST /api/superadmin/approve
 router.post('/approve', (req, res) => {
-    var _a, _b, _c, _d;
     const { type, id } = req.body;
     if (type === 'company') {
-        const company = global.tempStorage.companies.find(c => c.uuid === id);
+        const company = persistentStorage_1.companies[id];
         if (company) {
             company.status = 'approved';
             company.verified = true;
+            (0, persistentStorage_1.saveCompanies)();
             // Create admin user from pending admin credentials
-            const pendingAdmin = (_a = global.tempStorage.pendingAdmins) === null || _a === void 0 ? void 0 : _a.find(pa => pa.uuid === id);
+            const pendingAdmin = pendingAdmins.find((pa) => pa.uuid === id);
             if (pendingAdmin) {
                 // In a real application, you'd hash the password here
                 const hashedPassword = pendingAdmin.adminPassword; // This should be bcrypt.hash() in production
-                // Add to users array (you'll need to create this in tempStorage)
-                global.tempStorage.authUsers = global.tempStorage.authUsers || [];
-                global.tempStorage.authUsers.push({
-                    uuid: (0, server_1.generateId)(),
+                // Add to users array
+                const adminUser = {
+                    uuid: (0, uuid_1.v4)(),
                     username: pendingAdmin.adminUsername,
                     password: hashedPassword,
                     companyUuid: id,
                     role: 'admin',
                     email: pendingAdmin.email,
                     createdAt: new Date().toISOString()
-                });
+                };
+                persistentStorage_1.users[adminUser.uuid] = adminUser;
+                (0, persistentStorage_1.saveUsers)();
                 // Remove from pending admins
-                global.tempStorage.pendingAdmins = ((_b = global.tempStorage.pendingAdmins) === null || _b === void 0 ? void 0 : _b.filter(pa => pa.uuid !== id)) || [];
+                const index = pendingAdmins.findIndex((pa) => pa.uuid === id);
+                if (index > -1) {
+                    pendingAdmins.splice(index, 1);
+                }
             }
             return res.json({ success: true, message: 'Company approved successfully' });
         }
     }
     else if (type === 'agent') {
-        const agent = global.tempStorage.agents.find(a => a.uuid === id);
+        const agent = persistentStorage_1.agents[id];
         if (agent) {
             agent.registrationStatus = 'approved';
             agent.status = 'offline'; // Set initial status to offline
+            (0, persistentStorage_1.saveAgents)();
             // Create agent user from pending agent credentials
-            const pendingAgentCred = (_c = global.tempStorage.pendingAgentCredentials) === null || _c === void 0 ? void 0 : _c.find(pac => pac.uuid === id);
+            const pendingAgentCred = pendingAgentCredentials.find((pac) => pac.uuid === id);
             if (pendingAgentCred) {
                 // In a real application, you'd hash the password here
                 const hashedPassword = pendingAgentCred.password; // This should be bcrypt.hash() in production
-                // Add to authUsers array
-                global.tempStorage.authUsers = global.tempStorage.authUsers || [];
-                global.tempStorage.authUsers.push({
-                    uuid: (0, server_1.generateId)(),
+                // Add to users array
+                const agentUser = {
+                    uuid: (0, uuid_1.v4)(),
                     username: pendingAgentCred.username,
                     password: hashedPassword,
                     companyUuid: pendingAgentCred.companyUuid,
                     role: 'agent',
                     email: pendingAgentCred.email,
                     createdAt: new Date().toISOString()
-                });
+                };
+                persistentStorage_1.users[agentUser.uuid] = agentUser;
+                (0, persistentStorage_1.saveUsers)();
                 // Remove from pending agent credentials
-                global.tempStorage.pendingAgentCredentials = ((_d = global.tempStorage.pendingAgentCredentials) === null || _d === void 0 ? void 0 : _d.filter(pac => pac.uuid !== id)) || [];
+                const index = pendingAgentCredentials.findIndex((pac) => pac.uuid === id);
+                if (index > -1) {
+                    pendingAgentCredentials.splice(index, 1);
+                }
             }
             return res.json({ success: true, message: 'Agent approved successfully' });
         }
@@ -682,16 +695,18 @@ router.post('/approve', (req, res) => {
 router.post('/reject', (req, res) => {
     const { type, id } = req.body;
     if (type === 'company') {
-        const company = global.tempStorage.companies.find(c => c.uuid === id);
+        const company = persistentStorage_1.companies[id];
         if (company) {
             company.status = 'rejected';
+            (0, persistentStorage_1.saveCompanies)();
             return res.json({ success: true });
         }
     }
     else if (type === 'agent') {
-        const agent = global.tempStorage.agents.find(a => a.uuid === id);
+        const agent = persistentStorage_1.agents[id];
         if (agent) {
             agent.status = 'rejected';
+            (0, persistentStorage_1.saveAgents)();
             return res.json({ success: true });
         }
     }
@@ -700,17 +715,19 @@ router.post('/reject', (req, res) => {
 // --- Super Admin: Contact Messages ---
 // GET /api/superadmin/contact-messages
 router.get('/contact-messages', (req, res) => {
-    res.json(global.tempStorage.contactMessages || []);
+    res.json({ messages: contactMessages });
 });
-// POST /api/superadmin/contact-messages/:id/mark-handled
-router.post('/contact-messages/:id/mark-handled', (req, res) => {
+// POST /api/superadmin/contact-messages/:id/handle
+router.post('/contact-messages/:id/handle', (req, res) => {
     const { id } = req.params;
-    const msg = (global.tempStorage.contactMessages || []).find(m => m._id === id);
+    const msg = contactMessages.find((m) => m._id === id);
     if (msg) {
         msg.handled = true;
-        return res.json({ success: true });
+        res.json({ success: true });
     }
-    res.status(404).json({ error: 'Message not found' });
+    else {
+        res.status(404).json({ error: 'Message not found' });
+    }
 });
 // ===== CALL MANAGEMENT ENDPOINTS =====
 // Get active calls
@@ -938,7 +955,7 @@ router.put('/agents/:id/assignment', authenticateSuperAdmin, (req, res) => {
         let assignment = tempStorage.agentAssignments.find((a) => a.agentId === id);
         if (!assignment) {
             assignment = {
-                id: (0, server_1.generateId)(),
+                id: (0, uuid_1.v4)(),
                 agentId: id,
                 assignedToPublic: assignedToPublic || false,
                 maxCalls: maxCalls || 5,
@@ -1034,9 +1051,9 @@ router.post('/create-company', authenticateSuperAdmin, (req, res) => __awaiter(v
             return res.status(400).json({ error: 'A company with this email already exists' });
         }
         // Generate UUID
-        const uuid = (0, server_1.generateId)();
+        const uuid = (0, uuid_1.v4)();
         // Hash admin password
-        const hashedPassword = yield bcryptjs_1.default.hash(adminPassword, 10);
+        const hashedPassword = yield bcrypt_1.default.hash(adminPassword, 10);
         // Create company with approved status
         const newCompany = {
             uuid,
@@ -1053,7 +1070,7 @@ router.post('/create-company', authenticateSuperAdmin, (req, res) => __awaiter(v
         (0, persistentStorage_1.saveCompanies)(); // Save to file
         // Create admin user
         const adminUser = {
-            uuid: (0, server_1.generateId)(),
+            uuid: (0, uuid_1.v4)(),
             username: adminUsername,
             password: hashedPassword,
             companyUuid: uuid,

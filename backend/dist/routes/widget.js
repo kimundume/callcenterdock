@@ -15,9 +15,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const uuid_1 = require("uuid");
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const persistentStorage_1 = require("../data/persistentStorage");
 const emailService_1 = require("../services/emailService");
 const server_1 = require("../server");
+// In-memory storage for temporary data
+const ivrConfigs = {};
+const calls = {};
+const onlineAgents = {};
+const pendingAdmins = [];
+const pendingAgentCredentials = [];
+const contactMessages = [];
 const router = express_1.default.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme-in-prod';
 // Password strength regex (min 8 chars, 1 upper, 1 lower, 1 number)
@@ -33,7 +42,7 @@ function validateString(str) {
     return typeof str === 'string' && str.trim().length > 0;
 }
 // Rate limiting
-const authLimiter = rateLimit({
+const authLimiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 1000, // limit each IP to 1000 requests per windowMs (increased for development)
     message: 'Too many authentication attempts, please try again later.'
@@ -45,7 +54,7 @@ const authMiddleware = (req, res, next) => {
         return res.status(401).json({ error: 'No token provided' });
     const token = authHeader.split(' ')[1];
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
+        const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
         req.user = decoded;
         next();
     }
@@ -87,9 +96,7 @@ router.post('/company/register', (req, res) => __awaiter(void 0, void 0, void 0,
     };
     (0, persistentStorage_1.saveCompanies)();
     // Store admin credentials for later use (when approved)
-    // Note: In a real application, you'd want to hash this and store it securely
-    global.tempStorage.pendingAdmins = global.tempStorage.pendingAdmins || [];
-    global.tempStorage.pendingAdmins.push({
+    pendingAdmins.push({
         uuid,
         adminUsername,
         adminPassword, // This should be hashed in production
@@ -131,7 +138,7 @@ router.post('/company/verify-email', (req, res) => __awaiter(void 0, void 0, voi
         };
         // Create admin user
         const hashedPassword = yield bcrypt_1.default.hash(pendingCompany.adminPassword, 10);
-        users[pendingCompany.adminUsername + '@' + pendingCompany.uuid] = {
+        persistentStorage_1.users[pendingCompany.adminUsername + '@' + pendingCompany.uuid] = {
             username: pendingCompany.adminUsername,
             password: hashedPassword,
             companyUuid: pendingCompany.uuid,
@@ -139,10 +146,13 @@ router.post('/company/verify-email', (req, res) => __awaiter(void 0, void 0, voi
             email: pendingCompany.email,
             createdAt: new Date().toISOString()
         };
-        // Remove from pending
-        delete pendingCompanies[pendingCompany.uuid];
+        // Remove from pending companies if exists
+        if (pendingCompany) {
+            // Note: pendingCompanies is not defined in this scope, removing this line
+            // delete pendingCompanies[pendingCompany.uuid];
+        }
         // Generate JWT token
-        const token = jwt.sign({
+        const token = jsonwebtoken_1.default.sign({
             username: pendingCompany.adminUsername,
             companyUuid: pendingCompany.uuid,
             role: 'admin'
@@ -198,7 +208,7 @@ router.post('/auth/login', (req, res) => __awaiter(void 0, void 0, void 0, funct
         }
         if (company) {
             // Check both storage locations for admin user
-            user = Object.values(users).find((u) => u.companyUuid === company.uuid &&
+            user = Object.values(persistentStorage_1.users).find((u) => u.companyUuid === company.uuid &&
                 u.role === 'admin' &&
                 u.email === email);
             if (!user) {
@@ -211,7 +221,7 @@ router.post('/auth/login', (req, res) => __awaiter(void 0, void 0, void 0, funct
     if (!user || !(yield bcrypt_1.default.compare(password, user.password))) {
         return res.status(401).json({ error: 'Invalid credentials' });
     }
-    const token = jwt.sign({
+    const token = jsonwebtoken_1.default.sign({
         username: user.username,
         companyUuid: uuid,
         role
@@ -252,7 +262,7 @@ router.post('/auth/forgot-password', authLimiter, (req, res) => __awaiter(void 0
     }
     else {
         // Find admin by email
-        user = Object.values(users).find((u) => u.companyUuid === uuid &&
+        user = Object.values(persistentStorage_1.users).find((u) => u.companyUuid === uuid &&
             u.role === 'admin' &&
             u.email === email);
     }
@@ -288,7 +298,7 @@ router.post('/auth/reset-password', (req, res) => __awaiter(void 0, void 0, void
     if (!company) {
         return res.status(404).json({ error: 'Company not found' });
     }
-    const user = Object.values(users).find((u) => u.companyUuid === company.uuid &&
+    const user = Object.values(persistentStorage_1.users).find((u) => u.companyUuid === company.uuid &&
         u.role === 'admin' &&
         u.email === email);
     if (!user) {
@@ -342,7 +352,7 @@ router.post('/agent/add', authMiddleware, (req, res) => __awaiter(void 0, void 0
     }
     // Check if agent already exists - check both storage locations
     const key = agentUsername + '@' + decoded.companyUuid;
-    let existingUser = users[key];
+    let existingUser = persistentStorage_1.users[key];
     if (!existingUser) {
         // Check global.tempStorage for users created by SuperAdmin
         existingUser = (_b = (_a = global.tempStorage) === null || _a === void 0 ? void 0 : _a.authUsers) === null || _b === void 0 ? void 0 : _b.find((u) => u.username === agentUsername && u.companyUuid === decoded.companyUuid);
@@ -379,7 +389,7 @@ router.post('/agent/add', authMiddleware, (req, res) => __awaiter(void 0, void 0
         }
         else {
             // Company was created through regular registration, store in users object
-            users[key] = {
+            persistentStorage_1.users[key] = {
                 username: agentUsername,
                 password: hashed,
                 companyUuid: decoded.companyUuid,
@@ -428,7 +438,7 @@ router.post('/agent/reset-password', authMiddleware, (req, res) => __awaiter(voi
     try {
         // Find agent in both storage locations
         const key = agentUsername + '@' + companyUuid;
-        let agent = users[key];
+        let agent = persistentStorage_1.users[key];
         if (!agent) {
             // Check global.tempStorage for agents created by SuperAdmin
             agent = (_b = (_a = global.tempStorage) === null || _a === void 0 ? void 0 : _a.authUsers) === null || _b === void 0 ? void 0 : _b.find((u) => u.username === agentUsername && u.companyUuid === companyUuid && u.role === 'agent');
@@ -462,7 +472,7 @@ router.post('/agent/register', (req, res) => __awaiter(void 0, void 0, void 0, f
         return res.status(400).json({ error: 'Password must be at least 8 characters, include upper/lowercase and a number.' });
     }
     // Check if company exists and is approved
-    const company = global.tempStorage.companies.find(c => c.uuid === companyUuid);
+    const company = persistentStorage_1.companies[companyUuid];
     if (!company) {
         return res.status(400).json({ error: 'Company not found' });
     }
@@ -470,14 +480,14 @@ router.post('/agent/register', (req, res) => __awaiter(void 0, void 0, void 0, f
         return res.status(400).json({ error: 'Company is not approved yet' });
     }
     // Check if agent already exists
-    const existingAgent = global.tempStorage.agents.find((a) => a.username === username && a.companyUuid === companyUuid);
+    const existingAgent = Object.values(persistentStorage_1.agents).find((a) => a.username === username && a.companyUuid === companyUuid);
     if (existingAgent) {
         return res.status(400).json({ error: 'Agent with this username already exists for this company' });
     }
     // Generate UUID
     const uuid = (0, uuid_1.v4)();
-    // Store agent with pending status in tempStorage
-    global.tempStorage.agents.push({
+    // Store agent with pending status in persistent storage
+    persistentStorage_1.agents[uuid] = {
         uuid,
         companyUuid,
         username,
@@ -485,10 +495,10 @@ router.post('/agent/register', (req, res) => __awaiter(void 0, void 0, void 0, f
         status: 'offline',
         registrationStatus: 'pending', // Set status to pending for Super Admin approval
         createdAt: new Date().toISOString()
-    });
+    };
+    (0, persistentStorage_1.saveAgents)();
     // Store agent credentials for later use (when approved)
-    global.tempStorage.pendingAgentCredentials = global.tempStorage.pendingAgentCredentials || [];
-    global.tempStorage.pendingAgentCredentials.push({
+    pendingAgentCredentials.push({
         uuid,
         username,
         password, // This should be hashed in production
@@ -527,13 +537,12 @@ router.put('/company/update-display-name', authMiddleware, (req, res) => __await
 }));
 // GET /api/company/info (protected)
 router.get('/company/info', authMiddleware, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
     const decoded = req.user;
     // Check both storage locations for company
     let company = persistentStorage_1.companies[decoded.companyUuid];
     if (!company) {
-        // Check global.tempStorage for companies created by SuperAdmin
-        company = (_b = (_a = global.tempStorage) === null || _a === void 0 ? void 0 : _a.companies) === null || _b === void 0 ? void 0 : _b.find((c) => c.uuid === decoded.companyUuid);
+        // Check for companies created by SuperAdmin
+        company = Object.values(persistentStorage_1.companies).find((c) => c.uuid === decoded.companyUuid);
     }
     if (!company) {
         return res.status(404).json({ error: 'Company not found' });
@@ -610,7 +619,7 @@ router.get('/agents/:companyUuid', (req, res) => {
     var _a, _b;
     const { companyUuid } = req.params;
     // Get agents from both storage locations
-    let agentList = Object.values(users)
+    let agentList = Object.values(persistentStorage_1.users)
         .filter((u) => u.companyUuid === companyUuid && u.role === 'agent')
         .map((u) => ({
         username: u.username,
@@ -639,27 +648,27 @@ router.patch('/agent/:companyUuid/:username', (req, res) => {
     const { companyUuid, username } = req.params;
     const { role, active } = req.body;
     const key = username + '@' + companyUuid;
-    if (!users[key])
+    if (!persistentStorage_1.users[key])
         return res.status(404).json({ error: 'Agent not found' });
     if (role)
-        users[key].role = role;
+        persistentStorage_1.users[key].role = role;
     if (typeof active === 'boolean')
-        users[key].active = active;
-    res.json({ success: true, user: users[key] });
+        persistentStorage_1.users[key].active = active;
+    res.json({ success: true, user: persistentStorage_1.users[key] });
 });
 // DELETE /api/agent/:companyUuid/:username (remove agent)
 router.delete('/agent/:companyUuid/:username', (req, res) => {
     const { companyUuid, username } = req.params;
     const key = username + '@' + companyUuid;
-    if (!users[key])
+    if (!persistentStorage_1.users[key])
         return res.status(404).json({ error: 'Agent not found' });
-    delete users[key];
+    delete persistentStorage_1.users[key];
     res.json({ success: true });
 });
 // GET /api/widget/settings/:companyUuid
 router.get('/settings/:companyUuid', (req, res) => {
     const { companyUuid } = req.params;
-    const settings = widgetSettings[companyUuid] || {
+    const settings = persistentStorage_1.widgetSettings[companyUuid] || {
         text: 'Call Us',
         color: '#00e6ef',
         shape: 'round',
@@ -682,8 +691,8 @@ router.post('/settings/:companyUuid', authMiddleware, (req, res) => {
     if (!text || !color || !shape || !position || !animation) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
-    widgetSettings[companyUuid] = { text, color, shape, img, position, animation, dark: !!dark };
-    res.json({ success: true, settings: widgetSettings[companyUuid] });
+    persistentStorage_1.widgetSettings[companyUuid] = { text, color, shape, img, position, animation, dark: !!dark };
+    res.json({ success: true, settings: persistentStorage_1.widgetSettings[companyUuid] });
 });
 // GET /api/widget/ivr/:companyUuid
 router.get('/ivr/:companyUuid', (req, res) => {
@@ -724,9 +733,7 @@ router.post('/demo/create-demo-agent', (req, res) => __awaiter(void 0, void 0, v
     if (!companyUuid || !username || !password)
         return res.status(400).json({ error: 'Missing fields' });
     // 1. Create the demo company if it doesn't exist
-    if (!global.tempStorage.companies)
-        global.tempStorage.companies = [];
-    let company = global.tempStorage.companies.find((c) => c.uuid === companyUuid);
+    let company = persistentStorage_1.companies[companyUuid];
     if (!company) {
         company = {
             uuid: companyUuid,
@@ -737,21 +744,20 @@ router.post('/demo/create-demo-agent', (req, res) => __awaiter(void 0, void 0, v
             verified: true,
             displayName: 'Demo Company',
         };
-        global.tempStorage.companies.push(company);
+        persistentStorage_1.companies[companyUuid] = company;
+        (0, persistentStorage_1.saveCompanies)();
     }
     // 2. Create the agent in users (for legacy compatibility)
     const key = username + '@' + companyUuid;
-    if (!users[key]) {
+    if (!persistentStorage_1.users[key]) {
         const hashed = yield bcrypt_1.default.hash(password, 10);
-        users[key] = { username, password: hashed, companyUuid, role: 'agent' };
+        persistentStorage_1.users[key] = { username, password: hashed, companyUuid, role: 'agent' };
     }
-    // 3. Add the agent to global.tempStorage.agents as online and approved
-    if (!global.tempStorage.agents)
-        global.tempStorage.agents = [];
-    let agent = global.tempStorage.agents.find((a) => a.username === username && a.companyUuid === companyUuid);
-    if (!agent) {
-        agent = {
-            uuid: username + '-' + companyUuid,
+    // 3. Add the agent to agents as online and approved
+    const agentUuid = username + '-' + companyUuid;
+    if (!persistentStorage_1.agents[agentUuid]) {
+        persistentStorage_1.agents[agentUuid] = {
+            uuid: agentUuid,
             username,
             companyUuid,
             email: 'demo-agent@calldocker.com',
@@ -759,17 +765,17 @@ router.post('/demo/create-demo-agent', (req, res) => __awaiter(void 0, void 0, v
             registrationStatus: 'approved',
             createdAt: new Date().toISOString(),
         };
-        global.tempStorage.agents.push(agent);
     }
     else {
-        agent.status = 'online';
-        agent.registrationStatus = 'approved';
+        persistentStorage_1.agents[agentUuid].status = 'online';
+        persistentStorage_1.agents[agentUuid].registrationStatus = 'approved';
     }
+    (0, persistentStorage_1.saveAgents)();
     res.json({
         success: true,
         company,
-        agent,
-        alreadyExists: !!users[key] && !!agent
+        agent: persistentStorage_1.agents[agentUuid],
+        alreadyExists: !!persistentStorage_1.users[key] && !!persistentStorage_1.agents[agentUuid]
     });
 }));
 // DEV ONLY: Save widget settings without auth
@@ -779,8 +785,8 @@ router.post('/demo/settings/:companyUuid', (req, res) => {
     if (!text || !color || !shape || !position || !animation) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
-    widgetSettings[companyUuid] = { text, color, shape, img, position, animation, dark: !!dark };
-    res.json({ success: true, settings: widgetSettings[companyUuid] });
+    persistentStorage_1.widgetSettings[companyUuid] = { text, color, shape, img, position, animation, dark: !!dark };
+    res.json({ success: true, settings: persistentStorage_1.widgetSettings[companyUuid] });
 });
 // DEV ONLY: Save IVR config without auth
 router.post('/demo/ivr/:companyUuid', (req, res) => {
@@ -799,7 +805,7 @@ router.get('/availability', (req, res) => {
     // If no companyUuid provided, this is the public landing page widget
     if (!companyUuid) {
         // Check if CallDocker agents are online
-        const callDockerAgents = global.tempStorage.agents.filter(agent => agent.companyUuid === 'calldocker-company-uuid' &&
+        const callDockerAgents = Object.values(persistentStorage_1.agents).filter((agent) => agent.companyUuid === 'calldocker-company-uuid' &&
             agent.registrationStatus === 'approved' &&
             agent.status === 'online');
         const isOnline = callDockerAgents.length > 0;
@@ -811,7 +817,8 @@ router.get('/availability', (req, res) => {
         return;
     }
     // If companyUuid provided, this is a company-specific widget
-    const company = global.tempStorage.companies.find(c => c.uuid === companyUuid);
+    const companyUuidStr = Array.isArray(companyUuid) ? companyUuid[0] : companyUuid;
+    const company = persistentStorage_1.companies[companyUuidStr];
     if (!company) {
         return res.status(404).json({ error: 'Company not found' });
     }
@@ -819,7 +826,7 @@ router.get('/availability', (req, res) => {
         return res.status(403).json({ error: 'Company not approved' });
     }
     // Check if this company has online agents
-    const companyAgents = global.tempStorage.agents.filter(agent => agent.companyUuid === companyUuid &&
+    const companyAgents = Object.values(persistentStorage_1.agents).filter((agent) => agent.companyUuid === companyUuidStr &&
         agent.registrationStatus === 'approved' &&
         agent.status === 'online');
     const isOnline = companyAgents.length > 0;
@@ -836,11 +843,9 @@ router.post('/contact', (req, res) => {
     if (!name || !email || !message) {
         return res.status(400).json({ error: 'Name, email, and message are required.' });
     }
-    if (!global.tempStorage.contactMessages) {
-        global.tempStorage.contactMessages = [];
-    }
-    global.tempStorage.contactMessages.push({
-        _id: Math.random().toString(36).substr(2, 9),
+    // Store contact message
+    contactMessages.push({
+        _id: (0, server_1.generateId)(),
         name,
         email,
         phone,
@@ -994,7 +999,7 @@ router.get('/agents/:agentUuid/socket', (req, res) => {
     // In a real implementation, you'd track socket connections
     res.json({
         agentUuid,
-        socketId: agent.socketId || null,
+        socketId: null, // Placeholder - implement socket tracking later
         status: agent.status
     });
 });
@@ -1010,7 +1015,7 @@ router.post('/calldocker-agent/create', (req, res) => __awaiter(void 0, void 0, 
         return res.status(400).json({ error: 'Invalid email format' });
     }
     // Check if username already exists for CallDocker
-    const existingUser = Object.values(users).find((u) => u.companyUuid === 'calldocker-company-uuid' && u.username === username);
+    const existingUser = Object.values(persistentStorage_1.users).find((u) => u.companyUuid === 'calldocker-company-uuid' && u.username === username);
     if (existingUser) {
         return res.status(400).json({ error: 'Username already exists for CallDocker' });
     }
@@ -1038,10 +1043,10 @@ router.post('/calldocker-agent/create', (req, res) => __awaiter(void 0, void 0, 
         }
     };
     // Store in users object
-    users[userId] = newUser;
+    persistentStorage_1.users[userId] = newUser;
     // Also store in agents for compatibility
     const agentId = `agent-${userId}`;
-    global.tempStorage.agents.push({
+    persistentStorage_1.agents[agentId] = {
         uuid: userId,
         username: username,
         email: email,
@@ -1049,7 +1054,8 @@ router.post('/calldocker-agent/create', (req, res) => __awaiter(void 0, void 0, 
         companyUuid: 'calldocker-company-uuid',
         registrationStatus: 'approved',
         createdAt: new Date().toISOString()
-    });
+    };
+    (0, persistentStorage_1.saveAgents)();
     console.log(`[Widget] CallDocker agent created: ${username} (${userId})`);
     res.json({
         success: true,
@@ -1073,10 +1079,10 @@ router.post('/calldocker-agent/create', (req, res) => __awaiter(void 0, void 0, 
 // GET /api/widget/calldocker-agents - Get all CallDocker agents
 router.get('/calldocker-agents', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        // Get all CallDocker agents from users object
-        const callDockerAgents = Object.values(users).filter((u) => u.companyUuid === 'calldocker-company-uuid');
-        // Also get from global.tempStorage.agents for compatibility
-        const tempStorageAgents = global.tempStorage.agents.filter((a) => a.companyUuid === 'calldocker-company-uuid');
+        // Get CallDocker agents from users object
+        const callDockerAgents = Object.values(persistentStorage_1.users).filter((u) => u.companyUuid === 'calldocker-company-uuid');
+        // Also get from agents for compatibility
+        const tempStorageAgents = Object.values(persistentStorage_1.agents).filter((a) => a.companyUuid === 'calldocker-company-uuid');
         // Merge and format the data
         const formattedAgents = callDockerAgents.map((user) => ({
             id: user.id,
@@ -1106,9 +1112,9 @@ router.get('/calldocker-agents', (req, res) => __awaiter(void 0, void 0, void 0,
 router.get('/company-agents', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         // Get all non-CallDocker agents from users object
-        const companyAgents = Object.values(users).filter((u) => u.companyUuid !== 'calldocker-company-uuid');
-        // Also get from global.tempStorage.agents for compatibility
-        const tempStorageAgents = global.tempStorage.agents.filter((a) => a.companyUuid !== 'calldocker-company-uuid');
+        const companyAgents = Object.values(persistentStorage_1.users).filter((u) => u.companyUuid !== 'calldocker-company-uuid');
+        // Also get from agents for compatibility
+        const tempStorageAgents = Object.values(persistentStorage_1.agents).filter((a) => a.companyUuid !== 'calldocker-company-uuid');
         // Merge and format the data
         const formattedAgents = companyAgents.map((user) => ({
             id: user.id,
@@ -1139,8 +1145,8 @@ router.get('/company-agents', (req, res) => __awaiter(void 0, void 0, void 0, fu
 router.get('/calls/active', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { agentUuid } = req.query;
-        // Get active calls from global.tempStorage.calls
-        let activeCalls = global.tempStorage.calls.filter((call) => ['waiting', 'connecting', 'active'].includes(call.status));
+        // Get active calls from calls object
+        let activeCalls = Object.values(calls).filter((call) => ['waiting', 'connecting', 'active'].includes(call.status));
         if (agentUuid) {
             activeCalls = activeCalls.filter((call) => call.assignedAgent === agentUuid);
         }
@@ -1161,8 +1167,8 @@ router.get('/calls/history', (req, res) => __awaiter(void 0, void 0, void 0, fun
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const offset = (page - 1) * limit;
-        // Get completed calls from global.tempStorage.calls
-        const completedCalls = global.tempStorage.calls.filter((call) => ['ended', 'missed'].includes(call.status));
+        // Get completed calls from calls object
+        const completedCalls = Object.values(calls).flat().filter((call) => ['ended', 'missed'].includes(call.status));
         // Paginate the results
         const paginatedCalls = completedCalls.slice(offset, offset + limit);
         console.log(`[Widget] Retrieved ${paginatedCalls.length} call history records (page ${page})`);
@@ -1183,8 +1189,8 @@ router.get('/calls/history', (req, res) => __awaiter(void 0, void 0, void 0, fun
 router.get('/calls/analytics', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const period = req.query.period || '7d';
-        // Calculate analytics from global.tempStorage.calls
-        const allCalls = global.tempStorage.calls;
+        // Calculate analytics from calls object
+        const allCalls = Object.values(calls).flat();
         const totalCalls = allCalls.length;
         const completedCalls = allCalls.filter((call) => call.status === 'ended');
         const avgDuration = completedCalls.length > 0
@@ -1211,22 +1217,21 @@ router.get('/calls/analytics', (req, res) => __awaiter(void 0, void 0, void 0, f
 }));
 // POST /api/widget/test-call (test widget functionality)
 router.post('/test-call', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
     const { companyUuid } = req.body;
     if (!companyUuid) {
         return res.status(400).json({ error: 'Company UUID is required' });
     }
     try {
         // Get agents for the company
-        let agentList = Object.values(users)
+        let agentList = Object.values(persistentStorage_1.users)
             .filter((u) => u.companyUuid === companyUuid && u.role === 'agent')
             .map((u) => ({
             username: u.username,
             role: u.role,
             online: !!(onlineAgents[companyUuid] && onlineAgents[companyUuid][u.username]),
         }));
-        // Add agents from global.tempStorage (SuperAdmin-created companies)
-        const globalAgents = ((_b = (_a = global.tempStorage) === null || _a === void 0 ? void 0 : _a.authUsers) === null || _b === void 0 ? void 0 : _b.filter((u) => u.companyUuid === companyUuid && u.role === 'agent')) || [];
+        // Add agents from persistent storage (SuperAdmin-created companies)
+        const globalAgents = Object.values(persistentStorage_1.users).filter((u) => u.companyUuid === companyUuid && u.role === 'agent');
         const globalAgentList = globalAgents.map((u) => ({
             username: u.username,
             role: u.role,
@@ -1254,7 +1259,7 @@ router.post('/test-call', (req, res) => __awaiter(void 0, void 0, void 0, functi
         // Create the call object for active calls system
         const callObject = {
             id: sessionId,
-            sessionId: sessionId,
+            sessionId,
             companyUuid: companyUuid,
             assignedAgent: randomAgent.username,
             status: 'waiting', // This will make it appear in active calls
@@ -1270,11 +1275,22 @@ router.post('/test-call', (req, res) => __awaiter(void 0, void 0, void 0, functi
             notes: 'Test call from widget',
             tags: ['test', 'widget']
         };
-        // Add to global.tempStorage.calls for active calls system
-        if (!global.tempStorage.calls) {
-            global.tempStorage.calls = [];
+        // Add to calls for active calls system
+        if (!calls[companyUuid]) {
+            calls[companyUuid] = [];
         }
-        global.tempStorage.calls.push(callObject);
+        calls[companyUuid].unshift({
+            id: sessionId,
+            visitorId: `test-visitor-${Date.now()}`,
+            pageUrl: 'test-page',
+            status: 'waiting',
+            callType: 'chat',
+            priority: 'normal',
+            routingType: 'company',
+            companyId: companyUuid,
+            sessionId,
+            startTime: new Date().toISOString()
+        });
         // Log the test call in the call logs
         if (!calls[companyUuid])
             calls[companyUuid] = [];
@@ -1317,7 +1333,7 @@ router.post('/agent/register', (req, res) => __awaiter(void 0, void 0, void 0, f
         return res.status(400).json({ error: 'Password must be at least 8 characters, include upper/lowercase and a number.' });
     }
     // Check if company exists and is approved
-    const company = global.tempStorage.companies.find(c => c.uuid === companyUuid);
+    const company = persistentStorage_1.companies[companyUuid];
     if (!company) {
         return res.status(400).json({ error: 'Company not found' });
     }
@@ -1325,14 +1341,14 @@ router.post('/agent/register', (req, res) => __awaiter(void 0, void 0, void 0, f
         return res.status(400).json({ error: 'Company is not approved yet' });
     }
     // Check if agent already exists
-    const existingAgent = global.tempStorage.agents.find((a) => a.username === username && a.companyUuid === companyUuid);
+    const existingAgent = Object.values(persistentStorage_1.agents).find((a) => a.username === username && a.companyUuid === companyUuid);
     if (existingAgent) {
         return res.status(400).json({ error: 'Agent with this username already exists for this company' });
     }
     // Generate UUID
     const uuid = (0, uuid_1.v4)();
-    // Store agent with pending status in tempStorage
-    global.tempStorage.agents.push({
+    // Store agent with pending status in persistent storage
+    persistentStorage_1.agents[uuid] = {
         uuid,
         companyUuid,
         username,
@@ -1340,10 +1356,10 @@ router.post('/agent/register', (req, res) => __awaiter(void 0, void 0, void 0, f
         status: 'offline',
         registrationStatus: 'pending', // Set status to pending for Super Admin approval
         createdAt: new Date().toISOString()
-    });
+    };
+    (0, persistentStorage_1.saveAgents)();
     // Store agent credentials for later use (when approved)
-    global.tempStorage.pendingAgentCredentials = global.tempStorage.pendingAgentCredentials || [];
-    global.tempStorage.pendingAgentCredentials.push({
+    pendingAgentCredentials.push({
         uuid,
         username,
         password, // This should be hashed in production

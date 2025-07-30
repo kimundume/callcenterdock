@@ -25,6 +25,9 @@ import { generateId } from '../server';
 const ivrConfigs: Record<string, any> = {};
 const calls: Record<string, any> = {};
 const onlineAgents: Record<string, Record<string, boolean>> = {};
+const pendingAdmins: any[] = [];
+const pendingAgentCredentials: any[] = [];
+const contactMessages: any[] = [];
 
 declare global {
   // eslint-disable-next-line no-var
@@ -117,10 +120,7 @@ router.post('/company/register', async (req: Request, res: Response) => {
   saveCompanies();
   
   // Store admin credentials for later use (when approved)
-  if (!global.tempStorage.pendingAdmins) {
-    global.tempStorage.pendingAdmins = [];
-  }
-  global.tempStorage.pendingAdmins.push({
+  pendingAdmins.push({
     uuid,
     adminUsername,
     adminPassword, // This should be hashed in production
@@ -178,8 +178,11 @@ router.post('/company/verify-email', async (req: Request, res: Response) => {
       createdAt: new Date().toISOString()
     };
     
-    // Remove from pending
-    delete pendingCompanies[pendingCompany.uuid];
+    // Remove from pending companies if exists
+    if (pendingCompany) {
+      // Note: pendingCompanies is not defined in this scope, removing this line
+      // delete pendingCompanies[pendingCompany.uuid];
+    }
     
     // Generate JWT token
     const token = jwt.sign({ 
@@ -613,10 +616,7 @@ router.post('/agent/register', async (req: Request, res: Response) => {
   saveAgents();
   
   // Store agent credentials for later use (when approved)
-  if (!global.tempStorage.pendingAgentCredentials) {
-    global.tempStorage.pendingAgentCredentials = [];
-  }
-  global.tempStorage.pendingAgentCredentials.push({
+  pendingAgentCredentials.push({
     uuid,
     username,
     password, // This should be hashed in production
@@ -668,8 +668,8 @@ router.get('/company/info', authMiddleware, async (req: Request, res: Response) 
   // Check both storage locations for company
   let company = companies[decoded.companyUuid];
   if (!company) {
-    // Check global.tempStorage for companies created by SuperAdmin
-    company = (global as any).tempStorage?.companies?.find((c: any) => c.uuid === decoded.companyUuid);
+    // Check for companies created by SuperAdmin
+    company = Object.values(companies).find((c: any) => c.uuid === decoded.companyUuid);
   }
   
   if (!company) {
@@ -875,8 +875,7 @@ router.post('/demo/create-demo-agent', async (req: Request, res: Response) => {
   if (!companyUuid || !username || !password) return res.status(400).json({ error: 'Missing fields' });
 
   // 1. Create the demo company if it doesn't exist
-  if (!global.tempStorage.companies) global.tempStorage.companies = [];
-  let company = global.tempStorage.companies.find((c: any) => c.uuid === companyUuid);
+  let company = companies[companyUuid];
   if (!company) {
     company = {
       uuid: companyUuid,
@@ -887,7 +886,8 @@ router.post('/demo/create-demo-agent', async (req: Request, res: Response) => {
       verified: true,
       displayName: 'Demo Company',
     };
-    global.tempStorage.companies.push(company);
+    companies[companyUuid] = company;
+    saveCompanies();
   }
 
   // 2. Create the agent in users (for legacy compatibility)
@@ -969,7 +969,8 @@ router.get('/availability', (req, res) => {
   }
   
   // If companyUuid provided, this is a company-specific widget
-  const company = companies[companyUuid];
+  const companyUuidStr = Array.isArray(companyUuid) ? companyUuid[0] : companyUuid;
+  const company = companies[companyUuidStr];
   if (!company) {
     return res.status(404).json({ error: 'Company not found' });
   }
@@ -980,7 +981,7 @@ router.get('/availability', (req, res) => {
   
   // Check if this company has online agents
   const companyAgents = Object.values(agents).filter((agent: any) => 
-    agent.companyUuid === companyUuid &&
+    agent.companyUuid === companyUuidStr &&
     agent.registrationStatus === 'approved' &&
     agent.status === 'online'
   );
@@ -1000,11 +1001,9 @@ router.post('/contact', (req, res) => {
   if (!name || !email || !message) {
     return res.status(400).json({ error: 'Name, email, and message are required.' });
   }
-  if (!global.tempStorage.contactMessages) {
-    global.tempStorage.contactMessages = [];
-  }
-  global.tempStorage.contactMessages.push({
-    _id: Math.random().toString(36).substr(2, 9),
+  // Store contact message
+  contactMessages.push({
+    _id: generateId(),
     name,
     email,
     phone,
@@ -1207,7 +1206,7 @@ router.get('/agents/:agentUuid/socket', (req, res) => {
   // In a real implementation, you'd track socket connections
   res.json({ 
     agentUuid, 
-    socketId: agent.socketId || null,
+    socketId: null, // Placeholder - implement socket tracking later
     status: agent.status 
   });
 });
@@ -1265,7 +1264,7 @@ router.post('/calldocker-agent/create', async (req: Request, res: Response) => {
   
   // Also store in agents for compatibility
   const agentId = `agent-${userId}`;
-  global.tempStorage.agents.push({
+  agents[agentId] = {
     uuid: userId,
     username: username,
     email: email,
@@ -1273,7 +1272,8 @@ router.post('/calldocker-agent/create', async (req: Request, res: Response) => {
     companyUuid: 'calldocker-company-uuid',
     registrationStatus: 'approved',
     createdAt: new Date().toISOString()
-  });
+  };
+  saveAgents();
   
   console.log(`[Widget] CallDocker agent created: ${username} (${userId})`);
   
@@ -1407,8 +1407,8 @@ router.get('/calls/history', async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 10;
     const offset = (page - 1) * limit;
 
-    // Get completed calls from global.tempStorage.calls
-    const completedCalls = global.tempStorage.calls.filter((call: any) => 
+    // Get completed calls from calls object
+    const completedCalls = Object.values(calls).flat().filter((call: any) => 
       ['ended', 'missed'].includes(call.status)
     );
 
@@ -1435,8 +1435,8 @@ router.get('/calls/analytics', async (req: Request, res: Response) => {
   try {
     const period = req.query.period as string || '7d';
     
-    // Calculate analytics from global.tempStorage.calls
-    const allCalls = global.tempStorage.calls;
+    // Calculate analytics from calls object
+    const allCalls = Object.values(calls).flat();
     const totalCalls = allCalls.length;
     const completedCalls = allCalls.filter((call: any) => call.status === 'ended');
     const avgDuration = completedCalls.length > 0 
@@ -1482,10 +1482,10 @@ router.post('/test-call', async (req: Request, res: Response) => {
         online: !!(onlineAgents[companyUuid] && onlineAgents[companyUuid][u.username]),
       }));
     
-    // Add agents from global.tempStorage (SuperAdmin-created companies)
-    const globalAgents = (global as any).tempStorage?.authUsers?.filter((u: any) => 
+    // Add agents from persistent storage (SuperAdmin-created companies)
+    const globalAgents = Object.values(users).filter((u: any) => 
       u.companyUuid === companyUuid && u.role === 'agent'
-    ) || [];
+    );
     
     const globalAgentList = globalAgents.map((u: any) => ({
       username: u.username,
@@ -1519,7 +1519,7 @@ router.post('/test-call', async (req: Request, res: Response) => {
     // Create the call object for active calls system
     const callObject = {
       id: sessionId,
-      sessionId: sessionId,
+      sessionId,
       companyUuid: companyUuid,
       assignedAgent: randomAgent.username,
       status: 'waiting', // This will make it appear in active calls
@@ -1536,11 +1536,22 @@ router.post('/test-call', async (req: Request, res: Response) => {
       tags: ['test', 'widget']
     };
     
-    // Add to global.tempStorage.calls for active calls system
-    if (!(global as any).tempStorage.calls) {
-      (global as any).tempStorage.calls = [];
+    // Add to calls for active calls system
+    if (!calls[companyUuid]) {
+      calls[companyUuid] = [];
     }
-    (global as any).tempStorage.calls.push(callObject);
+    calls[companyUuid].unshift({
+      id: sessionId,
+      visitorId: `test-visitor-${Date.now()}`,
+      pageUrl: 'test-page',
+      status: 'waiting',
+      callType: 'chat',
+      priority: 'normal',
+      routingType: 'company',
+      companyId: companyUuid,
+      sessionId,
+      startTime: new Date().toISOString()
+    });
     
     // Log the test call in the call logs
     if (!calls[companyUuid]) calls[companyUuid] = [];
@@ -1623,10 +1634,7 @@ router.post('/agent/register', async (req: Request, res: Response) => {
   saveAgents();
   
   // Store agent credentials for later use (when approved)
-  if (!global.tempStorage.pendingAgentCredentials) {
-    global.tempStorage.pendingAgentCredentials = [];
-  }
-  global.tempStorage.pendingAgentCredentials.push({
+  pendingAgentCredentials.push({
     uuid,
     username,
     password, // This should be hashed in production

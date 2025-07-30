@@ -1,13 +1,22 @@
 import express from 'express';
-import bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
+import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { generateId } from '../server';
 import { 
   companies, 
   agents, 
+  users,
   saveCompanies, 
-  saveAgents 
+  saveAgents, 
+  saveUsers,
+  findUserByCompanyAndRole,
+  findCompanyByEmail
 } from '../data/persistentStorage';
+
+// In-memory storage for temporary data
+const pendingAdmins: any[] = [];
+const pendingAgentCredentials: any[] = [];
+const contactMessages: any[] = [];
 
 const router = express.Router();
 
@@ -660,8 +669,8 @@ router.post('/api-keys', authenticateSuperAdmin, (req, res) => {
 
 // GET /api/superadmin/pending-registrations
 router.get('/pending-registrations', (req, res) => {
-  const pendingCompanies = global.tempStorage.companies.filter(c => c.status === 'pending');
-  const pendingAgents = global.tempStorage.agents.filter(a => a.status === 'pending');
+  const pendingCompanies = Object.values(companies).filter((c: any) => c.status === 'pending');
+  const pendingAgents = Object.values(agents).filter((a: any) => a.status === 'pending');
   res.json({ companies: pendingCompanies, agents: pendingAgents });
 });
 
@@ -670,61 +679,71 @@ router.post('/approve', (req, res) => {
   const { type, id } = req.body;
   
   if (type === 'company') {
-    const company = global.tempStorage.companies.find(c => c.uuid === id);
+    const company = companies[id];
     if (company) {
       company.status = 'approved';
       company.verified = true;
+      saveCompanies();
       
       // Create admin user from pending admin credentials
-      const pendingAdmin = global.tempStorage.pendingAdmins?.find(pa => pa.uuid === id);
+      const pendingAdmin = pendingAdmins.find((pa: any) => pa.uuid === id);
       if (pendingAdmin) {
         // In a real application, you'd hash the password here
         const hashedPassword = pendingAdmin.adminPassword; // This should be bcrypt.hash() in production
         
-        // Add to users array (you'll need to create this in tempStorage)
-        global.tempStorage.authUsers = global.tempStorage.authUsers || [];
-        global.tempStorage.authUsers.push({
-          uuid: generateId(),
+        // Add to users array
+        const adminUser = {
+          uuid: uuidv4(),
           username: pendingAdmin.adminUsername,
           password: hashedPassword,
           companyUuid: id,
           role: 'admin',
           email: pendingAdmin.email,
           createdAt: new Date().toISOString()
-        });
+        };
+        users[adminUser.uuid] = adminUser;
+        saveUsers();
         
         // Remove from pending admins
-        global.tempStorage.pendingAdmins = global.tempStorage.pendingAdmins?.filter(pa => pa.uuid !== id) || [];
+        const index = pendingAdmins.findIndex((pa: any) => pa.uuid === id);
+        if (index > -1) {
+          pendingAdmins.splice(index, 1);
+        }
       }
       
       return res.json({ success: true, message: 'Company approved successfully' });
     }
   } else if (type === 'agent') {
-    const agent = global.tempStorage.agents.find(a => a.uuid === id);
+    const agent = agents[id];
     if (agent) {
       agent.registrationStatus = 'approved';
       agent.status = 'offline'; // Set initial status to offline
+      saveAgents();
       
       // Create agent user from pending agent credentials
-      const pendingAgentCred = global.tempStorage.pendingAgentCredentials?.find(pac => pac.uuid === id);
+      const pendingAgentCred = pendingAgentCredentials.find((pac: any) => pac.uuid === id);
       if (pendingAgentCred) {
         // In a real application, you'd hash the password here
         const hashedPassword = pendingAgentCred.password; // This should be bcrypt.hash() in production
         
-        // Add to authUsers array
-        global.tempStorage.authUsers = global.tempStorage.authUsers || [];
-        global.tempStorage.authUsers.push({
-          uuid: generateId(),
+        // Add to users array
+        const agentUser = {
+          uuid: uuidv4(),
           username: pendingAgentCred.username,
           password: hashedPassword,
           companyUuid: pendingAgentCred.companyUuid,
           role: 'agent',
           email: pendingAgentCred.email,
           createdAt: new Date().toISOString()
-        });
+        };
+        users[agentUser.uuid] = agentUser;
+        saveUsers();
         
         // Remove from pending agent credentials
-        global.tempStorage.pendingAgentCredentials = global.tempStorage.pendingAgentCredentials?.filter(pac => pac.uuid !== id) || [];
+        const index = pendingAgentCredentials.findIndex((pac: any) => pac.uuid === id);
+        if (index > -1) {
+          pendingAgentCredentials.splice(index, 1);
+        }
       }
       
       return res.json({ success: true, message: 'Agent approved successfully' });
@@ -738,15 +757,17 @@ router.post('/approve', (req, res) => {
 router.post('/reject', (req, res) => {
   const { type, id } = req.body;
   if (type === 'company') {
-    const company = global.tempStorage.companies.find(c => c.uuid === id);
+    const company = companies[id];
     if (company) {
       company.status = 'rejected';
+      saveCompanies();
       return res.json({ success: true });
     }
   } else if (type === 'agent') {
-    const agent = global.tempStorage.agents.find(a => a.uuid === id);
+    const agent = agents[id];
     if (agent) {
       agent.status = 'rejected';
+      saveAgents();
       return res.json({ success: true });
     }
   }
@@ -757,18 +778,19 @@ router.post('/reject', (req, res) => {
 
 // GET /api/superadmin/contact-messages
 router.get('/contact-messages', (req, res) => {
-  res.json(global.tempStorage.contactMessages || []);
+  res.json({ messages: contactMessages });
 });
 
-// POST /api/superadmin/contact-messages/:id/mark-handled
-router.post('/contact-messages/:id/mark-handled', (req, res) => {
+// POST /api/superadmin/contact-messages/:id/handle
+router.post('/contact-messages/:id/handle', (req, res) => {
   const { id } = req.params;
-  const msg = (global.tempStorage.contactMessages || []).find(m => m._id === id);
+  const msg = contactMessages.find((m: any) => m._id === id);
   if (msg) {
     msg.handled = true;
-    return res.json({ success: true });
+    res.json({ success: true });
+  } else {
+    res.status(404).json({ error: 'Message not found' });
   }
-  res.status(404).json({ error: 'Message not found' });
 });
 
 // ===== CALL MANAGEMENT ENDPOINTS =====
@@ -1035,7 +1057,7 @@ router.put('/agents/:id/assignment', authenticateSuperAdmin, (req, res) => {
     
     if (!assignment) {
       assignment = {
-        id: generateId(),
+        id: uuidv4(),
         agentId: id,
         assignedToPublic: assignedToPublic || false,
         maxCalls: maxCalls || 5,
@@ -1140,7 +1162,7 @@ router.post('/create-company', authenticateSuperAdmin, async (req, res) => {
     }
     
     // Generate UUID
-    const uuid = generateId();
+    const uuid = uuidv4();
     
     // Hash admin password
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
@@ -1163,7 +1185,7 @@ router.post('/create-company', authenticateSuperAdmin, async (req, res) => {
     
     // Create admin user
     const adminUser = {
-      uuid: generateId(),
+      uuid: uuidv4(),
       username: adminUsername,
       password: hashedPassword,
       companyUuid: uuid,

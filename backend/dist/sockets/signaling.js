@@ -1,7 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerSignalingHandlers = registerSignalingHandlers;
-const tempDB_1 = require("../data/tempDB");
+const persistentStorage_1 = require("../data/persistentStorage");
+// In-memory storage for socket connections
+const socketConnections = {}; // agentId -> socketId
 function registerSignalingHandlers(io) {
     io.on('connection', (socket) => {
         // Agent registration
@@ -9,18 +11,14 @@ function registerSignalingHandlers(io) {
             const { uuid, agentId } = data;
             if (!uuid || !agentId)
                 return;
-            if (!tempDB_1.agents[uuid])
-                tempDB_1.agents[uuid] = {};
-            tempDB_1.agents[uuid][agentId] = { socketId: socket.id, online: true, registeredAt: new Date().toISOString() };
-            socket.data = { uuid, agentId };
-            socket.emit('agent-registered', { success: true, uuid, agentId });
-            // PATCH: Also update tempStorage.agents
-            if (global.tempStorage && Array.isArray(global.tempStorage.agents)) {
-                const agent = global.tempStorage.agents.find(a => a.companyUuid === uuid && a.username === agentId);
-                if (agent) {
-                    agent.status = 'online';
-                    agent.registrationStatus = 'approved';
-                }
+            // Find agent in persistent storage
+            const agent = Object.values(persistentStorage_1.agents).find((a) => a.companyUuid === uuid && a.username === agentId);
+            if (agent) {
+                // Store socket connection
+                socketConnections[agentId] = socket.id;
+                socket.data = { uuid, agentId };
+                socket.join(`company-${uuid}`);
+                socket.emit('agent-registered', { success: true });
             }
         });
         // Call request and queueing
@@ -30,41 +28,41 @@ function registerSignalingHandlers(io) {
                 socket.emit('call-routed', { success: false, reason: 'No company specified' });
                 return;
             }
-            if (!tempDB_1.callQueue[uuid])
-                tempDB_1.callQueue[uuid] = [];
+            if (!global.tempStorage.callQueue[uuid])
+                global.tempStorage.callQueue[uuid] = [];
             // Add to queue if not already present
-            if (!tempDB_1.callQueue[uuid].includes(socket.id))
-                tempDB_1.callQueue[uuid].push(socket.id);
+            if (!global.tempStorage.callQueue[uuid].includes(socket.id))
+                global.tempStorage.callQueue[uuid].push(socket.id);
             // If no agents online
-            if (!tempDB_1.agents[uuid] || Object.keys(tempDB_1.agents[uuid]).length === 0) {
+            if (!persistentStorage_1.agents[uuid] || Object.keys(persistentStorage_1.agents[uuid]).length === 0) {
                 socket.emit('call-routed', { success: false, reason: 'No agents online' });
-                tempDB_1.callQueue[uuid] = tempDB_1.callQueue[uuid].filter(id => id !== socket.id);
+                global.tempStorage.callQueue[uuid] = global.tempStorage.callQueue[uuid].filter(id => id !== socket.id);
                 return;
             }
             // Calculate position and estimate
-            const position = tempDB_1.callQueue[uuid].indexOf(socket.id) + 1;
+            const position = global.tempStorage.callQueue[uuid].indexOf(socket.id) + 1;
             const estimate = Math.max(1, position) * 30; // 30s per call as a rough estimate
             socket.emit('queue-update', { position, estimate });
             // If first in queue, try to route to agent
             if (position === 1) {
-                const agentIds = Object.keys(tempDB_1.agents[uuid]);
+                const agentIds = Object.keys(persistentStorage_1.agents[uuid]);
                 if (agentIds.length > 0) {
                     const agentId = agentIds[0];
-                    const agent = tempDB_1.agents[uuid][agentId];
+                    const agent = persistentStorage_1.agents[uuid][agentId];
                     io.to(agent.socketId).emit('incoming-call', { uuid, agentId, callTime: new Date().toISOString(), fromSocketId: socket.id });
                     // Log the call
-                    if (!tempDB_1.calls[uuid])
-                        tempDB_1.calls[uuid] = [];
+                    if (!global.tempStorage.calls[uuid])
+                        global.tempStorage.calls[uuid] = [];
                     const callLog = { from: socket.id, to: agentId, time: new Date().toISOString(), status: 'routed' };
-                    tempDB_1.calls[uuid].push(callLog);
+                    global.tempStorage.calls[uuid].push(callLog);
                     socket.emit('call-routed', { success: true, agentSocketId: agent.socketId });
                 }
             }
         });
         // Periodically broadcast queue positions/estimates
         const queueInterval = setInterval(() => {
-            Object.keys(tempDB_1.callQueue).forEach(uuid => {
-                tempDB_1.callQueue[uuid].forEach((sid, idx) => {
+            Object.keys(global.tempStorage.callQueue).forEach(uuid => {
+                global.tempStorage.callQueue[uuid].forEach((sid, idx) => {
                     const estimate = Math.max(1, idx + 1) * 30;
                     io.to(sid).emit('queue-update', { position: idx + 1, estimate });
                 });
@@ -76,25 +74,31 @@ function registerSignalingHandlers(io) {
             if (!uuid || !agentId || !fromSocketId || !sessionId)
                 return;
             // Remove caller from queue
-            if (tempDB_1.callQueue[uuid])
-                tempDB_1.callQueue[uuid] = tempDB_1.callQueue[uuid].filter(id => id !== fromSocketId);
+            if (global.tempStorage.callQueue[uuid])
+                global.tempStorage.callQueue[uuid] = global.tempStorage.callQueue[uuid].filter(id => id !== fromSocketId);
             // Update call log
-            if (tempDB_1.calls[uuid]) {
-                const call = tempDB_1.calls[uuid].find((c) => c.from === fromSocketId && c.to === agentId && c.status === 'routed');
+            if (global.tempStorage.calls[uuid]) {
+                const call = global.tempStorage.calls[uuid].find((c) => c.from === fromSocketId && c.to === agentId && c.status === 'routed');
                 if (call)
                     call.status = 'accepted';
             }
             // Update session status
-            if (global.tempStorage && Array.isArray(global.tempStorage.sessions)) {
-                const session = global.tempStorage.sessions.find(s => s.sessionId === sessionId);
-                if (session)
-                    session.status = 'active';
-            }
+            socket.on('update-session-status', (data) => {
+                const { sessionId, status } = data;
+                if (!sessionId || !status)
+                    return;
+                // Find session in persistent storage
+                const session = Object.values(persistentStorage_1.sessions).find((s) => s.sessionId === sessionId);
+                if (session) {
+                    session.status = status;
+                    (0, persistentStorage_1.saveSessions)();
+                }
+            });
             // Notify widget/client
             io.to(fromSocketId).emit('call-status', { status: 'accepted', agentId });
             // Update queue positions for others
-            if (tempDB_1.callQueue[uuid]) {
-                tempDB_1.callQueue[uuid].forEach((sid, idx) => {
+            if (global.tempStorage.callQueue[uuid]) {
+                global.tempStorage.callQueue[uuid].forEach((sid, idx) => {
                     const estimate = Math.max(1, idx + 1) * 30;
                     io.to(sid).emit('queue-update', { position: idx + 1, estimate });
                 });
@@ -106,11 +110,11 @@ function registerSignalingHandlers(io) {
             if (!uuid || !agentId || !fromSocketId || !sessionId)
                 return;
             // Remove caller from queue
-            if (tempDB_1.callQueue[uuid])
-                tempDB_1.callQueue[uuid] = tempDB_1.callQueue[uuid].filter(id => id !== fromSocketId);
+            if (global.tempStorage.callQueue[uuid])
+                global.tempStorage.callQueue[uuid] = global.tempStorage.callQueue[uuid].filter(id => id !== fromSocketId);
             // Update call log
-            if (tempDB_1.calls[uuid]) {
-                const call = tempDB_1.calls[uuid].find((c) => c.from === fromSocketId && c.to === agentId && c.status === 'routed');
+            if (global.tempStorage.calls[uuid]) {
+                const call = global.tempStorage.calls[uuid].find((c) => c.from === fromSocketId && c.to === agentId && c.status === 'routed');
                 if (call)
                     call.status = 'rejected';
             }
@@ -123,8 +127,8 @@ function registerSignalingHandlers(io) {
             // Notify widget/client
             io.to(fromSocketId).emit('call-status', { status: 'rejected', agentId });
             // Update queue positions for others
-            if (tempDB_1.callQueue[uuid]) {
-                tempDB_1.callQueue[uuid].forEach((sid, idx) => {
+            if (global.tempStorage.callQueue[uuid]) {
+                global.tempStorage.callQueue[uuid].forEach((sid, idx) => {
                     const estimate = Math.max(1, idx + 1) * 30;
                     io.to(sid).emit('queue-update', { position: idx + 1, estimate });
                 });
@@ -132,12 +136,12 @@ function registerSignalingHandlers(io) {
         });
         // On disconnect, remove from queue
         socket.on('disconnect', () => {
-            Object.keys(tempDB_1.callQueue).forEach(uuid => {
-                tempDB_1.callQueue[uuid] = tempDB_1.callQueue[uuid].filter(id => id !== socket.id);
+            Object.keys(global.tempStorage.callQueue).forEach(uuid => {
+                global.tempStorage.callQueue[uuid] = global.tempStorage.callQueue[uuid].filter(id => id !== socket.id);
             });
             const { uuid, agentId } = socket.data || {};
-            if (uuid && agentId && tempDB_1.agents[uuid] && tempDB_1.agents[uuid][agentId]) {
-                delete tempDB_1.agents[uuid][agentId];
+            if (uuid && agentId && persistentStorage_1.agents[uuid] && persistentStorage_1.agents[uuid][agentId]) {
+                delete persistentStorage_1.agents[uuid][agentId];
             }
         });
         // WebRTC signaling: offer
@@ -164,18 +168,18 @@ function registerSignalingHandlers(io) {
         // Test call request from admin
         socket.on('test-call-request', (data) => {
             const { uuid } = data;
-            if (!uuid || !tempDB_1.agents[uuid]) {
+            if (!uuid || !persistentStorage_1.agents[uuid]) {
                 socket.emit('test-call-result', { success: false, reason: 'No such company or no agents online' });
                 return;
             }
-            const agentIds = Object.keys(tempDB_1.agents[uuid]);
+            const agentIds = Object.keys(persistentStorage_1.agents[uuid]);
             if (agentIds.length === 0) {
                 socket.emit('test-call-result', { success: false, reason: 'No agents online' });
                 return;
             }
             // Route to first available agent
             const agentId = agentIds[0];
-            const agent = tempDB_1.agents[uuid][agentId];
+            const agent = persistentStorage_1.agents[uuid][agentId];
             io.to(agent.socketId).emit('test-incoming-call', { uuid, agentId, fromSocketId: socket.id, test: true });
             socket.emit('test-call-result', { success: true, agentId });
         });
@@ -184,8 +188,8 @@ function registerSignalingHandlers(io) {
             // data: { sessionId, companyUuid, visitorId, pageUrl }
             if (!data.sessionId || !data.companyUuid || !data.visitorId)
                 return;
-            if (!tempDB_1.chatSessions[data.sessionId]) {
-                tempDB_1.chatSessions[data.sessionId] = {
+            if (!global.tempStorage.chatSessions[data.sessionId]) {
+                global.tempStorage.chatSessions[data.sessionId] = {
                     companyUuid: data.companyUuid,
                     visitorId: data.visitorId,
                     pageUrl: data.pageUrl,
@@ -205,8 +209,8 @@ function registerSignalingHandlers(io) {
                 from: data.from,
                 timestamp: data.timestamp || new Date().toISOString()
             };
-            if (tempDB_1.chatSessions[data.sessionId]) {
-                tempDB_1.chatSessions[data.sessionId].messages.push(msg);
+            if (global.tempStorage.chatSessions[data.sessionId]) {
+                global.tempStorage.chatSessions[data.sessionId].messages.push(msg);
             }
             // Also save to backend storage for persistence
             const chatMessage = {
