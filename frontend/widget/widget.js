@@ -1,6 +1,18 @@
 // Embeddable CallDocker Widget
 (function() {
-  const BACKEND_URL = 'http://localhost:5001'; // Already correct, but ensure no other port is used
+  // Dynamic URL detection for production deployment
+  const getBackendUrl = () => {
+    // Check if we're in development (localhost)
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:5001';
+    }
+    
+    // Production: Use Render backend URL
+    // You can override this by setting window.CALLDOCKER_BACKEND_URL
+    return window.CALLDOCKER_BACKEND_URL || 'https://calldocker-backend.onrender.com';
+  };
+
+  const BACKEND_URL = getBackendUrl();
   const COMPANY_UUID = window.CALLDOCKER_COMPANY_UUID || 'demo-uuid';
 
   let socket = null;
@@ -19,6 +31,14 @@
     var script = document.createElement('script');
     script.src = BACKEND_URL + '/socket.io/socket.io.js';
     script.onload = callback;
+    script.onerror = () => {
+      console.error('[Widget] Failed to load Socket.IO from:', script.src);
+      // Fallback to CDN if backend Socket.IO fails
+      var fallbackScript = document.createElement('script');
+      fallbackScript.src = 'https://cdn.socket.io/4.7.2/socket.io.min.js';
+      fallbackScript.onload = callback;
+      document.head.appendChild(fallbackScript);
+    };
     document.head.appendChild(script);
   }
 
@@ -38,7 +58,7 @@
 
   function startCall() {
     console.log('[Widget] Call button clicked');
-    fetch('/api/widget/route-call', {
+    fetch(BACKEND_URL + '/api/widget/route-call', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -53,12 +73,16 @@
         console.log('[Widget] /route-call response (call):', data);
         // Trigger WebRTC call flow here
         if (data.success) startWebRTC(data.sessionId, data.agent);
+      })
+      .catch(error => {
+        console.error('[Widget] Failed to start call:', error);
+        alert('Unable to connect. Please try again later.');
       });
   }
 
   function startChat() {
     console.log('[Widget] Chat button clicked');
-    fetch('/api/widget/route-call', {
+    fetch(BACKEND_URL + '/api/widget/route-call', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -73,6 +97,10 @@
         console.log('[Widget] /route-call response (chat):', data);
         // Trigger chat flow here
         if (data.success) startChatSession(data.sessionId, data.agent);
+      })
+      .catch(error => {
+        console.error('[Widget] Failed to start chat:', error);
+        alert('Unable to connect. Please try again later.');
       });
   }
 
