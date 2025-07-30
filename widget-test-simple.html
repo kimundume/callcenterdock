@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CallDocker Widget Test - Simple</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>CallDocker Widget Test</h1>
+    
+    <div class="info">
+        <h2>✅ Corrected Configuration:</h2>
+        <ul>
+            <li><strong>Company UUID:</strong> calldocker-company-uuid</li>
+            <li><strong>Widget URL:</strong> https://calldocker.netlify.app/widget.js</li>
+            <li><strong>Backend URL:</strong> https://callcenterdock.onrender.com</li>
+        </ul>
+    </div>
+
+    <div class="info">
+        <h2>🧪 What to expect:</h2>
+        <ul>
+            <li>✅ Two buttons: "Call Us" and "Chat Us" in bottom-right corner</li>
+            <li>✅ Buttons should be styled with your brand colors</li>
+            <li>✅ Clicking should connect to your company's agents</li>
+            <li>✅ Console should show successful loading messages</li>
+        </ul>
+    </div>
+
+    <div id="status" class="status info">Loading widget...</div>
+
+    <p>If you see the widget buttons in the bottom-right corner, the embed code is working correctly!</p>
+
+    <!-- ✅ CORRECTED EMBED CODE -->
+    <script>
+    (function() {
+      // CallDocker Widget Loader - CORRECTED VERSION
+      window.CallDockerWidget = window.CallDockerWidget || {};
+      
+      // ✅ CORRECTED: Widget configuration with proper URLs and UUID
+      var config = {
+        uuid: 'calldocker-company-uuid', // ✅ Correct company UUID
+        uniqueId: 'calldocker-company-uuid-' + Date.now(),
+        text: 'Talk to us',
+        color: '#339fa3',
+        shape: 'round',
+        position: 'bottom-right',
+        animation: 'none',
+        dark: false,
+        // ✅ CORRECTED: Widget URL from Netlify (not Render)
+        widgetUrl: 'https://calldocker.netlify.app/widget.js',
+        // ✅ CORRECTED: Backend URL for API calls
+        backendUrl: 'https://callcenterdock.onrender.com',
+        routing: {
+          type: 'company',
+          fallbackToCallDocker: true,
+          priority: 'company-first',
+          loadBalancing: 'round-robin'
+        },
+        analytics: {
+          enabled: true,
+          trackPageViews: true,
+          trackInteractions: true,
+          companyId: 'calldocker-company-uuid'
+        }
+      };
+      
+      // Create unique widget instance
+      var widgetId = 'calldocker-widget-' + config.uniqueId;
+      
+      // ✅ CRITICAL: Set global configuration for the widget
+      window.CALLDOCKER_COMPANY_UUID = config.uuid;
+      window.CALLDOCKER_BACKEND_URL = config.backendUrl;
+      
+      // ✅ CORRECTED: Load widget script from Netlify
+      var script = document.createElement('script');
+      script.src = config.widgetUrl;
+      script.async = true;
+      script.onload = function() {
+        console.log('[CallDocker] Widget loaded successfully for company:', config.uuid);
+        document.getElementById('status').textContent = '✅ Widget loaded successfully! Check bottom-right corner for buttons.';
+        document.getElementById('status').className = 'status success';
+      };
+      script.onerror = function() {
+        console.error('[CallDocker] Failed to load widget from:', config.widgetUrl);
+        document.getElementById('status').textContent = '❌ Widget loading failed. Check console for errors.';
+        document.getElementById('status').className = 'status error';
+      };
+      document.head.appendChild(script);
+    })();
+    </script>
+</body>
+</html> 

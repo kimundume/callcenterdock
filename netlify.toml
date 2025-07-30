@@ -1,6 +1,6 @@
 [build]
   base = "frontend/dashboard"
-  command = "npm run build"
+  command = "powershell -ExecutionPolicy Bypass -File build-with-widget.ps1"
   publish = "dist"
 
 [build.environment]
