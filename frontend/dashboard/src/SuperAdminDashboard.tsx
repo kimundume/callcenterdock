@@ -708,7 +708,7 @@ const CallManagementTab = () => {
   const fetchActiveCalls = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5001/api/widget/calls/active');
+      const response = await fetch('${API_ENDPOINTS.WIDGET}/calls/active');
       if (response.ok) {
         const data = await response.json();
         setActiveCalls(data.calls || []);
@@ -755,7 +755,7 @@ const CallManagementTab = () => {
   const fetchCallHistory = async (page = 1) => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:5001/api/widget/calls/history?page=${page}&limit=10`);
+      const response = await fetch(`${API_ENDPOINTS.WIDGET}/calls/history?page=${page}&limit=10`);
       if (response.ok) {
         const data = await response.json();
         setCallHistory(data.calls || []);
@@ -811,7 +811,7 @@ const CallManagementTab = () => {
 
   const fetchCallAnalytics = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/widget/calls/analytics?period=7d');
+      const response = await fetch('${API_ENDPOINTS.WIDGET}/calls/analytics?period=7d');
       if (response.ok) {
         const data = await response.json();
         setCallAnalytics(data.analytics || {});
@@ -851,7 +851,7 @@ const CallManagementTab = () => {
 
   const fetchAgents = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/widget/agents/online');
+      const response = await fetch('${API_ENDPOINTS.WIDGET}/agents/online');
       if (response.ok) {
         const data = await response.json();
         setAgents(data.agents || []);
@@ -1696,7 +1696,7 @@ const AgentManagementTab = () => {
       skills: ['enquiry_handling']
     };
     try {
-      const response = await fetch('http://localhost:5001/api/widget/calldocker-agent/create', {
+      const response = await fetch('${API_ENDPOINTS.WIDGET}/calldocker-agent/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(testAgent)
@@ -2453,6 +2453,11 @@ const CompanyCreationModal = ({ visible, onCancel, onSuccess }: { visible: boole
 };
 
 export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardProps) {
+  // Get token from localStorage
+  const token = localStorage.getItem('superAdminToken');
+  // Get token from localStorage
+  const token = localStorage.getItem('superAdminToken');
+
   // State for modals and forms
   const [accountModalVisible, setAccountModalVisible] = useState(false);
   const [contentModalVisible, setContentModalVisible] = useState(false);
