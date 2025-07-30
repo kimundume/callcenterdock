@@ -1,0 +1,63 @@
+# Backend files (not needed for frontend deployment)
+backend/
+node_modules/
+.env
+.env.local
+.env.production
+
+# Docker files
+Dockerfile*
+docker-compose.yml
+.dockerignore
+
+# Documentation
+*.md
+DOCKER_DEPLOYMENT.md
+SECRETS_SETUP_GUIDE.md
+VERCEL_*.md
+WIDGET_DEPLOYMENT_GUIDE.md
+
+# Git
+.git/
+.gitignore
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env 
