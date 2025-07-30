@@ -17,4 +17,14 @@ services:
       - key: MONGODB_URI
         sync: false
       - key: REDIS_URL
-        sync: false 
+        sync: false
+
+  - type: web
+    name: calldocker-frontend
+    env: static
+    plan: free
+    buildCommand: cd frontend/dashboard && npm install && npm run build
+    staticPublishPath: frontend/dashboard/dist
+    envVars:
+      - key: NODE_VERSION
+        value: 18 
