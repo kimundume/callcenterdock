@@ -23,5 +23,7 @@ export default defineConfig({
       },
     },
   },
-  assetsInclude: ['**/*.png', '**/*.jpg', '**/*.jpeg', '**/*.gif', '**/*.svg'],
+  define: {
+    global: 'globalThis',
+  },
 }) 
