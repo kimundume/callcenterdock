@@ -1674,13 +1674,13 @@ registerSignalingHandlers(io);
 app.get('/widget.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.sendFile(path.join(__dirname, '../../frontend/widget/widget.js'));
+  res.sendFile(path.join(__dirname, '../../../frontend/widget/widget.js'));
 });
 
 app.get('/widget-config.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.sendFile(path.join(__dirname, '../../frontend/widget/widget-config.js'));
+  res.sendFile(path.join(__dirname, '../../../frontend/widget/widget-config.js'));
 });
 
 const PORT = process.env.PORT || 5001;

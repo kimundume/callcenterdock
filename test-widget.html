@@ -33,136 +33,124 @@
     
     <div class="test-section">
         <h2>Widget Configuration</h2>
-        <div id="config-status" class="status info">Loading configuration...</div>
+        <p><strong>Company UUID:</strong> qsxp4b5v4</p>
+        <p><strong>Backend URL:</strong> https://callcenterdock.onrender.com</p>
+        <p><strong>Widget Script:</strong> https://callcenterdock.onrender.com/widget.js</p>
     </div>
 
     <div class="test-section">
-        <h2>Backend Connection Test</h2>
-        <div id="backend-status" class="status info">Testing backend connection...</div>
+        <h2>Test Instructions</h2>
+        <ol>
+            <li>Look for the "Call Us" and "Chat Us" buttons in the bottom-right corner</li>
+            <li>Click "Call Us" to test voice calling</li>
+            <li>Click "Chat Us" to test chat functionality</li>
+            <li>Check the browser console for any errors</li>
+        </ol>
     </div>
 
     <div class="test-section">
-        <h2>Widget Loading Test</h2>
-        <div id="widget-status" class="status info">Loading widget...</div>
+        <h2>Status</h2>
+        <div id="status" class="status info">Loading widget...</div>
     </div>
 
     <div class="test-section">
-        <h2>Console Logs</h2>
-        <div id="console-logs" style="background: #000; color: #0f0; padding: 10px; border-radius: 4px; font-family: monospace; height: 200px; overflow-y: auto;"></div>
+        <h2>Console Log</h2>
+        <div id="console-log" style="background: #000; color: #0f0; padding: 10px; border-radius: 4px; font-family: monospace; height: 200px; overflow-y: auto;"></div>
     </div>
 
     <script>
-        // Test configuration
-        const TEST_CONFIG = {
-            companyUuid: 'calldocker-company-uuid',
-            widgetUrl: 'https://calldocker.netlify.app/widget.js',
-            backendUrl: 'https://callcenterdock.onrender.com',
-            testPageUrl: window.location.href
-        };
-
-        // Console logging function
-        function logToConsole(message, type = 'info') {
-            const logsDiv = document.getElementById('console-logs');
-            const timestamp = new Date().toLocaleTimeString();
-            const logEntry = document.createElement('div');
-            logEntry.textContent = `[${timestamp}] ${type.toUpperCase()}: ${message}`;
-            logsDiv.appendChild(logEntry);
-            logsDiv.scrollTop = logsDiv.scrollHeight;
-            console.log(`[Widget Test] ${message}`);
-        }
-
-        // Update status function
-        function updateStatus(elementId, message, type = 'info') {
-            const element = document.getElementById(elementId);
-            element.textContent = message;
-            element.className = `status ${type}`;
-        }
-
-        // Test 1: Configuration
-        function testConfiguration() {
-            logToConsole('Testing widget configuration...');
-            updateStatus('config-status', 'Configuration loaded successfully', 'success');
-            logToConsole(`Company UUID: ${TEST_CONFIG.companyUuid}`);
-            logToConsole(`Widget URL: ${TEST_CONFIG.widgetUrl}`);
-            logToConsole(`Backend URL: ${TEST_CONFIG.backendUrl}`);
-        }
-
-        // Test 2: Backend Connection
-        async function testBackendConnection() {
-            logToConsole('Testing backend connection...');
-            try {
-                const response = await fetch(`${TEST_CONFIG.backendUrl}/api/widget/calldocker-agents`);
-                if (response.ok) {
-                    const data = await response.json();
-                    updateStatus('backend-status', 'Backend connected successfully', 'success');
-                    logToConsole('Backend connection successful');
-                    logToConsole(`Found ${data.agents?.length || 0} agents`);
-                } else {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-            } catch (error) {
-                updateStatus('backend-status', `Backend connection failed: ${error.message}`, 'error');
-                logToConsole(`Backend connection failed: ${error.message}`, 'error');
-            }
-        }
-
-        // Test 3: Widget Loading
-        function testWidgetLoading() {
-            logToConsole('Testing widget loading...');
-            
-            // Set global configuration
-            window.CALLDOCKER_COMPANY_UUID = TEST_CONFIG.companyUuid;
-            window.CALLDOCKER_BACKEND_URL = TEST_CONFIG.backendUrl;
-            
-            // Create script element
-            const script = document.createElement('script');
-            script.src = TEST_CONFIG.widgetUrl;
-            script.async = true;
-            
-            script.onload = function() {
-                updateStatus('widget-status', 'Widget loaded successfully', 'success');
-                logToConsole('Widget script loaded successfully');
-                
-                // Test if widget functions are available
-                setTimeout(() => {
-                    if (typeof window.createWidget === 'function') {
-                        logToConsole('Widget createWidget function is available');
-                    } else {
-                        logToConsole('Widget createWidget function not found', 'error');
-                    }
-                }, 1000);
-            };
-            
-            script.onerror = function() {
-                updateStatus('widget-status', 'Widget loading failed', 'error');
-                logToConsole('Widget script loading failed', 'error');
-            };
-            
-            document.head.appendChild(script);
-        }
-
-        // Run all tests
-        window.addEventListener('load', function() {
-            logToConsole('Starting widget tests...');
-            
-            // Test 1: Configuration
-            testConfiguration();
-            
-            // Test 2: Backend Connection
-            testBackendConnection();
-            
-            // Test 3: Widget Loading
-            testWidgetLoading();
-        });
-
         // Override console.log to capture logs
-        const originalConsoleLog = console.log;
+        const originalLog = console.log;
+        const originalError = console.error;
+        const logDiv = document.getElementById('console-log');
+        
         console.log = function(...args) {
-            originalConsoleLog.apply(console, args);
-            if (args[0] && typeof args[0] === 'string' && args[0].includes('[Widget]')) {
-                logToConsole(args.join(' '), 'info');
+            originalLog.apply(console, args);
+            logDiv.innerHTML += '<div style="color: #0f0;">' + args.join(' ') + '</div>';
+            logDiv.scrollTop = logDiv.scrollHeight;
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            logDiv.innerHTML += '<div style="color: #f00;">ERROR: ' + args.join(' ') + '</div>';
+            logDiv.scrollTop = logDiv.scrollHeight;
+        };
+
+        // Test widget loading
+        window.addEventListener('load', function() {
+            const statusDiv = document.getElementById('status');
+            
+            // Check if widget script loads
+            const script = document.createElement('script');
+            script.src = 'https://callcenterdock.onrender.com/widget.js';
+            script.onload = function() {
+                statusDiv.className = 'status success';
+                statusDiv.textContent = 'Widget script loaded successfully!';
+                console.log('Widget script loaded successfully');
+            };
+            script.onerror = function() {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = 'Failed to load widget script';
+                console.error('Failed to load widget script');
+            };
+            document.head.appendChild(script);
+        });
+    </script>
+
+    <!-- CallDocker Widget -->
+    <script>
+    (function() {
+        // CallDocker Widget Loader - Enhanced for Soft Launch
+        window.CallDockerWidget = window.CallDockerWidget || {};
+        
+        // Widget configuration with unique routing
+        var config = {
+            uuid: 'qsxp4b5v4',
+            uniqueId: 'qsxp4b5v4-1753909180857',
+            text: 'Call%20Us',
+            color: '%23d3abd0',
+            shape: 'round',
+            position: 'bottom-right',
+            animation: 'none',
+            dark: false,
+            image: 'blob%3Ahttps%3A%2F%2Fcalldocker.netlify.app%2F3bea3900-cbce-49b7-b568-2a1348e8196b',
+            // Enhanced routing for soft launch
+            routing: {
+                type: 'company',
+                fallbackToCallDocker: true,
+                priority: 'company-first',
+                loadBalancing: 'round-robin'
+            },
+            // Analytics and tracking
+            analytics: {
+                enabled: true,
+                trackPageViews: true,
+                trackInteractions: true,
+                companyId: 'qsxp4b5v4'
             }
         };
+        
+        // Create unique widget instance
+        var widgetId = 'calldocker-widget-' + config.uniqueId;
+        
+        // Load widget script
+        var script = document.createElement('script');
+        script.src = 'https://callcenterdock.onrender.com/widget.js';
+        script.async = true;
+        script.onload = function() {
+            console.log('Widget script loaded, initializing...');
+            if (window.CallDockerWidget.init) {
+                window.CallDockerWidget.init(config, widgetId);
+                console.log('Widget initialized with config:', config);
+            } else {
+                console.error('Widget init function not found');
+            }
+        };
+        script.onerror = function() {
+            console.error('Failed to load widget script');
+        };
+        document.head.appendChild(script);
+    })();
     </script>
 </body>
 </html> 
