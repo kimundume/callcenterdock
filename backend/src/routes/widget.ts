@@ -1,24 +1,34 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
+import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
 import { 
   companies, 
   agents, 
+  users,
   sessions, 
+  widgetSettings,
   saveCompanies, 
   saveAgents, 
+  saveUsers,
   saveSessions,
+  saveWidgetSettings,
   findUserByCompanyAndRole,
   findCompanyByEmail,
   findPendingCompanyByEmail
 } from '../data/persistentStorage';
 import { EmailService } from '../services/emailService';
-import type { TempStorage } from '../server';
 import { generateId } from '../server';
+
+// In-memory storage for temporary data
+const ivrConfigs: Record<string, any> = {};
+const calls: Record<string, any> = {};
+const onlineAgents: Record<string, Record<string, boolean>> = {};
 
 declare global {
   // eslint-disable-next-line no-var
-  var tempStorage: TempStorage;
+  var tempStorage: any; // Changed to any to avoid circular dependency
 }
 
 declare module 'express-serve-static-core' {
@@ -107,8 +117,9 @@ router.post('/company/register', async (req: Request, res: Response) => {
   saveCompanies();
   
   // Store admin credentials for later use (when approved)
-  // Note: In a real application, you'd want to hash this and store it securely
-  global.tempStorage.pendingAdmins = global.tempStorage.pendingAdmins || [];
+  if (!global.tempStorage.pendingAdmins) {
+    global.tempStorage.pendingAdmins = [];
+  }
   global.tempStorage.pendingAdmins.push({
     uuid,
     adminUsername,
@@ -569,7 +580,7 @@ router.post('/agent/register', async (req: Request, res: Response) => {
   }
   
   // Check if company exists and is approved
-  const company = global.tempStorage.companies.find(c => c.uuid === companyUuid);
+  const company = companies[companyUuid];
   if (!company) {
     return res.status(400).json({ error: 'Company not found' });
   }
@@ -579,7 +590,7 @@ router.post('/agent/register', async (req: Request, res: Response) => {
   }
   
   // Check if agent already exists
-  const existingAgent = global.tempStorage.agents.find((a: any) => 
+  const existingAgent = Object.values(agents).find((a: any) => 
     a.username === username && a.companyUuid === companyUuid
   );
   if (existingAgent) {
@@ -589,8 +600,8 @@ router.post('/agent/register', async (req: Request, res: Response) => {
   // Generate UUID
   const uuid = uuidv4();
   
-  // Store agent with pending status in tempStorage
-  global.tempStorage.agents.push({
+  // Store agent with pending status in persistent storage
+  agents[uuid] = {
     uuid,
     companyUuid,
     username,
@@ -598,10 +609,13 @@ router.post('/agent/register', async (req: Request, res: Response) => {
     status: 'offline',
     registrationStatus: 'pending', // Set status to pending for Super Admin approval
     createdAt: new Date().toISOString()
-  });
+  };
+  saveAgents();
   
   // Store agent credentials for later use (when approved)
-  global.tempStorage.pendingAgentCredentials = global.tempStorage.pendingAgentCredentials || [];
+  if (!global.tempStorage.pendingAgentCredentials) {
+    global.tempStorage.pendingAgentCredentials = [];
+  }
   global.tempStorage.pendingAgentCredentials.push({
     uuid,
     username,
@@ -883,12 +897,11 @@ router.post('/demo/create-demo-agent', async (req: Request, res: Response) => {
     users[key] = { username, password: hashed, companyUuid, role: 'agent' };
   }
 
-  // 3. Add the agent to global.tempStorage.agents as online and approved
-  if (!global.tempStorage.agents) global.tempStorage.agents = [];
-  let agent = global.tempStorage.agents.find((a: any) => a.username === username && a.companyUuid === companyUuid);
-  if (!agent) {
-    agent = {
-      uuid: username + '-' + companyUuid,
+  // 3. Add the agent to agents as online and approved
+  const agentUuid = username + '-' + companyUuid;
+  if (!agents[agentUuid]) {
+    agents[agentUuid] = {
+      uuid: agentUuid,
       username,
       companyUuid,
       email: 'demo-agent@calldocker.com',
@@ -896,17 +909,17 @@ router.post('/demo/create-demo-agent', async (req: Request, res: Response) => {
       registrationStatus: 'approved',
       createdAt: new Date().toISOString(),
     };
-    global.tempStorage.agents.push(agent);
   } else {
-    agent.status = 'online';
-    agent.registrationStatus = 'approved';
+    agents[agentUuid].status = 'online';
+    agents[agentUuid].registrationStatus = 'approved';
   }
+  saveAgents();
 
   res.json({
     success: true,
     company,
-    agent,
-    alreadyExists: !!users[key] && !!agent
+    agent: agents[agentUuid],
+    alreadyExists: !!users[key] && !!agents[agentUuid]
   });
 });
 
@@ -940,7 +953,7 @@ router.get('/availability', (req, res) => {
   // If no companyUuid provided, this is the public landing page widget
   if (!companyUuid) {
     // Check if CallDocker agents are online
-    const callDockerAgents = global.tempStorage.agents.filter(agent => 
+    const callDockerAgents = Object.values(agents).filter((agent: any) => 
       agent.companyUuid === 'calldocker-company-uuid' &&
       agent.registrationStatus === 'approved' && 
       agent.status === 'online'
@@ -956,7 +969,7 @@ router.get('/availability', (req, res) => {
   }
   
   // If companyUuid provided, this is a company-specific widget
-  const company = global.tempStorage.companies.find(c => c.uuid === companyUuid);
+  const company = companies[companyUuid];
   if (!company) {
     return res.status(404).json({ error: 'Company not found' });
   }
@@ -966,7 +979,7 @@ router.get('/availability', (req, res) => {
   }
   
   // Check if this company has online agents
-  const companyAgents = global.tempStorage.agents.filter(agent => 
+  const companyAgents = Object.values(agents).filter((agent: any) => 
     agent.companyUuid === companyUuid &&
     agent.registrationStatus === 'approved' &&
     agent.status === 'online'
@@ -1287,13 +1300,13 @@ router.post('/calldocker-agent/create', async (req: Request, res: Response) => {
 // GET /api/widget/calldocker-agents - Get all CallDocker agents
 router.get('/calldocker-agents', async (req: Request, res: Response) => {
   try {
-    // Get all CallDocker agents from users object
+    // Get CallDocker agents from users object
     const callDockerAgents = Object.values(users).filter((u: any) => 
       u.companyUuid === 'calldocker-company-uuid'
     );
 
-    // Also get from global.tempStorage.agents for compatibility
-    const tempStorageAgents = global.tempStorage.agents.filter((a: any) => 
+    // Also get from agents for compatibility
+    const tempStorageAgents = Object.values(agents).filter((a: any) => 
       a.companyUuid === 'calldocker-company-uuid'
     );
 
@@ -1332,8 +1345,8 @@ router.get('/company-agents', async (req: Request, res: Response) => {
       u.companyUuid !== 'calldocker-company-uuid'
     );
 
-    // Also get from global.tempStorage.agents for compatibility
-    const tempStorageAgents = global.tempStorage.agents.filter((a: any) => 
+    // Also get from agents for compatibility
+    const tempStorageAgents = Object.values(agents).filter((a: any) => 
       a.companyUuid !== 'calldocker-company-uuid'
     );
 
@@ -1369,8 +1382,8 @@ router.get('/company-agents', async (req: Request, res: Response) => {
 router.get('/calls/active', async (req: Request, res: Response) => {
   try {
     const { agentUuid } = req.query;
-    // Get active calls from global.tempStorage.calls
-    let activeCalls = global.tempStorage.calls.filter((call: any) => 
+    // Get active calls from calls object
+    let activeCalls = Object.values(calls).filter((call: any) => 
       ['waiting', 'connecting', 'active'].includes(call.status)
     );
     if (agentUuid) {
@@ -1577,7 +1590,7 @@ router.post('/agent/register', async (req: Request, res: Response) => {
   }
   
   // Check if company exists and is approved
-  const company = global.tempStorage.companies.find(c => c.uuid === companyUuid);
+  const company = companies[companyUuid];
   if (!company) {
     return res.status(400).json({ error: 'Company not found' });
   }
@@ -1587,7 +1600,7 @@ router.post('/agent/register', async (req: Request, res: Response) => {
   }
   
   // Check if agent already exists
-  const existingAgent = global.tempStorage.agents.find((a: any) => 
+  const existingAgent = Object.values(agents).find((a: any) => 
     a.username === username && a.companyUuid === companyUuid
   );
   if (existingAgent) {
@@ -1597,8 +1610,8 @@ router.post('/agent/register', async (req: Request, res: Response) => {
   // Generate UUID
   const uuid = uuidv4();
   
-  // Store agent with pending status in tempStorage
-  global.tempStorage.agents.push({
+  // Store agent with pending status in persistent storage
+  agents[uuid] = {
     uuid,
     companyUuid,
     username,
@@ -1606,10 +1619,13 @@ router.post('/agent/register', async (req: Request, res: Response) => {
     status: 'offline',
     registrationStatus: 'pending', // Set status to pending for Super Admin approval
     createdAt: new Date().toISOString()
-  });
+  };
+  saveAgents();
   
   // Store agent credentials for later use (when approved)
-  global.tempStorage.pendingAgentCredentials = global.tempStorage.pendingAgentCredentials || [];
+  if (!global.tempStorage.pendingAgentCredentials) {
+    global.tempStorage.pendingAgentCredentials = [];
+  }
   global.tempStorage.pendingAgentCredentials.push({
     uuid,
     username,

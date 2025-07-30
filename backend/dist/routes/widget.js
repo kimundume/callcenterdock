@@ -12,15 +12,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
+const express_1 = __importDefault(require("express"));
+const bcrypt_1 = __importDefault(require("bcrypt"));
 const uuid_1 = require("uuid");
-const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const bcryptjs_1 = __importDefault(require("bcryptjs"));
-const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
-const tempDB_1 = require("../data/tempDB");
+const persistentStorage_1 = require("../data/persistentStorage");
 const emailService_1 = require("../services/emailService");
 const server_1 = require("../server");
-const router = (0, express_1.Router)();
+const router = express_1.default.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme-in-prod';
 // Password strength regex (min 8 chars, 1 upper, 1 lower, 1 number)
 function isStrongPassword(pw) {
@@ -35,7 +33,7 @@ function validateString(str) {
     return typeof str === 'string' && str.trim().length > 0;
 }
 // Rate limiting
-const authLimiter = (0, express_rate_limit_1.default)({
+const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 1000, // limit each IP to 1000 requests per windowMs (increased for development)
     message: 'Too many authentication attempts, please try again later.'
@@ -47,7 +45,7 @@ const authMiddleware = (req, res, next) => {
         return res.status(401).json({ error: 'No token provided' });
     const token = authHeader.split(' ')[1];
     try {
-        const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
+        const decoded = jwt.verify(token, JWT_SECRET);
         req.user = decoded;
         next();
     }
@@ -71,23 +69,23 @@ router.post('/company/register', (req, res) => __awaiter(void 0, void 0, void 0,
         return res.status(400).json({ error: 'Password must be at least 8 characters, include upper/lowercase and a number.' });
     }
     // Check if company already exists (by email)
-    const existingCompany = global.tempStorage.companies.find(c => c.email === email);
+    const existingCompany = (0, persistentStorage_1.findCompanyByEmail)(email);
     if (existingCompany) {
         return res.status(400).json({ error: 'A company with this email already exists' });
     }
     // Generate UUID
     const uuid = (0, uuid_1.v4)();
-    // Store company with pending status in tempStorage
-    global.tempStorage.companies.push({
+    // Store company with pending status in persistent storage
+    persistentStorage_1.companies[uuid] = {
         uuid,
         name: companyName,
         displayName: displayName || companyName,
         email,
         verified: false,
-        suspended: false,
-        createdAt: new Date().toISOString(),
-        status: 'pending' // Set status to pending for Super Admin approval
-    });
+        status: 'pending',
+        createdAt: new Date().toISOString()
+    };
+    (0, persistentStorage_1.saveCompanies)();
     // Store admin credentials for later use (when approved)
     // Note: In a real application, you'd want to hash this and store it securely
     global.tempStorage.pendingAdmins = global.tempStorage.pendingAdmins || [];
@@ -116,13 +114,13 @@ router.post('/company/verify-email', (req, res) => __awaiter(void 0, void 0, voi
         return res.status(400).json({ error: 'Invalid or expired verification token' });
     }
     // Find pending company
-    const pendingCompany = (0, tempDB_1.findPendingCompanyByEmail)(email);
+    const pendingCompany = (0, persistentStorage_1.findPendingCompanyByEmail)(email);
     if (!pendingCompany) {
         return res.status(404).json({ error: 'No pending registration found for this email' });
     }
     try {
         // Create the actual company
-        tempDB_1.companies[pendingCompany.uuid] = {
+        persistentStorage_1.companies[pendingCompany.uuid] = {
             uuid: pendingCompany.uuid,
             name: pendingCompany.companyName,
             companyName: pendingCompany.companyName,
@@ -132,8 +130,8 @@ router.post('/company/verify-email', (req, res) => __awaiter(void 0, void 0, voi
             createdAt: new Date().toISOString()
         };
         // Create admin user
-        const hashedPassword = yield bcryptjs_1.default.hash(pendingCompany.adminPassword, 10);
-        tempDB_1.users[pendingCompany.adminUsername + '@' + pendingCompany.uuid] = {
+        const hashedPassword = yield bcrypt_1.default.hash(pendingCompany.adminPassword, 10);
+        users[pendingCompany.adminUsername + '@' + pendingCompany.uuid] = {
             username: pendingCompany.adminUsername,
             password: hashedPassword,
             companyUuid: pendingCompany.uuid,
@@ -142,9 +140,9 @@ router.post('/company/verify-email', (req, res) => __awaiter(void 0, void 0, voi
             createdAt: new Date().toISOString()
         };
         // Remove from pending
-        delete tempDB_1.pendingCompanies[pendingCompany.uuid];
+        delete pendingCompanies[pendingCompany.uuid];
         // Generate JWT token
-        const token = jsonwebtoken_1.default.sign({
+        const token = jwt.sign({
             username: pendingCompany.adminUsername,
             companyUuid: pendingCompany.uuid,
             role: 'admin'
@@ -171,7 +169,7 @@ router.post('/auth/login', (req, res) => __awaiter(void 0, void 0, void 0, funct
     // If email is provided, find company by email
     if (email && !companyUuid) {
         // Check both storage locations for companies
-        let company = (0, tempDB_1.findCompanyByEmail)(email);
+        let company = (0, persistentStorage_1.findCompanyByEmail)(email);
         if (!company) {
             // Check global.tempStorage for companies created by SuperAdmin
             company = (_b = (_a = global.tempStorage) === null || _a === void 0 ? void 0 : _a.companies) === null || _b === void 0 ? void 0 : _b.find((c) => c.email === email);
@@ -186,7 +184,7 @@ router.post('/auth/login', (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
     // Try to find user by username first - check both storage locations
     if (username) {
-        user = (0, tempDB_1.findUserByCompanyAndRole)(uuid, username, role);
+        user = (0, persistentStorage_1.findUserByCompanyAndRole)(uuid, username, role);
         if (!user) {
             // Check global.tempStorage for users created by SuperAdmin
             user = (_d = (_c = global.tempStorage) === null || _c === void 0 ? void 0 : _c.authUsers) === null || _d === void 0 ? void 0 : _d.find((u) => u.companyUuid === uuid && u.username === username && u.role === role);
@@ -194,13 +192,13 @@ router.post('/auth/login', (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
     // If no user found and email provided, try to find admin by email
     if (!user && email && role === 'admin') {
-        let company = (0, tempDB_1.findCompanyByEmail)(email);
+        let company = (0, persistentStorage_1.findCompanyByEmail)(email);
         if (!company) {
             company = (_f = (_e = global.tempStorage) === null || _e === void 0 ? void 0 : _e.companies) === null || _f === void 0 ? void 0 : _f.find((c) => c.email === email);
         }
         if (company) {
             // Check both storage locations for admin user
-            user = Object.values(tempDB_1.users).find((u) => u.companyUuid === company.uuid &&
+            user = Object.values(users).find((u) => u.companyUuid === company.uuid &&
                 u.role === 'admin' &&
                 u.email === email);
             if (!user) {
@@ -210,16 +208,16 @@ router.post('/auth/login', (req, res) => __awaiter(void 0, void 0, void 0, funct
             }
         }
     }
-    if (!user || !(yield bcryptjs_1.default.compare(password, user.password))) {
+    if (!user || !(yield bcrypt_1.default.compare(password, user.password))) {
         return res.status(401).json({ error: 'Invalid credentials' });
     }
-    const token = jsonwebtoken_1.default.sign({
+    const token = jwt.sign({
         username: user.username,
         companyUuid: uuid,
         role
     }, JWT_SECRET, { expiresIn: '1h' });
     // Get company info for response - check both storage locations
-    let company = tempDB_1.companies[uuid];
+    let company = persistentStorage_1.companies[uuid];
     if (!company) {
         company = (_k = (_j = global.tempStorage) === null || _j === void 0 ? void 0 : _j.companies) === null || _k === void 0 ? void 0 : _k.find((c) => c.uuid === uuid);
     }
@@ -242,7 +240,7 @@ router.post('/auth/forgot-password', authLimiter, (req, res) => __awaiter(void 0
     let user = null;
     // Find company by email if UUID not provided
     if (!uuid) {
-        const company = (0, tempDB_1.findCompanyByEmail)(email);
+        const company = (0, persistentStorage_1.findCompanyByEmail)(email);
         if (!company) {
             return res.status(404).json({ error: 'No account found with this email' });
         }
@@ -250,11 +248,11 @@ router.post('/auth/forgot-password', authLimiter, (req, res) => __awaiter(void 0
     }
     // Find user
     if (username) {
-        user = (0, tempDB_1.findUserByCompanyAndRole)(uuid, username, 'admin');
+        user = (0, persistentStorage_1.findUserByCompanyAndRole)(uuid, username, 'admin');
     }
     else {
         // Find admin by email
-        user = Object.values(tempDB_1.users).find((u) => u.companyUuid === uuid &&
+        user = Object.values(users).find((u) => u.companyUuid === uuid &&
             u.role === 'admin' &&
             u.email === email);
     }
@@ -286,11 +284,11 @@ router.post('/auth/reset-password', (req, res) => __awaiter(void 0, void 0, void
         return res.status(400).json({ error: 'Invalid or expired reset token' });
     }
     // Find company and user
-    const company = (0, tempDB_1.findCompanyByEmail)(email);
+    const company = (0, persistentStorage_1.findCompanyByEmail)(email);
     if (!company) {
         return res.status(404).json({ error: 'Company not found' });
     }
-    const user = Object.values(tempDB_1.users).find((u) => u.companyUuid === company.uuid &&
+    const user = Object.values(users).find((u) => u.companyUuid === company.uuid &&
         u.role === 'admin' &&
         u.email === email);
     if (!user) {
@@ -298,7 +296,7 @@ router.post('/auth/reset-password', (req, res) => __awaiter(void 0, void 0, void
     }
     try {
         // Update password
-        const hashedPassword = yield bcryptjs_1.default.hash(newPassword, 10);
+        const hashedPassword = yield bcrypt_1.default.hash(newPassword, 10);
         user.password = hashedPassword;
         res.json({ message: 'Password updated successfully' });
     }
@@ -314,7 +312,7 @@ router.post('/auth/forgot-uuid', authLimiter, (req, res) => __awaiter(void 0, vo
         return res.status(400).json({ error: 'Email is required' });
     }
     // Find company by email
-    const company = (0, tempDB_1.findCompanyByEmail)(email);
+    const company = (0, persistentStorage_1.findCompanyByEmail)(email);
     if (!company) {
         return res.status(404).json({ error: 'No company found with this email' });
     }
@@ -344,7 +342,7 @@ router.post('/agent/add', authMiddleware, (req, res) => __awaiter(void 0, void 0
     }
     // Check if agent already exists - check both storage locations
     const key = agentUsername + '@' + decoded.companyUuid;
-    let existingUser = tempDB_1.users[key];
+    let existingUser = users[key];
     if (!existingUser) {
         // Check global.tempStorage for users created by SuperAdmin
         existingUser = (_b = (_a = global.tempStorage) === null || _a === void 0 ? void 0 : _a.authUsers) === null || _b === void 0 ? void 0 : _b.find((u) => u.username === agentUsername && u.companyUuid === decoded.companyUuid);
@@ -353,9 +351,9 @@ router.post('/agent/add', authMiddleware, (req, res) => __awaiter(void 0, void 0
         return res.status(400).json({ error: 'Agent already exists' });
     }
     try {
-        const hashed = yield bcryptjs_1.default.hash(agentPassword, 10);
+        const hashed = yield bcrypt_1.default.hash(agentPassword, 10);
         // Get company info - check both storage locations
-        let company = tempDB_1.companies[decoded.companyUuid];
+        let company = persistentStorage_1.companies[decoded.companyUuid];
         if (!company) {
             company = (_d = (_c = global.tempStorage) === null || _c === void 0 ? void 0 : _c.companies) === null || _d === void 0 ? void 0 : _d.find((c) => c.uuid === decoded.companyUuid);
         }
@@ -381,7 +379,7 @@ router.post('/agent/add', authMiddleware, (req, res) => __awaiter(void 0, void 0
         }
         else {
             // Company was created through regular registration, store in users object
-            tempDB_1.users[key] = {
+            users[key] = {
                 username: agentUsername,
                 password: hashed,
                 companyUuid: decoded.companyUuid,
@@ -430,7 +428,7 @@ router.post('/agent/reset-password', authMiddleware, (req, res) => __awaiter(voi
     try {
         // Find agent in both storage locations
         const key = agentUsername + '@' + companyUuid;
-        let agent = tempDB_1.users[key];
+        let agent = users[key];
         if (!agent) {
             // Check global.tempStorage for agents created by SuperAdmin
             agent = (_b = (_a = global.tempStorage) === null || _a === void 0 ? void 0 : _a.authUsers) === null || _b === void 0 ? void 0 : _b.find((u) => u.username === agentUsername && u.companyUuid === companyUuid && u.role === 'agent');
@@ -439,7 +437,7 @@ router.post('/agent/reset-password', authMiddleware, (req, res) => __awaiter(voi
             return res.status(404).json({ error: 'Agent not found' });
         }
         // Update password
-        const hashedPassword = yield bcryptjs_1.default.hash(newPassword, 10);
+        const hashedPassword = yield bcrypt_1.default.hash(newPassword, 10);
         agent.password = hashedPassword;
         res.json({ success: true, message: 'Agent password updated successfully' });
     }
@@ -472,7 +470,7 @@ router.post('/agent/register', (req, res) => __awaiter(void 0, void 0, void 0, f
         return res.status(400).json({ error: 'Company is not approved yet' });
     }
     // Check if agent already exists
-    const existingAgent = Object.values(tempDB_1.tempStorage.agents).find((a) => a.username === username && a.companyUuid === companyUuid);
+    const existingAgent = global.tempStorage.agents.find((a) => a.username === username && a.companyUuid === companyUuid);
     if (existingAgent) {
         return res.status(400).json({ error: 'Agent with this username already exists for this company' });
     }
@@ -515,7 +513,7 @@ router.put('/company/update-display-name', authMiddleware, (req, res) => __await
     if (decoded.role !== 'admin') {
         return res.status(403).json({ error: 'Forbidden' });
     }
-    const company = tempDB_1.companies[decoded.companyUuid];
+    const company = persistentStorage_1.companies[decoded.companyUuid];
     if (!company) {
         return res.status(404).json({ error: 'Company not found' });
     }
@@ -532,7 +530,7 @@ router.get('/company/info', authMiddleware, (req, res) => __awaiter(void 0, void
     var _a, _b;
     const decoded = req.user;
     // Check both storage locations for company
-    let company = tempDB_1.companies[decoded.companyUuid];
+    let company = persistentStorage_1.companies[decoded.companyUuid];
     if (!company) {
         // Check global.tempStorage for companies created by SuperAdmin
         company = (_b = (_a = global.tempStorage) === null || _a === void 0 ? void 0 : _a.companies) === null || _b === void 0 ? void 0 : _b.find((c) => c.uuid === decoded.companyUuid);
@@ -556,12 +554,12 @@ router.post('/register', (req, res) => {
         return res.status(400).json({ error: 'companyName and email are required' });
     }
     // Check if company already exists (by email)
-    const existing = Object.values(tempDB_1.companies).find((c) => c.email === email);
+    const existing = Object.values(persistentStorage_1.companies).find((c) => c.email === email);
     if (existing) {
         return res.json({ uuid: existing.uuid });
     }
     const uuid = (0, uuid_1.v4)();
-    tempDB_1.companies[uuid] = {
+    persistentStorage_1.companies[uuid] = {
         uuid,
         name: companyName,
         companyName,
@@ -589,9 +587,9 @@ router.post('/call/log', (req, res) => {
     if (!companyUuid || !agent || !duration) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
-    if (!tempDB_1.calls[companyUuid])
-        tempDB_1.calls[companyUuid] = [];
-    tempDB_1.calls[companyUuid].unshift({
+    if (!calls[companyUuid])
+        calls[companyUuid] = [];
+    calls[companyUuid].unshift({
         time: time || new Date().toISOString(),
         agent,
         notes,
@@ -605,26 +603,26 @@ router.post('/call/log', (req, res) => {
 // GET /api/call/logs/:companyUuid (fetch all call logs for a company)
 router.get('/call/logs/:companyUuid', (req, res) => {
     const { companyUuid } = req.params;
-    res.json(tempDB_1.calls[companyUuid] || []);
+    res.json(calls[companyUuid] || []);
 });
 // GET /api/agents/:companyUuid (list all agents for a company with online status)
 router.get('/agents/:companyUuid', (req, res) => {
     var _a, _b;
     const { companyUuid } = req.params;
     // Get agents from both storage locations
-    let agentList = Object.values(tempDB_1.users)
+    let agentList = Object.values(users)
         .filter((u) => u.companyUuid === companyUuid && u.role === 'agent')
         .map((u) => ({
         username: u.username,
         role: u.role,
-        online: !!(tempDB_1.agents[companyUuid] && tempDB_1.agents[companyUuid][u.username]),
+        online: !!(onlineAgents[companyUuid] && onlineAgents[companyUuid][u.username]),
     }));
     // Add agents from global.tempStorage (SuperAdmin-created companies)
     const globalAgents = ((_b = (_a = global.tempStorage) === null || _a === void 0 ? void 0 : _a.authUsers) === null || _b === void 0 ? void 0 : _b.filter((u) => u.companyUuid === companyUuid && u.role === 'agent')) || [];
     const globalAgentList = globalAgents.map((u) => ({
         username: u.username,
         role: u.role,
-        online: !!(tempDB_1.agents[companyUuid] && tempDB_1.agents[companyUuid][u.username]),
+        online: !!(onlineAgents[companyUuid] && onlineAgents[companyUuid][u.username]),
     }));
     // Combine both lists, avoiding duplicates
     const combinedAgents = [...agentList];
@@ -641,27 +639,27 @@ router.patch('/agent/:companyUuid/:username', (req, res) => {
     const { companyUuid, username } = req.params;
     const { role, active } = req.body;
     const key = username + '@' + companyUuid;
-    if (!tempDB_1.users[key])
+    if (!users[key])
         return res.status(404).json({ error: 'Agent not found' });
     if (role)
-        tempDB_1.users[key].role = role;
+        users[key].role = role;
     if (typeof active === 'boolean')
-        tempDB_1.users[key].active = active;
-    res.json({ success: true, user: tempDB_1.users[key] });
+        users[key].active = active;
+    res.json({ success: true, user: users[key] });
 });
 // DELETE /api/agent/:companyUuid/:username (remove agent)
 router.delete('/agent/:companyUuid/:username', (req, res) => {
     const { companyUuid, username } = req.params;
     const key = username + '@' + companyUuid;
-    if (!tempDB_1.users[key])
+    if (!users[key])
         return res.status(404).json({ error: 'Agent not found' });
-    delete tempDB_1.users[key];
+    delete users[key];
     res.json({ success: true });
 });
 // GET /api/widget/settings/:companyUuid
 router.get('/settings/:companyUuid', (req, res) => {
     const { companyUuid } = req.params;
-    const settings = tempDB_1.widgetSettings[companyUuid] || {
+    const settings = widgetSettings[companyUuid] || {
         text: 'Call Us',
         color: '#00e6ef',
         shape: 'round',
@@ -684,13 +682,13 @@ router.post('/settings/:companyUuid', authMiddleware, (req, res) => {
     if (!text || !color || !shape || !position || !animation) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
-    tempDB_1.widgetSettings[companyUuid] = { text, color, shape, img, position, animation, dark: !!dark };
-    res.json({ success: true, settings: tempDB_1.widgetSettings[companyUuid] });
+    widgetSettings[companyUuid] = { text, color, shape, img, position, animation, dark: !!dark };
+    res.json({ success: true, settings: widgetSettings[companyUuid] });
 });
 // GET /api/widget/ivr/:companyUuid
 router.get('/ivr/:companyUuid', (req, res) => {
     const { companyUuid } = req.params;
-    const config = tempDB_1.ivrConfigs[companyUuid] || {
+    const config = ivrConfigs[companyUuid] || {
         steps: [
             {
                 prompt: 'Welcome to CallDocker! Press 1 for Sales, 2 for Support.',
@@ -717,8 +715,8 @@ router.post('/ivr/:companyUuid', authMiddleware, (req, res) => {
     if (!Array.isArray(steps)) {
         return res.status(400).json({ error: 'Invalid IVR config' });
     }
-    tempDB_1.ivrConfigs[companyUuid] = { steps };
-    res.json({ success: true, config: tempDB_1.ivrConfigs[companyUuid] });
+    ivrConfigs[companyUuid] = { steps };
+    res.json({ success: true, config: ivrConfigs[companyUuid] });
 });
 // DEV ONLY: Create demo agent for demo company (no auth)
 router.post('/demo/create-demo-agent', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -743,9 +741,9 @@ router.post('/demo/create-demo-agent', (req, res) => __awaiter(void 0, void 0, v
     }
     // 2. Create the agent in users (for legacy compatibility)
     const key = username + '@' + companyUuid;
-    if (!tempDB_1.users[key]) {
-        const hashed = yield bcryptjs_1.default.hash(password, 10);
-        tempDB_1.users[key] = { username, password: hashed, companyUuid, role: 'agent' };
+    if (!users[key]) {
+        const hashed = yield bcrypt_1.default.hash(password, 10);
+        users[key] = { username, password: hashed, companyUuid, role: 'agent' };
     }
     // 3. Add the agent to global.tempStorage.agents as online and approved
     if (!global.tempStorage.agents)
@@ -771,7 +769,7 @@ router.post('/demo/create-demo-agent', (req, res) => __awaiter(void 0, void 0, v
         success: true,
         company,
         agent,
-        alreadyExists: !!tempDB_1.users[key] && !!agent
+        alreadyExists: !!users[key] && !!agent
     });
 }));
 // DEV ONLY: Save widget settings without auth
@@ -781,8 +779,8 @@ router.post('/demo/settings/:companyUuid', (req, res) => {
     if (!text || !color || !shape || !position || !animation) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
-    tempDB_1.widgetSettings[companyUuid] = { text, color, shape, img, position, animation, dark: !!dark };
-    res.json({ success: true, settings: tempDB_1.widgetSettings[companyUuid] });
+    widgetSettings[companyUuid] = { text, color, shape, img, position, animation, dark: !!dark };
+    res.json({ success: true, settings: widgetSettings[companyUuid] });
 });
 // DEV ONLY: Save IVR config without auth
 router.post('/demo/ivr/:companyUuid', (req, res) => {
@@ -791,8 +789,8 @@ router.post('/demo/ivr/:companyUuid', (req, res) => {
     if (!Array.isArray(steps)) {
         return res.status(400).json({ error: 'Invalid IVR config' });
     }
-    tempDB_1.ivrConfigs[companyUuid] = { steps };
-    res.json({ success: true, config: tempDB_1.ivrConfigs[companyUuid] });
+    ivrConfigs[companyUuid] = { steps };
+    res.json({ success: true, config: ivrConfigs[companyUuid] });
 });
 // --- Widget Availability & Contact Form Endpoints ---
 // GET /api/widget/availability
@@ -870,18 +868,21 @@ router.post('/route-call', (req, res) => {
             pageUrl,
             queuePosition
         };
-        tempDB_1.tempStorage.sessions.push(session);
+        persistentStorage_1.sessions.push(session);
+        (0, persistentStorage_1.saveSessions)(); // Save to file
         console.log('[route-call] Session created:', session);
         return session;
     }
     // Find company
-    const company = tempDB_1.tempStorage.companies[companyUuid];
+    const company = persistentStorage_1.companies[companyUuid];
     if (!company) {
         console.log('[route-call] Company not found:', companyUuid);
         return res.status(404).json({ success: false, error: 'Company not found' });
     }
     // Find available agents
-    const availableAgents = Object.values(tempDB_1.tempStorage.agents).filter((a) => a.companyUuid === companyUuid && a.status === 'online' && a.registrationStatus === 'approved');
+    const availableAgents = Object.values(persistentStorage_1.agents).filter((a) => a.companyUuid === companyUuid &&
+        a.status === 'online' &&
+        a.registrationStatus === 'approved');
     console.log('[route-call] Available agents:', availableAgents.map((a) => a.username));
     if (availableAgents.length === 0) {
         return res.status(200).json({ success: false, error: 'No agents online' });
@@ -890,8 +891,7 @@ router.post('/route-call', (req, res) => {
     console.log('[route-call] Assigned agent:', assignedAgent.username);
     // Find agent socketId (if available)
     let agentSocketId = undefined;
-    // Note: onlineAgents is actually the agents object from tempDB, not a nested structure
-    // We'll need to get socketId from a different source or implement it properly
+    // Note: We'll need to implement socketId tracking properly
     console.log('[route-call] Agent socketId lookup:', { companyUuid, username: assignedAgent.username, agentSocketId: 'Not implemented yet' });
     // Create session
     const session = createSession({
@@ -928,7 +928,7 @@ router.post('/agent/status', (req, res) => {
     if (!agentUuid || !status || !['online', 'offline'].includes(status)) {
         return res.status(400).json({ error: 'Invalid agent UUID or status' });
     }
-    const agent = global.tempStorage.agents.find(a => a.uuid === agentUuid);
+    const agent = persistentStorage_1.agents[agentUuid];
     if (!agent) {
         return res.status(404).json({ error: 'Agent not found' });
     }
@@ -937,22 +937,13 @@ router.post('/agent/status', (req, res) => {
     }
     agent.status = status;
     agent.updatedAt = new Date().toISOString();
-    console.log(`[Widget] Agent ${agent.username} (${agentUuid}) status changed to ${status}`);
-    res.json({
-        success: true,
-        message: `Agent status updated to ${status}`,
-        agent: {
-            uuid: agent.uuid,
-            username: agent.username,
-            status: agent.status,
-            companyUuid: agent.companyUuid
-        }
-    });
+    (0, persistentStorage_1.saveAgents)();
+    res.json({ success: true, agent });
 });
 // GET /api/widget/agent/status/:agentUuid
 router.get('/agent/status/:agentUuid', (req, res) => {
     const { agentUuid } = req.params;
-    const agent = global.tempStorage.agents.find(a => a.uuid === agentUuid);
+    const agent = persistentStorage_1.agents[agentUuid];
     if (!agent) {
         return res.status(404).json({ error: 'Agent not found' });
     }
@@ -970,15 +961,15 @@ router.get('/agents/online', (req, res) => {
     let onlineAgents;
     if (companyUuid) {
         // Get online agents for specific company
-        onlineAgents = Object.values(tempDB_1.tempStorage.agents).filter((agent) => agent.companyUuid === companyUuid &&
+        onlineAgents = Object.values(persistentStorage_1.agents).filter((agent) => agent.companyUuid === companyUuid &&
             agent.registrationStatus === 'approved' &&
             agent.status === 'online');
     }
     else {
         // Get all online agents (for public routing)
-        onlineAgents = Object.values(tempDB_1.tempStorage.agents).filter((agent) => agent.registrationStatus === 'approved' &&
+        onlineAgents = Object.values(persistentStorage_1.agents).filter((agent) => agent.registrationStatus === 'approved' &&
             agent.status === 'online' &&
-            Object.values(tempDB_1.tempStorage.companies).find((company) => company.uuid === agent.companyUuid &&
+            Object.values(persistentStorage_1.companies).find((company) => company.uuid === agent.companyUuid &&
                 company.status === 'approved'));
     }
     res.json({
@@ -986,9 +977,25 @@ router.get('/agents/online', (req, res) => {
         agents: onlineAgents.map((agent) => ({
             uuid: agent.uuid,
             username: agent.username,
-            companyUuid: agent.companyUuid,
-            email: agent.email
+            email: agent.email,
+            status: agent.status,
+            companyUuid: agent.companyUuid
         }))
+    });
+});
+// GET /api/widget/agents/:agentUuid/socket
+router.get('/agents/:agentUuid/socket', (req, res) => {
+    const { agentUuid } = req.params;
+    const agent = persistentStorage_1.agents[agentUuid];
+    if (!agent) {
+        return res.status(404).json({ error: 'Agent not found' });
+    }
+    // For now, return a placeholder socketId
+    // In a real implementation, you'd track socket connections
+    res.json({
+        agentUuid,
+        socketId: agent.socketId || null,
+        status: agent.status
     });
 });
 // POST /api/widget/calldocker-agent/create
@@ -1003,13 +1010,13 @@ router.post('/calldocker-agent/create', (req, res) => __awaiter(void 0, void 0, 
         return res.status(400).json({ error: 'Invalid email format' });
     }
     // Check if username already exists for CallDocker
-    const existingUser = Object.values(tempDB_1.users).find((u) => u.companyUuid === 'calldocker-company-uuid' && u.username === username);
+    const existingUser = Object.values(users).find((u) => u.companyUuid === 'calldocker-company-uuid' && u.username === username);
     if (existingUser) {
         return res.status(400).json({ error: 'Username already exists for CallDocker' });
     }
     // Generate password and user ID
     const password = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4).toUpperCase();
-    const hashedPassword = yield bcryptjs_1.default.hash(password, 10);
+    const hashedPassword = yield bcrypt_1.default.hash(password, 10);
     const userId = `cd-${Date.now()}`;
     // Create CallDocker agent user
     const newUser = {
@@ -1031,7 +1038,7 @@ router.post('/calldocker-agent/create', (req, res) => __awaiter(void 0, void 0, 
         }
     };
     // Store in users object
-    tempDB_1.users[userId] = newUser;
+    users[userId] = newUser;
     // Also store in agents for compatibility
     const agentId = `agent-${userId}`;
     global.tempStorage.agents.push({
@@ -1067,7 +1074,7 @@ router.post('/calldocker-agent/create', (req, res) => __awaiter(void 0, void 0, 
 router.get('/calldocker-agents', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         // Get all CallDocker agents from users object
-        const callDockerAgents = Object.values(tempDB_1.users).filter((u) => u.companyUuid === 'calldocker-company-uuid');
+        const callDockerAgents = Object.values(users).filter((u) => u.companyUuid === 'calldocker-company-uuid');
         // Also get from global.tempStorage.agents for compatibility
         const tempStorageAgents = global.tempStorage.agents.filter((a) => a.companyUuid === 'calldocker-company-uuid');
         // Merge and format the data
@@ -1099,7 +1106,7 @@ router.get('/calldocker-agents', (req, res) => __awaiter(void 0, void 0, void 0,
 router.get('/company-agents', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         // Get all non-CallDocker agents from users object
-        const companyAgents = Object.values(tempDB_1.users).filter((u) => u.companyUuid !== 'calldocker-company-uuid');
+        const companyAgents = Object.values(users).filter((u) => u.companyUuid !== 'calldocker-company-uuid');
         // Also get from global.tempStorage.agents for compatibility
         const tempStorageAgents = global.tempStorage.agents.filter((a) => a.companyUuid !== 'calldocker-company-uuid');
         // Merge and format the data
@@ -1211,19 +1218,19 @@ router.post('/test-call', (req, res) => __awaiter(void 0, void 0, void 0, functi
     }
     try {
         // Get agents for the company
-        let agentList = Object.values(tempDB_1.users)
+        let agentList = Object.values(users)
             .filter((u) => u.companyUuid === companyUuid && u.role === 'agent')
             .map((u) => ({
             username: u.username,
             role: u.role,
-            online: !!(tempDB_1.agents[companyUuid] && tempDB_1.agents[companyUuid][u.username]),
+            online: !!(onlineAgents[companyUuid] && onlineAgents[companyUuid][u.username]),
         }));
         // Add agents from global.tempStorage (SuperAdmin-created companies)
         const globalAgents = ((_b = (_a = global.tempStorage) === null || _a === void 0 ? void 0 : _a.authUsers) === null || _b === void 0 ? void 0 : _b.filter((u) => u.companyUuid === companyUuid && u.role === 'agent')) || [];
         const globalAgentList = globalAgents.map((u) => ({
             username: u.username,
             role: u.role,
-            online: !!(tempDB_1.agents[companyUuid] && tempDB_1.agents[companyUuid][u.username]),
+            online: !!(onlineAgents[companyUuid] && onlineAgents[companyUuid][u.username]),
         }));
         // Combine both lists
         const combinedAgents = [...agentList];
@@ -1269,9 +1276,9 @@ router.post('/test-call', (req, res) => __awaiter(void 0, void 0, void 0, functi
         }
         global.tempStorage.calls.push(callObject);
         // Log the test call in the call logs
-        if (!tempDB_1.calls[companyUuid])
-            tempDB_1.calls[companyUuid] = [];
-        tempDB_1.calls[companyUuid].unshift({
+        if (!calls[companyUuid])
+            calls[companyUuid] = [];
+        calls[companyUuid].unshift({
             time: new Date().toISOString(),
             agent: randomAgent.username,
             notes: 'Test call from widget',
@@ -1318,7 +1325,7 @@ router.post('/agent/register', (req, res) => __awaiter(void 0, void 0, void 0, f
         return res.status(400).json({ error: 'Company is not approved yet' });
     }
     // Check if agent already exists
-    const existingAgent = Object.values(tempDB_1.tempStorage.agents).find((a) => a.username === username && a.companyUuid === companyUuid);
+    const existingAgent = global.tempStorage.agents.find((a) => a.username === username && a.companyUuid === companyUuid);
     if (existingAgent) {
         return res.status(400).json({ error: 'Agent with this username already exists for this company' });
     }

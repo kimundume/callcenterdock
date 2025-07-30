@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -16,6 +49,7 @@ const express_1 = __importDefault(require("express"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const server_1 = require("../server");
+const persistentStorage_1 = require("../data/persistentStorage");
 const router = express_1.default.Router();
 // Super Admin authentication middleware
 const authenticateSuperAdmin = (req, res, next) => {
@@ -78,12 +112,8 @@ router.post('/login', (req, res) => __awaiter(void 0, void 0, void 0, function* 
 // Get all accounts (protected)
 router.get('/accounts', authenticateSuperAdmin, (req, res) => {
     try {
-        const tempStorage = global.tempStorage;
-        if (!tempStorage) {
-            return res.status(500).json({ error: 'Storage not available' });
-        }
         // Transform existing companies data to match the expected format
-        const accounts = tempStorage.companies.map((company) => ({
+        const accounts = Object.values(persistentStorage_1.companies).map((company) => ({
             id: company.uuid,
             companyName: company.name,
             email: company.email,
@@ -91,14 +121,14 @@ router.get('/accounts', authenticateSuperAdmin, (req, res) => {
             createdAt: company.createdAt || new Date().toISOString(),
             lastLogin: company.lastLogin || new Date().toISOString(),
             subscription: 'pro', // Default subscription
-            agents: tempStorage.agents.filter((agent) => agent.companyUuid === company.uuid).length,
+            agents: Object.values(persistentStorage_1.agents).filter((agent) => agent.companyUuid === company.uuid).length,
             calls: 0, // This would be calculated from call logs
             revenue: Math.floor(Math.random() * 5000) + 1000 // Mock revenue data
         }));
-        res.json({ accounts });
+        res.json(accounts);
     }
     catch (error) {
-        console.error('Get accounts error:', error);
+        console.error('Error fetching accounts:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -999,7 +1029,7 @@ router.post('/create-company', authenticateSuperAdmin, (req, res) => __awaiter(v
             return res.status(400).json({ error: 'Invalid email format' });
         }
         // Check if company already exists (by email)
-        const existingCompany = global.tempStorage.companies.find(c => c.email === email);
+        const existingCompany = Object.values(persistentStorage_1.companies).find((c) => c.email === email);
         if (existingCompany) {
             return res.status(400).json({ error: 'A company with this email already exists' });
         }
@@ -1018,8 +1048,9 @@ router.post('/create-company', authenticateSuperAdmin, (req, res) => __awaiter(v
             createdAt: new Date().toISOString(),
             status: 'approved' // Directly approved
         };
-        // Add to companies array
-        global.tempStorage.companies.push(newCompany);
+        // Add to companies object
+        persistentStorage_1.companies[uuid] = newCompany;
+        (0, persistentStorage_1.saveCompanies)(); // Save to file
         // Create admin user
         const adminUser = {
             uuid: (0, server_1.generateId)(),
@@ -1030,9 +1061,10 @@ router.post('/create-company', authenticateSuperAdmin, (req, res) => __awaiter(v
             email: adminEmail || email,
             createdAt: new Date().toISOString()
         };
-        // Add to authUsers array
-        global.tempStorage.authUsers = global.tempStorage.authUsers || [];
-        global.tempStorage.authUsers.push(adminUser);
+        // Add to users object
+        const { users, saveUsers } = yield Promise.resolve().then(() => __importStar(require('../data/persistentStorage')));
+        users[adminUser.uuid] = adminUser;
+        saveUsers(); // Save to file
         // Generate JWT token for admin
         const token = jsonwebtoken_1.default.sign({
             username: adminUsername,
@@ -1040,6 +1072,7 @@ router.post('/create-company', authenticateSuperAdmin, (req, res) => __awaiter(v
             role: 'admin'
         }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '24h' });
         console.log(`[SuperAdmin] Company created: ${companyName} (${uuid})`);
+        console.log(`[SuperAdmin] Company saved to persistent storage`);
         res.json({
             success: true,
             message: 'Company created successfully',
