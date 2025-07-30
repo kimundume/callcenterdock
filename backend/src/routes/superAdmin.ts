@@ -2,6 +2,12 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { generateId } from '../server';
+import { 
+  companies, 
+  agents, 
+  saveCompanies, 
+  saveAgents 
+} from '../data/persistentStorage';
 
 const router = express.Router();
 
@@ -80,13 +86,8 @@ router.post('/login', async (req, res) => {
 // Get all accounts (protected)
 router.get('/accounts', authenticateSuperAdmin, (req, res) => {
   try {
-    const tempStorage = (global as any).tempStorage;
-    if (!tempStorage) {
-      return res.status(500).json({ error: 'Storage not available' });
-    }
-
     // Transform existing companies data to match the expected format
-    const accounts = tempStorage.companies.map((company: any) => ({
+    const accounts = Object.values(companies).map((company: any) => ({
       id: company.uuid,
       companyName: company.name,
       email: company.email,
@@ -94,14 +95,14 @@ router.get('/accounts', authenticateSuperAdmin, (req, res) => {
       createdAt: company.createdAt || new Date().toISOString(),
       lastLogin: company.lastLogin || new Date().toISOString(),
       subscription: 'pro', // Default subscription
-      agents: tempStorage.agents.filter((agent: any) => agent.companyUuid === company.uuid).length,
+      agents: Object.values(agents).filter((agent: any) => agent.companyUuid === company.uuid).length,
       calls: 0, // This would be calculated from call logs
       revenue: Math.floor(Math.random() * 5000) + 1000 // Mock revenue data
     }));
 
-    res.json({ accounts });
+    res.json(accounts);
   } catch (error) {
-    console.error('Get accounts error:', error);
+    console.error('Error fetching accounts:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1133,7 +1134,7 @@ router.post('/create-company', authenticateSuperAdmin, async (req, res) => {
     }
     
     // Check if company already exists (by email)
-    const existingCompany = global.tempStorage.companies.find(c => c.email === email);
+    const existingCompany = Object.values(companies).find((c: any) => c.email === email);
     if (existingCompany) {
       return res.status(400).json({ error: 'A company with this email already exists' });
     }
@@ -1156,8 +1157,9 @@ router.post('/create-company', authenticateSuperAdmin, async (req, res) => {
       status: 'approved' as const // Directly approved
     };
     
-    // Add to companies array
-    global.tempStorage.companies.push(newCompany);
+    // Add to companies object
+    companies[uuid] = newCompany;
+    saveCompanies(); // Save to file
     
     // Create admin user
     const adminUser = {
@@ -1170,9 +1172,10 @@ router.post('/create-company', authenticateSuperAdmin, async (req, res) => {
       createdAt: new Date().toISOString()
     };
     
-    // Add to authUsers array
-    global.tempStorage.authUsers = global.tempStorage.authUsers || [];
-    global.tempStorage.authUsers.push(adminUser);
+    // Add to users object
+    const { users, saveUsers } = await import('../data/persistentStorage');
+    users[adminUser.uuid] = adminUser;
+    saveUsers(); // Save to file
     
     // Generate JWT token for admin
     const token = jwt.sign({ 
@@ -1182,6 +1185,7 @@ router.post('/create-company', authenticateSuperAdmin, async (req, res) => {
     }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '24h' });
     
     console.log(`[SuperAdmin] Company created: ${companyName} (${uuid})`);
+    console.log(`[SuperAdmin] Company saved to persistent storage`);
     
     res.json({
       success: true,

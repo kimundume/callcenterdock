@@ -1,10 +1,17 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import express from 'express';
+import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-import cors from 'cors';
-import rateLimit from 'express-rate-limit';
-import { companies, users, findUserByCompanyAndRole, calls, agents as onlineAgents, widgetSettings, ivrConfigs, pendingCompanies, findCompanyByEmail, findPendingCompanyByEmail, agents, tempStorage } from '../data/tempDB';
+import { 
+  companies, 
+  agents, 
+  sessions, 
+  saveCompanies, 
+  saveAgents, 
+  saveSessions,
+  findUserByCompanyAndRole,
+  findCompanyByEmail,
+  findPendingCompanyByEmail
+} from '../data/persistentStorage';
 import { EmailService } from '../services/emailService';
 import type { TempStorage } from '../server';
 import { generateId } from '../server';
@@ -20,7 +27,7 @@ declare module 'express-serve-static-core' {
   }
 }
 
-const router = Router();
+const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme-in-prod';
 
 // Password strength regex (min 8 chars, 1 upper, 1 lower, 1 number)
@@ -1033,31 +1040,35 @@ router.post('/route-call', (req: Request, res: Response) => {
       pageUrl,
       queuePosition
     };
-    global.tempStorage.sessions.push(session);
+    sessions.push(session);
+    saveSessions(); // Save to file
     console.log('[route-call] Session created:', session);
     return session;
   }
 
   // Find company
-  const company = global.tempStorage.companies.find((c: any) => c.uuid === companyUuid);
+  const company = companies[companyUuid];
   if (!company) {
     console.log('[route-call] Company not found:', companyUuid);
     return res.status(404).json({ success: false, error: 'Company not found' });
   }
 
   // Find available agents
-  const availableAgents = global.tempStorage.agents.filter((a: any) => a.companyUuid === companyUuid && a.status === 'online' && a.registrationStatus === 'approved');
+  const availableAgents = Object.values(agents).filter((a: any) => 
+    a.companyUuid === companyUuid && 
+    a.status === 'online' && 
+    a.registrationStatus === 'approved'
+  );
   console.log('[route-call] Available agents:', availableAgents.map((a: any) => a.username));
   if (availableAgents.length === 0) {
     return res.status(200).json({ success: false, error: 'No agents online' });
   }
-  const assignedAgent = availableAgents[0];
+  const assignedAgent = availableAgents[0] as any;
   console.log('[route-call] Assigned agent:', assignedAgent.username);
 
   // Find agent socketId (if available)
   let agentSocketId: string | undefined = undefined;
-  // Note: onlineAgents is actually the agents object from tempDB, not a nested structure
-  // We'll need to get socketId from a different source or implement it properly
+  // Note: We'll need to implement socketId tracking properly
   console.log('[route-call] Agent socketId lookup:', { companyUuid, username: assignedAgent.username, agentSocketId: 'Not implemented yet' });
 
   // Create session

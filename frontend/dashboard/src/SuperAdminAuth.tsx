@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { Form, Input, Button, Card, message, Typography } from 'antd';
 import { UserOutlined, LockOutlined, CrownOutlined } from '@ant-design/icons';
 import logoLight from '/logo-light.png';
+import { API_ENDPOINTS } from './config';
 
 const { Title, Text } = Typography;
-const API_URL = 'http://localhost:5001/api/super-admin';
 
 interface SuperAdminAuthProps {
   onAuth: (token: string) => void;
@@ -19,7 +19,9 @@ export default function SuperAdminAuth({ onAuth }: SuperAdminAuthProps) {
     setLoading(true);
     
     try {
-      const response = await fetch(`${API_URL}/login`, {
+      console.log('Attempting Super Admin login to:', API_ENDPOINTS.SUPER_ADMIN);
+      
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(values)
@@ -41,6 +43,7 @@ export default function SuperAdminAuth({ onAuth }: SuperAdminAuthProps) {
       message.success('Super Admin login successful!');
       
     } catch (error: any) {
+      console.error('Super Admin login error:', error);
       message.error(error.message || 'Login failed');
     } finally {
       setLoading(false);

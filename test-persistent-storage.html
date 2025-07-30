@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Persistent Storage</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        .test-result {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Persistent Storage</h1>
+    
+    <div class="info">
+        <strong>Testing Persistent Storage System:</strong><br>
+        - Companies are now saved to JSON files<br>
+        - Data persists across server restarts<br>
+        - Widget will work with consistent company UUIDs
+    </div>
+
+    <div id="status" class="warning">
+        Ready to test...
+    </div>
+
+    <div class="test-result">
+        <h3>🔧 Create Test Company</h3>
+        <form id="createCompanyForm">
+            <label>Company Name:</label>
+            <input type="text" id="companyName" value="Test Company" required>
+            
+            <label>Admin Username:</label>
+            <input type="text" id="adminUsername" value="testadmin" required>
+            
+            <label>Admin Password:</label>
+            <input type="password" id="adminPassword" value="password123" required>
+            
+            <label>Email:</label>
+            <input type="email" id="email" value="test@company.com" required>
+            
+            <button type="submit">Create Company</button>
+        </form>
+    </div>
+
+    <div class="test-result">
+        <h3>📋 Test Widget with New Company</h3>
+        <button onclick="testWidget()">Test Widget API</button>
+        <div id="widgetTestResult"></div>
+    </div>
+
+    <div class="test-result">
+        <h3>🔄 Test Server Restart Persistence</h3>
+        <p>After creating a company, restart the backend server and test again to verify data persists.</p>
+        <button onclick="checkCompanies()">Check All Companies</button>
+        <div id="companiesResult"></div>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        
+        function updateStatus(message, type) {
+            statusDiv.className = type;
+            statusDiv.innerHTML = message;
+        }
+
+        // Test backend connection
+        fetch('http://localhost:5001/test')
+            .then(response => response.text())
+            .then(data => {
+                if (data === 'Test OK') {
+                    updateStatus('✅ Backend is running', 'success');
+                } else {
+                    updateStatus('❌ Backend responded but with unexpected data', 'error');
+                }
+            })
+            .catch(error => {
+                updateStatus('❌ Backend is not running. Please start it with: npm run dev', 'error');
+            });
+
+        // Create company form handler
+        document.getElementById('createCompanyForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                companyName: document.getElementById('companyName').value,
+                adminUsername: document.getElementById('adminUsername').value,
+                adminPassword: document.getElementById('adminPassword').value,
+                email: document.getElementById('email').value
+            };
+
+            try {
+                // First, get a super admin token
+                const loginResponse = await fetch('http://localhost:5001/api/super-admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: 'superadmin',
+                        password: 'password'
+                    })
+                });
+
+                const loginData = await loginResponse.json();
+                if (!loginData.token) {
+                    throw new Error('Failed to get super admin token');
+                }
+
+                // Create company
+                const createResponse = await fetch('http://localhost:5001/api/super-admin/create-company', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${loginData.token}`
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const createData = await createResponse.json();
+                
+                if (createData.success) {
+                    updateStatus(`✅ Company created successfully! UUID: ${createData.company.uuid}`, 'success');
+                    
+                    // Store the company UUID for widget testing
+                    localStorage.setItem('testCompanyUuid', createData.company.uuid);
+                    
+                    console.log('Company created:', createData);
+                } else {
+                    updateStatus(`❌ Failed to create company: ${createData.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error creating company:', error);
+                updateStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        });
+
+        // Test widget with the created company
+        async function testWidget() {
+            const companyUuid = localStorage.getItem('testCompanyUuid');
+            if (!companyUuid) {
+                document.getElementById('widgetTestResult').innerHTML = '<p class="error">No company UUID found. Create a company first.</p>';
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:5001/api/widget/route-call', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        companyUuid: companyUuid,
+                        visitorId: 'test-visitor-' + Date.now(),
+                        pageUrl: window.location.href,
+                        callType: 'chat'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('widgetTestResult').innerHTML = `
+                        <p class="success">✅ Widget API working! Session: ${data.sessionId}, Agent: ${data.agent}</p>
+                    `;
+                } else {
+                    document.getElementById('widgetTestResult').innerHTML = `
+                        <p class="warning">⚠️ Widget API responded but: ${data.error}</p>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('widgetTestResult').innerHTML = `
+                    <p class="error">❌ Widget API error: ${error.message}</p>
+                `;
+            }
+        }
+
+        // Check all companies
+        async function checkCompanies() {
+            try {
+                const response = await fetch('http://localhost:5001/api/super-admin/accounts', {
+                    headers: { 
+                        'Authorization': `Bearer ${localStorage.getItem('superAdminToken') || ''}`
+                    }
+                });
+
+                if (response.ok) {
+                    const companies = await response.json();
+                    document.getElementById('companiesResult').innerHTML = `
+                        <h4>Found ${companies.length} companies:</h4>
+                        <ul>
+                            ${companies.map(c => `<li>${c.companyName} (${c.id}) - ${c.status}</li>`).join('')}
+                        </ul>
+                    `;
+                } else {
+                    document.getElementById('companiesResult').innerHTML = `
+                        <p class="error">❌ Failed to fetch companies: ${response.status}</p>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('companiesResult').innerHTML = `
+                    <p class="error">❌ Error fetching companies: ${error.message}</p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html> 

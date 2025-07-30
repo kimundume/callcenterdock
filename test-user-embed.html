@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test User Embed Code</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        .test-result {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Testing User's Embed Code</h1>
+    
+    <div class="info">
+        <strong>User's Embed Code Analysis:</strong><br>
+        - Company UUID: jd3m6eovi (❌ This doesn't exist in backend)<br>
+        - Widget URL: https://callcenterdock.onrender.com/widget.js (❌ Wrong URL)<br>
+        - Backend URL: https://callcenterdock.onrender.com (✅ Correct)<br>
+        - Text: "piga tenje" (Swahili for "make a call")
+    </div>
+
+    <div id="status" class="warning">
+        Testing embed code...
+    </div>
+
+    <div class="test-result">
+        <h3>🔍 Issues Found:</h3>
+        <ul>
+            <li>❌ Company UUID 'jd3m6eovi' doesn't exist in backend</li>
+            <li>❌ Widget URL points to backend instead of Netlify</li>
+            <li>❌ Backend will return "Company not found" error</li>
+        </ul>
+    </div>
+
+    <div class="test-result">
+        <h3>✅ Corrected Embed Code:</h3>
+        <pre style="background: #f8f9fa; padding: 15px; border-radius: 4px; overflow-x: auto;">
+&lt;script&gt;
+(function() {
+  // CallDocker Widget Loader - CORRECTED VERSION
+  window.CallDockerWidget = window.CallDockerWidget || {};
+  
+  // ✅ CORRECTED: Widget configuration with existing company UUID
+  var config = {
+    uuid: 'demo-company-uuid', // ✅ Use existing company UUID
+    uniqueId: 'jd3m6eovi-1753890785225',
+    text: 'piga tenje', // ✅ Keep user's Swahili text
+    color: '#9c00f0', // ✅ Keep user's color
+    shape: 'round',
+    position: 'bottom-right',
+    animation: 'none',
+    dark: false,
+    // ✅ CORRECTED: Widget URL from Netlify
+    widgetUrl: 'https://calldocker.netlify.app/widget.js',
+    // ✅ CORRECTED: Backend URL for API calls
+    backendUrl: 'https://callcenterdock.onrender.com'
+  };
+  
+  // Create unique widget instance
+  var widgetId = 'calldocker-widget-' + config.uniqueId;
+  
+  // Load widget script
+  var script = document.createElement('script');
+  script.src = config.widgetUrl; // ✅ Use corrected widget URL
+  script.async = true;
+  script.onload = function() {
+    console.log('[Widget] Script loaded successfully');
+    if (window.CallDockerWidget.init) {
+      window.CallDockerWidget.init(config, widgetId);
+    }
+  };
+  script.onerror = function() {
+    console.error('[Widget] Failed to load widget from:', config.widgetUrl);
+  };
+  document.head.appendChild(script);
+})();
+&lt;/script&gt;</pre>
+    </div>
+
+    <script>
+        // Test widget loading
+        const statusDiv = document.getElementById('status');
+        
+        function updateStatus(message, type) {
+            statusDiv.className = type;
+            statusDiv.innerHTML = message;
+        }
+
+        // Test backend connection with user's company UUID
+        fetch('https://callcenterdock.onrender.com/api/widget/route-call', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                companyUuid: 'jd3m6eovi', // User's company UUID
+                visitorId: 'test-' + Date.now(),
+                pageUrl: window.location.href,
+                callType: 'chat'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Backend test response (user UUID):', data);
+            if (data.success) {
+                updateStatus('✅ Backend connected successfully! User company UUID works.', 'success');
+            } else {
+                updateStatus('❌ Backend connected but company not found: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Backend test failed:', error);
+            updateStatus('❌ Backend connection failed.', 'error');
+        });
+    </script>
+
+    <!-- USER'S ORIGINAL EMBED CODE -->
+    <script>
+    (function() {
+      // CallDocker Widget Loader - Enhanced for Soft Launch
+      window.CallDockerWidget = window.CallDockerWidget || {};
+      
+      // Widget configuration with unique routing
+      var config = {
+        uuid: 'jd3m6eovi',
+        uniqueId: 'jd3m6eovi-1753890785225',
+        text: 'piga%20tenje',
+        color: '%239c00f0',
+        shape: 'round',
+        position: 'bottom-right',
+        animation: 'none',
+        dark: false,
+        image: 'blob%3Ahttps%3A%2F%2Fcalldocker.netlify.app%2Fde485daf-e740-4b89-a701-30a30966321a',
+        // Enhanced routing for soft launch
+        routing: {
+          type: 'company',
+          fallbackToCallDocker: true,
+          priority: 'company-first',
+          loadBalancing: 'round-robin'
+        },
+        // Analytics and tracking
+        analytics: {
+          enabled: true,
+          trackPageViews: true,
+          trackInteractions: true,
+          companyId: 'jd3m6eovi'
+        }
+      };
+      
+      // Create unique widget instance
+      var widgetId = 'calldocker-widget-' + config.uniqueId;
+      
+      // Load widget script
+      var script = document.createElement('script');
+      script.src = 'https://callcenterdock.onrender.com/widget.js';
+      script.async = true;
+      script.onload = function() {
+        console.log('[Widget] User embed code loaded');
+        if (window.CallDockerWidget.init) {
+          window.CallDockerWidget.init(config, widgetId);
+        }
+      };
+      script.onerror = function() {
+        console.error('[Widget] Failed to load widget from user embed code');
+        updateStatus('❌ Widget failed to load from user embed code', 'error');
+      };
+      document.head.appendChild(script);
+    })();
+    </script>
+</body>
+</html> 

@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corrected Embed Code Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        .test-result {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        select, input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .company-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            background: white;
+        }
+        .company-card h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .company-card button {
+            background: #28a745;
+            margin: 5px;
+        }
+        .company-card button:hover {
+            background: #218838;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 Corrected Embed Code Generator</h1>
+    
+    <div class="info">
+        <strong>Persistent Storage Solution:</strong><br>
+        ✅ Companies are now saved to JSON files and persist across server restarts<br>
+        ✅ Widget will work with consistent company UUIDs<br>
+        ✅ No more "Company not found" errors after server restart
+    </div>
+
+    <div id="status" class="warning">
+        Loading companies...
+    </div>
+
+    <div class="test-result">
+        <h3>🏢 Available Companies</h3>
+        <button onclick="loadCompanies()">Refresh Companies</button>
+        <div id="companiesList"></div>
+    </div>
+
+    <div class="test-result">
+        <h3>🎨 Generate Embed Code</h3>
+        <form id="embedForm">
+            <label>Select Company:</label>
+            <select id="companySelect" required>
+                <option value="">Choose a company...</option>
+            </select>
+            
+            <label>Widget Text:</label>
+            <input type="text" id="widgetText" value="Talk to us" placeholder="Widget button text">
+            
+            <label>Widget Color:</label>
+            <input type="color" id="widgetColor" value="#007bff">
+            
+            <label>Widget Position:</label>
+            <select id="widgetPosition">
+                <option value="bottom-right">Bottom Right</option>
+                <option value="bottom-left">Bottom Left</option>
+                <option value="top-right">Top Right</option>
+                <option value="top-left">Top Left</option>
+            </select>
+            
+            <button type="submit">Generate Embed Code</button>
+        </form>
+    </div>
+
+    <div class="test-result">
+        <h3>📋 Generated Embed Code</h3>
+        <div id="generatedCode" class="code-block">Select a company and generate embed code...</div>
+        <button onclick="copyToClipboard()">Copy to Clipboard</button>
+        <button onclick="testEmbedCode()">Test Embed Code</button>
+    </div>
+
+    <div class="test-result">
+        <h3>🧪 Test Results</h3>
+        <div id="testResults"></div>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        
+        function updateStatus(message, type) {
+            statusDiv.className = type;
+            statusDiv.innerHTML = message;
+        }
+
+        // Load companies from backend
+        async function loadCompanies() {
+            try {
+                // First, get super admin token
+                const loginResponse = await fetch('http://localhost:5001/api/super-admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: 'superadmin',
+                        password: 'password'
+                    })
+                });
+
+                const loginData = await loginResponse.json();
+                if (!loginData.token) {
+                    throw new Error('Failed to get super admin token');
+                }
+
+                // Get companies
+                const companiesResponse = await fetch('http://localhost:5001/api/super-admin/accounts', {
+                    headers: { 
+                        'Authorization': `Bearer ${loginData.token}`
+                    }
+                });
+
+                if (companiesResponse.ok) {
+                    const companies = await companiesResponse.json();
+                    
+                    // Update companies list
+                    const companiesListDiv = document.getElementById('companiesList');
+                    const companySelect = document.getElementById('companySelect');
+                    
+                    companiesListDiv.innerHTML = '';
+                    companySelect.innerHTML = '<option value="">Choose a company...</option>';
+                    
+                    companies.forEach(company => {
+                        // Add to companies list
+                        const companyCard = document.createElement('div');
+                        companyCard.className = 'company-card';
+                        companyCard.innerHTML = `
+                            <h4>${company.companyName}</h4>
+                            <p><strong>UUID:</strong> ${company.id}</p>
+                            <p><strong>Email:</strong> ${company.email}</p>
+                            <p><strong>Status:</strong> ${company.status}</p>
+                            <p><strong>Agents:</strong> ${company.agents}</p>
+                            <button onclick="selectCompany('${company.id}', '${company.companyName}')">Use This Company</button>
+                            <button onclick="testCompanyWidget('${company.id}')">Test Widget</button>
+                        `;
+                        companiesListDiv.appendChild(companyCard);
+                        
+                        // Add to select dropdown
+                        const option = document.createElement('option');
+                        option.value = company.id;
+                        option.textContent = `${company.companyName} (${company.id})`;
+                        companySelect.appendChild(option);
+                    });
+                    
+                    updateStatus(`✅ Loaded ${companies.length} companies`, 'success');
+                } else {
+                    throw new Error(`Failed to fetch companies: ${companiesResponse.status}`);
+                }
+            } catch (error) {
+                console.error('Error loading companies:', error);
+                updateStatus(`❌ Error loading companies: ${error.message}`, 'error');
+            }
+        }
+
+        // Select a company
+        function selectCompany(uuid, name) {
+            document.getElementById('companySelect').value = uuid;
+            document.getElementById('widgetText').value = `Talk to ${name}`;
+            generateEmbedCode();
+        }
+
+        // Generate embed code
+        function generateEmbedCode() {
+            const companyUuid = document.getElementById('companySelect').value;
+            const widgetText = document.getElementById('widgetText').value;
+            const widgetColor = document.getElementById('widgetColor').value;
+            const widgetPosition = document.getElementById('widgetPosition').value;
+            
+            if (!companyUuid) {
+                document.getElementById('generatedCode').textContent = 'Please select a company first.';
+                return;
+            }
+
+            const embedCode = `<script>
+(function() {
+  // CallDocker Widget Loader - PERSISTENT STORAGE READY
+  window.CallDockerWidget = window.CallDockerWidget || {};
+  
+  // ✅ CORRECTED: Widget configuration with persistent company UUID
+  var config = {
+    uuid: '${companyUuid}', // ✅ This UUID will persist across server restarts
+    uniqueId: '${companyUuid}-' + Date.now(),
+    text: '${widgetText}',
+    color: '${widgetColor}',
+    shape: 'round',
+    position: '${widgetPosition}',
+    animation: 'none',
+    dark: false,
+    // ✅ CORRECTED: Widget URL from Netlify
+    widgetUrl: 'https://calldocker.netlify.app/widget.js',
+    // ✅ CORRECTED: Backend URL for API calls
+    backendUrl: 'https://callcenterdock.onrender.com'
+  };
+  
+  // Create unique widget instance
+  var widgetId = 'calldocker-widget-' + config.uniqueId;
+  
+  // Load widget script
+  var script = document.createElement('script');
+  script.src = config.widgetUrl;
+  script.async = true;
+  script.onload = function() {
+    console.log('[Widget] Script loaded successfully');
+    if (window.CallDockerWidget.init) {
+      window.CallDockerWidget.init(config, widgetId);
+    }
+  };
+  script.onerror = function() {
+    console.error('[Widget] Failed to load widget from:', config.widgetUrl);
+  };
+  document.head.appendChild(script);
+})();
+</script>`;
+
+            document.getElementById('generatedCode').textContent = embedCode;
+        }
+
+        // Copy to clipboard
+        function copyToClipboard() {
+            const codeBlock = document.getElementById('generatedCode');
+            const text = codeBlock.textContent;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                updateStatus('✅ Embed code copied to clipboard!', 'success');
+            }).catch(err => {
+                updateStatus('❌ Failed to copy to clipboard', 'error');
+            });
+        }
+
+        // Test embed code
+        async function testEmbedCode() {
+            const companyUuid = document.getElementById('companySelect').value;
+            if (!companyUuid) {
+                document.getElementById('testResults').innerHTML = '<p class="error">Please select a company first.</p>';
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:5001/api/widget/route-call', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        companyUuid: companyUuid,
+                        visitorId: 'test-visitor-' + Date.now(),
+                        pageUrl: window.location.href,
+                        callType: 'chat'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('testResults').innerHTML = `
+                        <p class="success">✅ Widget API Test Successful!</p>
+                        <ul>
+                            <li><strong>Session ID:</strong> ${data.sessionId}</li>
+                            <li><strong>Assigned Agent:</strong> ${data.agent}</li>
+                            <li><strong>Company UUID:</strong> ${companyUuid}</li>
+                        </ul>
+                        <p>🎉 This embed code will work correctly!</p>
+                    `;
+                } else {
+                    document.getElementById('testResults').innerHTML = `
+                        <p class="warning">⚠️ Widget API Test: ${data.error}</p>
+                        <p>This might be due to no agents being online for this company.</p>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('testResults').innerHTML = `
+                    <p class="error">❌ Widget API Test Failed: ${error.message}</p>
+                `;
+            }
+        }
+
+        // Test company widget
+        async function testCompanyWidget(companyUuid) {
+            try {
+                const response = await fetch('http://localhost:5001/api/widget/route-call', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        companyUuid: companyUuid,
+                        visitorId: 'test-visitor-' + Date.now(),
+                        pageUrl: window.location.href,
+                        callType: 'chat'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`✅ Widget test successful for company ${companyUuid}!\nSession: ${data.sessionId}\nAgent: ${data.agent}`);
+                } else {
+                    alert(`⚠️ Widget test: ${data.error}\nThis might be due to no agents being online.`);
+                }
+            } catch (error) {
+                alert(`❌ Widget test failed: ${error.message}`);
+            }
+        }
+
+        // Form submit handler
+        document.getElementById('embedForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            generateEmbedCode();
+        });
+
+        // Load companies on page load
+        loadCompanies();
+    </script>
+</body>
+</html> 
