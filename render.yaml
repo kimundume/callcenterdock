@@ -3,17 +3,17 @@ services:
     name: calldocker-backend
     env: node
     plan: free
-    buildCommand: cd backend && npm install && npm run build
-    startCommand: cd backend && npm start
+    buildCommand: npm run build:backend
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
       - key: JWT_SECRET
-        sync: false
+        generateValue: true
       - key: CORS_ORIGIN
-        value: https://your-frontend-domain.vercel.app
+        value: https://callcenterdock-dashboard.vercel.app,https://callcenterdock-widget.vercel.app
       - key: MONGODB_URI
         sync: false
       - key: REDIS_URL
