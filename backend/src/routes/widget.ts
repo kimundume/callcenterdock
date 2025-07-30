@@ -1194,7 +1194,7 @@ router.get('/agents/:agentUuid/socket', (req, res) => {
   // In a real implementation, you'd track socket connections
   res.json({ 
     agentUuid, 
-    socketId: agent.socketId || null || null,
+    socketId: agent.socketId || null,
     status: agent.status 
   });
 });

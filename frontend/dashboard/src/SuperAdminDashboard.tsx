@@ -893,7 +893,7 @@ const CallManagementTab = () => {
   const assignCallToAgent = async (callId: string, agentId: string) => {
     try {
       const token = localStorage.getItem('superAdminToken');
-      const response = await fetch(`http://localhost:5001/api/super-admin/calls/${callId}/assign`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/calls/${callId}/assign`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -918,7 +918,7 @@ const CallManagementTab = () => {
   const updateCallStatus = async (callId: string, status: string, notes?: string) => {
     try {
       const token = localStorage.getItem('superAdminToken');
-      const response = await fetch(`http://localhost:5001/api/super-admin/calls/${callId}/status`, {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/calls/${callId}/status`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1317,8 +1317,7 @@ const AgentManagementTab = () => {
   const fetchCallDockerAgents = async () => {
     try {
       setLoading(true);
-      const backendUrl = getBackendUrl();
-      const response = await fetch(`${backendUrl}/api/widget/calldocker-agents`);
+      const response = await fetch(`${API_ENDPOINTS.WIDGET}/calldocker-agents`);
       if (response.ok) {
         const data = await response.json();
         setCallDockerAgents(data.agents || []);
@@ -1337,8 +1336,7 @@ const AgentManagementTab = () => {
   // Fetch company agents from backend
   const fetchCompanyAgents = async () => {
     try {
-      const backendUrl = getBackendUrl();
-      const response = await fetch(`${backendUrl}/api/widget/company-agents`);
+      const response = await fetch(`${API_ENDPOINTS.WIDGET}/company-agents`);
       if (response.ok) {
         const data = await response.json();
         setAgents(data.agents || []);
@@ -1400,8 +1398,7 @@ const AgentManagementTab = () => {
       console.log('Creating CallDocker agent with data:', formData);
 
       // Call backend API to create CallDocker agent
-      const backendUrl = getBackendUrl();
-      const response = await fetch(`${backendUrl}/api/widget/calldocker-agent/create`, {
+      const response = await fetch(`${API_ENDPOINTS.WIDGET}/calldocker-agent/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2367,7 +2364,7 @@ const CompanyCreationModal = ({ visible, onCancel, onSuccess }: { visible: boole
     setLoading(true);
     try {
       const token = localStorage.getItem('superAdminToken');
-      const response = await fetch('http://localhost:5001/api/super-admin/create-company', {
+      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/create-company`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
