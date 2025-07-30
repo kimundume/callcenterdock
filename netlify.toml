@@ -1,6 +1,6 @@
 [build]
   base = "frontend/dashboard"
-  command = "powershell -ExecutionPolicy Bypass -File build-with-widget.ps1"
+  command = "chmod +x build-with-widget.sh && ./build-with-widget.sh"
   publish = "dist"
 
 [build.environment]
