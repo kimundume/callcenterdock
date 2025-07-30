@@ -86,7 +86,7 @@ router.post('/company/register', async (req: Request, res: Response) => {
   }
   
   // Check if company already exists (by email)
-  const existingCompany = global.tempStorage.companies.find(c => c.email === email);
+  const existingCompany = findCompanyByEmail(email);
   if (existingCompany) {
     return res.status(400).json({ error: 'A company with this email already exists' });
   }
@@ -94,17 +94,17 @@ router.post('/company/register', async (req: Request, res: Response) => {
   // Generate UUID
   const uuid = uuidv4();
   
-  // Store company with pending status in tempStorage
-  global.tempStorage.companies.push({
+  // Store company with pending status in persistent storage
+  companies[uuid] = {
     uuid,
     name: companyName,
     displayName: displayName || companyName,
     email,
     verified: false,
-    suspended: false,
-    createdAt: new Date().toISOString(),
-    status: 'pending' // Set status to pending for Super Admin approval
-  });
+    status: 'pending',
+    createdAt: new Date().toISOString()
+  };
+  saveCompanies();
   
   // Store admin credentials for later use (when approved)
   // Note: In a real application, you'd want to hash this and store it securely
@@ -1130,7 +1130,7 @@ router.post('/agent/status', (req, res) => {
 router.get('/agent/status/:agentUuid', (req, res) => {
   const { agentUuid } = req.params;
   
-  const agent = global.tempStorage.agents.find((a: any) => a.uuid === agentUuid);
+  const agent = agents[agentUuid];
   if (!agent) {
     return res.status(404).json({ error: 'Agent not found' });
   }

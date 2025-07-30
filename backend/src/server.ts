@@ -6,7 +6,17 @@ import widgetRoutes from './routes/widget';
 import superAdminRoutes from './routes/superAdmin';
 import { registerSignalingHandlers } from './sockets/signaling';
 import dotenv from 'dotenv';
-import { chatSessions } from './data/persistentStorage';
+import { 
+  companies, 
+  agents, 
+  users, 
+  sessions, 
+  chatSessions,
+  saveCompanies,
+  saveAgents,
+  saveUsers,
+  saveSessions
+} from './data/persistentStorage';
 import mongoose from 'mongoose';
 import CannedResponse from './models/CannedResponse';
 import ChatSession from './models/ChatSession';
