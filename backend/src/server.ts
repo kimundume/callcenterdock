@@ -29,7 +29,22 @@ const io = new Server(server, { cors: { origin: '*' } });
 // Expose io on app for use in routes
 app.set('io', io);
 
-app.use(cors());
+// CORS configuration
+const corsOptions = {
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'https://calldocker.netlify.app',
+    'https://callcenterdock.onrender.com',
+    'https://*.netlify.app'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 
 app.use('/api/widget', widgetRoutes);

@@ -117,7 +117,8 @@ import {
   AimOutlined,
   TargetOutlined,
   FlagOutlined,
-  MedalOutlined
+  MedalOutlined,
+  TagOutlined
 } from '@ant-design/icons';
 import { API_ENDPOINTS, getBackendUrl } from './config';
 import SuperAdminSidebar from './SuperAdminSidebar';
@@ -2487,6 +2488,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   const [apiKeys, setApiKeys] = useState<any[]>([]);
   const [pendingCompanies, setPendingCompanies] = useState<PendingCompany[]>([]);
   const [pendingAgents, setPendingAgents] = useState<PendingAgent[]>([]);
+  const [pendingRegistrations, setPendingRegistrations] = useState<any[]>([]);
   const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
