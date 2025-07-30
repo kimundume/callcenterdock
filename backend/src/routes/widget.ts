@@ -1174,9 +1174,28 @@ router.get('/agents/online', (req, res) => {
     agents: onlineAgents.map((agent: any) => ({
       uuid: agent.uuid,
       username: agent.username,
-      companyUuid: agent.companyUuid,
-      email: agent.email
+      email: agent.email,
+      status: agent.status,
+      companyUuid: agent.companyUuid
     }))
+  });
+});
+
+// GET /api/widget/agents/:agentUuid/socket
+router.get('/agents/:agentUuid/socket', (req, res) => {
+  const { agentUuid } = req.params;
+  
+  const agent = agents[agentUuid];
+  if (!agent) {
+    return res.status(404).json({ error: 'Agent not found' });
+  }
+  
+  // For now, return a placeholder socketId
+  // In a real implementation, you'd track socket connections
+  res.json({ 
+    agentUuid, 
+    socketId: agent.socketId || null || null,
+    status: agent.status 
   });
 });
 
