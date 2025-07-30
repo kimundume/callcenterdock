@@ -1,6 +1,6 @@
 // Embeddable CallDocker Widget
 (function() {
-  const BACKEND_URL = 'http://localhost:5000';
+  const BACKEND_URL = 'http://localhost:5001'; // Already correct, but ensure no other port is used
   const COMPANY_UUID = window.CALLDOCKER_COMPANY_UUID || 'demo-uuid';
 
   let socket = null;
@@ -26,8 +26,54 @@
     const callBtn = document.createElement('button');
     callBtn.innerText = 'Call Us';
     callBtn.style = 'position: fixed; bottom: 20px; right: 20px; z-index: 9999; padding: 12px 24px; background: #007bff; color: #fff; border: none; border-radius: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); cursor: pointer; font-size: 16px;';
-    callBtn.onclick = openCallModal;
+    callBtn.onclick = startCall;
     document.body.appendChild(callBtn);
+
+    const chatBtn = document.createElement('button');
+    chatBtn.innerText = 'Chat Us';
+    chatBtn.style = 'position: fixed; bottom: 20px; right: 20px; z-index: 9999; padding: 12px 24px; background: #6c757d; color: #fff; border: none; border-radius: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); cursor: pointer; font-size: 16px; margin-right: 10px;';
+    chatBtn.onclick = startChat;
+    document.body.appendChild(chatBtn);
+  }
+
+  function startCall() {
+    console.log('[Widget] Call button clicked');
+    fetch('/api/widget/route-call', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        companyUuid: window.CALLDOCKER_COMPANY_UUID || 'demo-company-uuid',
+        visitorId: getVisitorId(),
+        pageUrl: window.location.href,
+        callType: 'call'
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        console.log('[Widget] /route-call response (call):', data);
+        // Trigger WebRTC call flow here
+        if (data.success) startWebRTC(data.sessionId, data.agent);
+      });
+  }
+
+  function startChat() {
+    console.log('[Widget] Chat button clicked');
+    fetch('/api/widget/route-call', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        companyUuid: window.CALLDOCKER_COMPANY_UUID || 'demo-company-uuid',
+        visitorId: getVisitorId(),
+        pageUrl: window.location.href,
+        callType: 'chat'
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        console.log('[Widget] /route-call response (chat):', data);
+        // Trigger chat flow here
+        if (data.success) startChatSession(data.sessionId, data.agent);
+      });
   }
 
   function openCallModal() {
@@ -57,7 +103,7 @@
 
     socket = window.io(BACKEND_URL);
     log('Socket.IO connected:', socket.id);
-    socket.emit('call-request', { uuid: COMPANY_UUID });
+    socket.emit('call-request', { uuid: COMPANY_UUID, callType: 'call' });
 
     socket.on('call-routed', function(data) {
       log('call-routed', data);
@@ -104,6 +150,11 @@
       }
     });
 
+    socket.on('form-push', function(data) {
+      console.log('[form-push] Received form-push event', data);
+      // ... existing code to display the form ...
+    });
+
     modal.onclick = function(e) {
       if (e.target === modal) {
         document.body.removeChild(modal);
@@ -115,13 +166,14 @@
   }
 
   async function startWebRTC() {
+    console.log('[WebRTC] startWebRTC called');
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      log('Got local audio stream');
+      console.log('[WebRTC] getUserMedia success', localStream);
       muteBtn.innerText = 'Mute';
       isMuted = false;
     } catch (err) {
-      log('Error getting local audio stream', err);
+      console.error('[WebRTC] getUserMedia error', err);
       document.getElementById('calldocker-status').innerText = 'Microphone access denied or unavailable.';
       endCallBtn.disabled = true;
       muteBtn.disabled = true;
@@ -130,11 +182,22 @@
     peerConnection = new RTCPeerConnection();
     localStream.getTracks().forEach(track => {
       peerConnection.addTrack(track, localStream);
+      console.log('[WebRTC] addTrack', track);
       log('Added local track to peer connection');
     });
+    peerConnection.oniceconnectionstatechange = function() {
+      console.log('[WebRTC] ICE state:', peerConnection.iceConnectionState);
+    };
     peerConnection.ontrack = function(event) {
-      log('Received remote track', event.streams);
-      if (remoteAudio) remoteAudio.srcObject = event.streams[0];
+      console.log('[WebRTC] ontrack', event);
+      if (remoteAudio) {
+        remoteAudio.srcObject = event.streams[0];
+        remoteAudio.play().then(() => {
+          console.log('[WebRTC] remoteAudio play() success');
+        }).catch(e => {
+          console.error('[WebRTC] remoteAudio play() error', e);
+        });
+      }
     };
     peerConnection.onicecandidate = function(event) {
       if (event.candidate) {

@@ -14,6 +14,14 @@ function registerSignalingHandlers(io) {
             tempDB_1.agents[uuid][agentId] = { socketId: socket.id, online: true, registeredAt: new Date().toISOString() };
             socket.data = { uuid, agentId };
             socket.emit('agent-registered', { success: true, uuid, agentId });
+            // PATCH: Also update tempStorage.agents
+            if (global.tempStorage && Array.isArray(global.tempStorage.agents)) {
+                const agent = global.tempStorage.agents.find(a => a.companyUuid === uuid && a.username === agentId);
+                if (agent) {
+                    agent.status = 'online';
+                    agent.registrationStatus = 'approved';
+                }
+            }
         });
         // Call request and queueing
         socket.on('call-request', (data) => {
@@ -64,8 +72,8 @@ function registerSignalingHandlers(io) {
         }, 5000);
         // Agent accepts call
         socket.on('accept-call', (data) => {
-            const { uuid, agentId, fromSocketId } = data;
-            if (!uuid || !agentId || !fromSocketId)
+            const { uuid, agentId, fromSocketId, sessionId } = data;
+            if (!uuid || !agentId || !fromSocketId || !sessionId)
                 return;
             // Remove caller from queue
             if (tempDB_1.callQueue[uuid])
@@ -75,6 +83,12 @@ function registerSignalingHandlers(io) {
                 const call = tempDB_1.calls[uuid].find((c) => c.from === fromSocketId && c.to === agentId && c.status === 'routed');
                 if (call)
                     call.status = 'accepted';
+            }
+            // Update session status
+            if (global.tempStorage && Array.isArray(global.tempStorage.sessions)) {
+                const session = global.tempStorage.sessions.find(s => s.sessionId === sessionId);
+                if (session)
+                    session.status = 'active';
             }
             // Notify widget/client
             io.to(fromSocketId).emit('call-status', { status: 'accepted', agentId });
@@ -88,8 +102,8 @@ function registerSignalingHandlers(io) {
         });
         // Agent rejects call
         socket.on('reject-call', (data) => {
-            const { uuid, agentId, fromSocketId } = data;
-            if (!uuid || !agentId || !fromSocketId)
+            const { uuid, agentId, fromSocketId, sessionId } = data;
+            if (!uuid || !agentId || !fromSocketId || !sessionId)
                 return;
             // Remove caller from queue
             if (tempDB_1.callQueue[uuid])
@@ -99,6 +113,12 @@ function registerSignalingHandlers(io) {
                 const call = tempDB_1.calls[uuid].find((c) => c.from === fromSocketId && c.to === agentId && c.status === 'routed');
                 if (call)
                     call.status = 'rejected';
+            }
+            // Update session status
+            if (global.tempStorage && Array.isArray(global.tempStorage.sessions)) {
+                const session = global.tempStorage.sessions.find(s => s.sessionId === sessionId);
+                if (session)
+                    session.status = 'ended';
             }
             // Notify widget/client
             io.to(fromSocketId).emit('call-status', { status: 'rejected', agentId });

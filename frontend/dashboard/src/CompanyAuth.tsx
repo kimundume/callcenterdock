@@ -3,7 +3,7 @@ import { DEMO_COMPANY_UUID, DEMO_ADMIN_USERNAME, DEMO_ADMIN_PASSWORD } from './d
 import logoLight from '/logo-light.png';
 import logoDark from '/logo-dark.png';
 
-const API_URL = 'http://localhost:5000/api/widget';
+const API_URL = 'http://localhost:5001/api/widget';
 
 export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: string) => void }) {
   const [mode, setMode] = useState<'register' | 'login'>('register');
@@ -267,93 +267,95 @@ export default function CompanyAuth({ onAuth }: { onAuth: (token: string, uuid: 
 
   const isDark = document.body.classList.contains('dark');
   return (
-    <div className="auth-container">
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 32 }}>
-        <img src={logoLight} alt="Calldock Logo" style={{ height: 64, width: 'auto', borderRadius: 16, boxShadow: '0 2px 12px #2E73FF22' }} />
-      </div>
-      <h2 style={{ fontWeight: 900, color: '#2E73FF', margin: 0, fontSize: 28 }}>Calldocker</h2>
-      <div style={{ background: '#fff', padding: 32, borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', minWidth: 340 }}>
-        <h2>{mode === 'register' ? 'Company Registration' : 'Admin Login'}</h2>
-        <form onSubmit={mode === 'register' ? handleRegister : handleLogin}>
-          {mode === 'register' && (
-            <>
-              <div style={{ marginBottom: 12 }}>
-                <label>Company Name *<br />
-                  <input value={companyName} onChange={e => setCompanyName(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
-                </label>
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <label>Display Name (optional)<br />
-                  <input 
-                    value={displayName} 
-                    onChange={e => setDisplayName(e.target.value)} 
-                    placeholder="e.g., MindFirm, Acme Corp"
-                    style={{ width: '100%', padding: 8, marginTop: 4 }} 
-                  />
-                  <small style={{ color: '#666', fontSize: 12 }}>This will appear in chats and widgets</small>
-                </label>
-              </div>
+    <div className="auth-container" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(120deg, #2E73FF 0%, #00e6ef 100%)' }}>
+      <div style={{ width: 420, maxWidth: '97vw', background: '#fff', borderRadius: 24, boxShadow: '0 8px 32px #2E73FF22, 0 2px 8px #F6C23E22', border: '2.5px solid #F6C23E', padding: '40px 32px 32px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
+          <img src={logoLight} alt="Calldock Logo" style={{ height: 64, width: 64, borderRadius: '50%', border: '3px solid #F6C23E', background: '#fff', boxShadow: '0 2px 12px #F6C23E22' }} />
+        </div>
+        <h2 style={{ fontWeight: 900, color: '#2E73FF', margin: 0, fontSize: 28, letterSpacing: 1 }}>Calldocker</h2>
+        <div style={{ width: '100%', background: '#fff', borderRadius: 18, boxShadow: '0 2px 12px #2E73FF11', padding: 28, marginTop: 8 }}>
+          <h2>{mode === 'register' ? 'Company Registration' : 'Admin Login'}</h2>
+          <form onSubmit={mode === 'register' ? handleRegister : handleLogin}>
+            {mode === 'register' && (
+              <>
+                <div style={{ marginBottom: 12 }}>
+                  <label>Company Name *<br />
+                    <input value={companyName} onChange={e => setCompanyName(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
+                  </label>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label>Display Name (optional)<br />
+                    <input 
+                      value={displayName} 
+                      onChange={e => setDisplayName(e.target.value)} 
+                      placeholder="e.g., MindFirm, Acme Corp"
+                      style={{ width: '100%', padding: 8, marginTop: 4 }} 
+                    />
+                    <small style={{ color: '#666', fontSize: 12 }}>This will appear in chats and widgets</small>
+                  </label>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label>Email *<br />
+                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
+                  </label>
+                </div>
+              </>
+            )}
+            {mode === 'login' && (
               <div style={{ marginBottom: 12 }}>
                 <label>Email *<br />
                   <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
                 </label>
               </div>
-            </>
-          )}
-          {mode === 'login' && (
+            )}
             <div style={{ marginBottom: 12 }}>
-              <label>Email *<br />
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
+              <label>Admin Username *<br />
+                <input value={adminUsername} onChange={e => setAdminUsername(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
               </label>
             </div>
-          )}
-          <div style={{ marginBottom: 12 }}>
-            <label>Admin Username *<br />
-              <input value={adminUsername} onChange={e => setAdminUsername(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
-            </label>
+            <div style={{ marginBottom: 12 }}>
+              <label>Password *<br />
+                <input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
+              </label>
+            </div>
+            {error && <div style={{ color: 'red', marginBottom: 12 }}>{error}</div>}
+            <button type="submit" style={{ width: '100%', padding: 10, background: '#007bff', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600 }} disabled={loading}>
+              {loading ? 'Please wait...' : (mode === 'register' ? 'Register Company' : 'Login as Admin')}
+            </button>
+          </form>
+          <div style={{ marginTop: 16, textAlign: 'center' }}>
+            <button type="button" onClick={() => {
+              if (mode === 'register') {
+                setCompanyName('Demo Company');
+                setDisplayName('MindFirm');
+                setEmail('demo@company.com');
+                setAdminUsername(DEMO_ADMIN_USERNAME);
+                setAdminPassword(DEMO_ADMIN_PASSWORD);
+              } else {
+                setCompanyUuid(DEMO_COMPANY_UUID);
+                setAdminUsername(DEMO_ADMIN_USERNAME);
+                setAdminPassword(DEMO_ADMIN_PASSWORD);
+              }
+            }} style={{ marginBottom: 12, background: '#ffc107', color: '#333', border: 'none', borderRadius: 6, padding: '6px 18px', fontWeight: 600, cursor: 'pointer' }}>
+              Auto-fill Demo
+            </button>
+            {mode === 'register' ? (
+              <span>Already have an account? <button style={{ color: '#007bff', background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setMode('login')}>Login</button></span>
+            ) : (
+              <span>Need to register? <button style={{ color: '#007bff', background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setMode('register')}>Register</button></span>
+            )}
           </div>
-          <div style={{ marginBottom: 12 }}>
-            <label>Password *<br />
-              <input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 4 }} required />
-            </label>
-          </div>
-          {error && <div style={{ color: 'red', marginBottom: 12 }}>{error}</div>}
-          <button type="submit" style={{ width: '100%', padding: 10, background: '#007bff', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600 }} disabled={loading}>
-            {loading ? 'Please wait...' : (mode === 'register' ? 'Register Company' : 'Login as Admin')}
-          </button>
-        </form>
-        <div style={{ marginTop: 16, textAlign: 'center' }}>
-          <button type="button" onClick={() => {
-            if (mode === 'register') {
-              setCompanyName('Demo Company');
-              setDisplayName('MindFirm');
-              setEmail('demo@company.com');
-              setAdminUsername(DEMO_ADMIN_USERNAME);
-              setAdminPassword(DEMO_ADMIN_PASSWORD);
-            } else {
-              setCompanyUuid(DEMO_COMPANY_UUID);
-              setAdminUsername(DEMO_ADMIN_USERNAME);
-              setAdminPassword(DEMO_ADMIN_PASSWORD);
-            }
-          }} style={{ marginBottom: 12, background: '#ffc107', color: '#333', border: 'none', borderRadius: 6, padding: '6px 18px', fontWeight: 600, cursor: 'pointer' }}>
-            Auto-fill Demo
-          </button>
-          {mode === 'register' ? (
-            <span>Already have an account? <button style={{ color: '#007bff', background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setMode('login')}>Login</button></span>
-          ) : (
-            <span>Need to register? <button style={{ color: '#007bff', background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setMode('register')}>Register</button></span>
+          {mode === 'login' && (
+            <div style={{ marginTop: 16, textAlign: 'center', fontSize: 14 }}>
+              <button style={{ color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginRight: 16 }} onClick={() => setShowForgotUuid(true)}>
+                Forgot UUID?
+              </button>
+              <button style={{ color: '#007bff', background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setShowForgotPassword(true)}>
+                Forgot Password?
+              </button>
+            </div>
           )}
         </div>
-        {mode === 'login' && (
-          <div style={{ marginTop: 16, textAlign: 'center', fontSize: 14 }}>
-            <button style={{ color: '#007bff', background: 'none', border: 'none', cursor: 'pointer', marginRight: 16 }} onClick={() => setShowForgotUuid(true)}>
-              Forgot UUID?
-            </button>
-            <button style={{ color: '#007bff', background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setShowForgotPassword(true)}>
-              Forgot Password?
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

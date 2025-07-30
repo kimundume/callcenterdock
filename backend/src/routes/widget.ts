@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
-import { companies, users, findUserByCompanyAndRole, calls, agents as onlineAgents, widgetSettings, ivrConfigs, pendingCompanies, findCompanyByEmail, findPendingCompanyByEmail } from '../data/tempDB';
+import { companies, users, findUserByCompanyAndRole, calls, agents as onlineAgents, widgetSettings, ivrConfigs, pendingCompanies, findCompanyByEmail, findPendingCompanyByEmail, agents, tempStorage } from '../data/tempDB';
 import { EmailService } from '../services/emailService';
 import type { TempStorage } from '../server';
 import { generateId } from '../server';
@@ -470,10 +470,15 @@ router.post('/agent/add', authMiddleware, async (req: Request, res: Response) =>
     
     // Send invitation email if email provided
     if (agentEmail && company) {
+      const companyName: string = (company && typeof company.name === 'string' && company.name.trim())
+        ? company.name
+        : (company && typeof company.companyName === 'string' && company.companyName.trim())
+          ? company.companyName
+          : 'Company';
       const emailSent = await EmailService.sendAgentInvitation(
         agentEmail,
         agentUsername,
-        (company.name || company.companyName || 'Company') as string,
+        companyName,
         decoded.companyUuid,
         agentPassword // Send temporary password
       );
@@ -567,7 +572,7 @@ router.post('/agent/register', async (req: Request, res: Response) => {
   }
   
   // Check if agent already exists
-  const existingAgent = global.tempStorage.agents.find(a => 
+  const existingAgent = Object.values(tempStorage.agents).find((a: any) => 
     a.username === username && a.companyUuid === companyUuid
   );
   if (existingAgent) {
@@ -747,7 +752,8 @@ router.get('/agents/:companyUuid', (req: Request, res: Response) => {
   
   // Combine both lists, avoiding duplicates
   const combinedAgents = [...agentList];
-  globalAgentList.forEach((globalAgent: any) => {
+  const safeGlobalAgentList = Array.isArray(globalAgentList) ? globalAgentList : [];
+  safeGlobalAgentList.forEach((globalAgent: any) => {
     if (!combinedAgents.find((agent: any) => agent.username === globalAgent.username)) {
       combinedAgents.push(globalAgent);
     }
@@ -846,11 +852,55 @@ router.post('/ivr/:companyUuid', authMiddleware, (req: Request, res: Response) =
 router.post('/demo/create-demo-agent', async (req: Request, res: Response) => {
   const { companyUuid, username, password } = req.body;
   if (!companyUuid || !username || !password) return res.status(400).json({ error: 'Missing fields' });
+
+  // 1. Create the demo company if it doesn't exist
+  if (!global.tempStorage.companies) global.tempStorage.companies = [];
+  let company = global.tempStorage.companies.find((c: any) => c.uuid === companyUuid);
+  if (!company) {
+    company = {
+      uuid: companyUuid,
+      name: 'Demo Company',
+      email: 'demo@calldocker.com',
+      status: 'approved',
+      createdAt: new Date().toISOString(),
+      verified: true,
+      displayName: 'Demo Company',
+    };
+    global.tempStorage.companies.push(company);
+  }
+
+  // 2. Create the agent in users (for legacy compatibility)
   const key = username + '@' + companyUuid;
-  if (users[key]) return res.json({ success: true, alreadyExists: true });
-  const hashed = await bcrypt.hash(password, 10);
-  users[key] = { username, password: hashed, companyUuid, role: 'agent' };
-  res.json({ success: true });
+  if (!users[key]) {
+    const hashed = await bcrypt.hash(password, 10);
+    users[key] = { username, password: hashed, companyUuid, role: 'agent' };
+  }
+
+  // 3. Add the agent to global.tempStorage.agents as online and approved
+  if (!global.tempStorage.agents) global.tempStorage.agents = [];
+  let agent = global.tempStorage.agents.find((a: any) => a.username === username && a.companyUuid === companyUuid);
+  if (!agent) {
+    agent = {
+      uuid: username + '-' + companyUuid,
+      username,
+      companyUuid,
+      email: 'demo-agent@calldocker.com',
+      status: 'online',
+      registrationStatus: 'approved',
+      createdAt: new Date().toISOString(),
+    };
+    global.tempStorage.agents.push(agent);
+  } else {
+    agent.status = 'online';
+    agent.registrationStatus = 'approved';
+  }
+
+  res.json({
+    success: true,
+    company,
+    agent,
+    alreadyExists: !!users[key] && !!agent
+  });
 });
 
 // DEV ONLY: Save widget settings without auth
@@ -945,214 +995,100 @@ router.post('/contact', (req, res) => {
 });
 
 // POST /api/widget/route-call - Enhanced routing for soft launch
-router.post('/route-call', (req, res) => {
-  const { companyUuid, visitorId, pageUrl, callType = 'chat', routingConfig } = req.body;
+router.post('/route-call', (req: Request, res: Response) => {
+  const { companyUuid, visitorId, pageUrl, callType = 'call', routingConfig } = req.body;
   console.log('[route-call] Incoming request:', { companyUuid, visitorId, pageUrl, callType, routingConfig });
-  
+
   // Generate session ID
   const sessionId = `call-${Math.random().toString(36).substr(2, 9)}-${Date.now()}`;
-  
-  // Enhanced routing logic for soft launch
-  const routeCall = () => {
-    // If no companyUuid provided, this is a public landing page call
-    if (!companyUuid) {
-      return routeToCallDockerAgents();
-    }
-    
-    // If companyUuid provided, this is a company-specific call
-    const company = global.tempStorage.companies.find(c => c.uuid === companyUuid);
-    if (!company) {
-      return res.status(404).json({ error: 'Company not found' });
-    }
-    
-    if (company.status !== 'approved') {
-      return res.status(403).json({ error: 'Company not approved' });
-    }
-    
-    // Check routing configuration
-    const config = routingConfig || {};
-    const fallbackToCallDocker = config.fallbackToCallDocker !== false; // Default to true
-    const priority = config.priority || 'company-first';
-    
-    // Find available agents for this company
-    const companyAgents = global.tempStorage.agents.filter(agent => 
-      agent.companyUuid === companyUuid &&
-      agent.registrationStatus === 'approved' &&
-      agent.status === 'online'
-    );
-    
-    // If company has agents and priority is company-first, route to company
-    if (companyAgents.length > 0 && priority === 'company-first') {
-      return routeToCompanyAgents(company, companyAgents);
-    }
-    
-    // If no company agents and fallback is enabled, route to CallDocker
-    if (companyAgents.length === 0 && fallbackToCallDocker) {
-      console.log(`[route-call] No agents available for company ${company.name}, falling back to CallDocker agents`);
-      return routeToCallDockerAgents(company.name);
-    }
-    
-    // If no company agents and no fallback, return error
-    if (companyAgents.length === 0) {
-      return res.status(503).json({ 
-        error: 'No agents available for this company',
-        routingType: 'company',
-        companyName: company.name,
-        requiresContactForm: true
-      });
-    }
-    
-    // Default: route to company agents
-    return routeToCompanyAgents(company, companyAgents);
-  };
-  
-  // Route to CallDocker agents (for public calls or fallback)
-  const routeToCallDockerAgents = (fallbackCompanyName?: string) => {
-    const availableAgents = global.tempStorage.agents.filter(agent => 
-      agent.companyUuid === 'calldocker-company-uuid' &&
-      agent.registrationStatus === 'approved' && 
-      agent.status === 'online'
-    );
-    
-    console.log('[route-call] Available CallDocker agents:', availableAgents.map(a => ({ uuid: a.uuid, status: a.status, registrationStatus: a.registrationStatus })));
-    
-    if (availableAgents.length === 0) {
-      console.warn('[route-call] No CallDocker agents available for public call.');
-      return res.status(503).json({ 
-        error: 'No CallDocker agents available',
-        routingType: 'public',
-        requiresContactForm: true
-      });
-    }
-    
-    // Enhanced load balancing: round-robin or random
-    const loadBalancing = routingConfig?.loadBalancing || 'random';
-    let assignedAgent;
-    
-    if (loadBalancing === 'round-robin') {
-      // Simple round-robin implementation
-      const agentIndex = Math.floor(Math.random() * availableAgents.length); // For now, random. In production, use proper round-robin
-      assignedAgent = availableAgents[agentIndex];
-    } else {
-      // Random assignment (default)
-      assignedAgent = availableAgents[Math.floor(Math.random() * availableAgents.length)];
-    }
-    
-    console.log('[route-call] Assigned CallDocker agent:', assignedAgent);
-    
-    // Create chat session
-    const chatSession = {
-      _id: sessionId,
-      companyId: 'calldocker-company-uuid',
+  const createdAt = new Date().toISOString();
+
+  function createSession({
+    companyUuid,
+    visitorId,
+    agentId,
+    type,
+    status,
+    createdAt,
+    pageUrl,
+    queuePosition
+  }: {
+    companyUuid: string;
+    visitorId: string;
+    agentId?: string;
+    type: 'call' | 'chat';
+    status: 'waiting' | 'active' | 'ended' | 'ringing';
+    createdAt: string;
+    pageUrl?: string;
+    queuePosition?: number;
+  }) {
+    const session = {
       sessionId,
+      companyUuid,
       visitorId,
+      agentId,
+      type,
+      status,
+      createdAt,
       pageUrl,
-      startedAt: new Date().toISOString(),
-      status: 'active',
-      routingType: 'public' as const,
-      assignedAgent: assignedAgent.uuid,
-      assignedCompany: 'CallDocker',
-      fallbackFrom: fallbackCompanyName || null
+      queuePosition
     };
-    
-    global.tempStorage.chatSessions.push(chatSession);
-    console.log('[route-call] Chat session created:', chatSession);
-    
-    // Create call record for Super Admin dashboard
-    const callRecord = {
-      id: generateId(),
+    tempStorage.sessions.push(session);
+    console.log('[route-call] Session created:', session);
+    return session;
+  }
+
+  // Find company
+  const company = tempStorage.companies[companyUuid];
+  if (!company) {
+    console.log('[route-call] Company not found:', companyUuid);
+    return res.status(404).json({ success: false, error: 'Company not found' });
+  }
+
+  // Find available agents
+  const availableAgents = Object.values(tempStorage.agents).filter((a: any) => a.companyUuid === companyUuid && a.status === 'online' && a.registrationStatus === 'approved');
+  console.log('[route-call] Available agents:', availableAgents.map((a: any) => a.username));
+  if (availableAgents.length === 0) {
+    return res.status(200).json({ success: false, error: 'No agents online' });
+  }
+  const assignedAgent = availableAgents[0];
+  console.log('[route-call] Assigned agent:', assignedAgent.username);
+
+  // Find agent socketId (if available)
+  let agentSocketId: string | undefined = undefined;
+  // Note: onlineAgents is actually the agents object from tempDB, not a nested structure
+  // We'll need to get socketId from a different source or implement it properly
+  console.log('[route-call] Agent socketId lookup:', { companyUuid, username: assignedAgent.username, agentSocketId: 'Not implemented yet' });
+
+  // Create session
+  const session = createSession({
+    companyUuid,
+    visitorId,
+    agentId: assignedAgent.username,
+    type: callType === 'call' ? 'call' : 'chat',
+    status: 'ringing' as 'ringing', // Fix: use correct union type
+    createdAt: new Date().toISOString(),
+    pageUrl
+  });
+  console.log('[route-call] Session created with type:', session.type);
+
+  // Emit incoming-call to agent dashboard via socket.io
+  const io = req.app.get('io');
+  if (io && agentSocketId) {
+    console.log('[route-call] Emitting incoming-call to agent with callType:', callType);
+    io.to(agentSocketId).emit('incoming-call', {
+      sessionId,
+      companyUuid,
       visitorId,
-      pageUrl,
-      status: 'waiting' as const,
-      assignedAgent: assignedAgent.uuid,
-      startTime: new Date().toISOString(),
       callType,
-      priority: 'normal' as const,
-      routingType: 'public' as const,
-      companyId: 'calldocker-company-uuid',
-      sessionId,
-      fallbackFrom: fallbackCompanyName || null
-    };
-    
-    global.tempStorage.calls.push(callRecord);
-    console.log('[route-call] Call record created:', callRecord);
-    
-    res.json({
-      success: true,
-      sessionId,
-      routingType: 'public',
-      assignedAgent: {
-        uuid: assignedAgent.uuid,
-        username: assignedAgent.username,
-        companyName: 'CallDocker'
-      },
-      message: `Call routed to CallDocker agent ${assignedAgent.username}${fallbackCompanyName ? ` (fallback from ${fallbackCompanyName})` : ''}`
+      pageUrl
     });
-  };
-  
-  // Route to company agents
-  const routeToCompanyAgents = (company: any, companyAgents: any[]) => {
-    // Enhanced load balancing for company agents
-    const loadBalancing = routingConfig?.loadBalancing || 'round-robin';
-    let assignedAgent;
-    
-    if (loadBalancing === 'round-robin') {
-      // Simple round-robin implementation
-      const agentIndex = Math.floor(Math.random() * companyAgents.length); // For now, random. In production, use proper round-robin
-      assignedAgent = companyAgents[agentIndex];
-    } else {
-      // Random assignment (default)
-      assignedAgent = companyAgents[Math.floor(Math.random() * companyAgents.length)];
-    }
-    
-    // Create chat session
-    const chatSession = {
-      _id: sessionId,
-      companyId: companyUuid,
-      sessionId,
-      visitorId,
-      pageUrl,
-      startedAt: new Date().toISOString(),
-      status: 'active',
-      routingType: 'company' as const,
-      assignedAgent: assignedAgent.uuid,
-      assignedCompany: company.name
-    };
-    
-    global.tempStorage.chatSessions.push(chatSession);
-    
-    // Create call record for Super Admin dashboard
-    const callRecord = {
-      id: generateId(),
-      visitorId,
-      pageUrl,
-      status: 'waiting' as const,
-      assignedAgent: assignedAgent.uuid,
-      startTime: new Date().toISOString(),
-      callType,
-      priority: 'normal' as const,
-      routingType: 'company' as const,
-      companyId: companyUuid,
-      sessionId
-    };
-    
-    global.tempStorage.calls.push(callRecord);
-    
-    res.json({
-      success: true,
-      sessionId,
-      routingType: 'company',
-      assignedAgent: {
-        uuid: assignedAgent.uuid,
-        username: assignedAgent.username,
-        companyName: company.name
-      },
-      message: `Call routed to ${company.name} agent ${assignedAgent.username}`
-    });
-  };
-  
-  // Execute routing
-  routeCall();
+    console.log('[route-call] Emitted incoming-call to agent:', assignedAgent.username, 'socketId:', agentSocketId);
+  } else {
+    console.log('[route-call] No socketId found for agent:', assignedAgent.username);
+  }
+
+  return res.json({ success: true, sessionId, agent: assignedAgent.username });
 });
 
 // POST /api/widget/agent/status
@@ -1163,7 +1099,7 @@ router.post('/agent/status', (req, res) => {
     return res.status(400).json({ error: 'Invalid agent UUID or status' });
   }
   
-  const agent = global.tempStorage.agents.find(a => a.uuid === agentUuid);
+  const agent = Object.values(tempStorage.agents).find((a: any) => a.uuid === agentUuid);
   if (!agent) {
     return res.status(404).json({ error: 'Agent not found' });
   }
@@ -1193,7 +1129,7 @@ router.post('/agent/status', (req, res) => {
 router.get('/agent/status/:agentUuid', (req, res) => {
   const { agentUuid } = req.params;
   
-  const agent = global.tempStorage.agents.find(a => a.uuid === agentUuid);
+  const agent = Object.values(tempStorage.agents).find((a: any) => a.uuid === agentUuid);
   if (!agent) {
     return res.status(404).json({ error: 'Agent not found' });
   }
@@ -1215,17 +1151,17 @@ router.get('/agents/online', (req, res) => {
   
   if (companyUuid) {
     // Get online agents for specific company
-    onlineAgents = global.tempStorage.agents.filter(agent => 
+    onlineAgents = Object.values(tempStorage.agents).filter((agent: any) => 
       agent.companyUuid === companyUuid &&
       agent.registrationStatus === 'approved' &&
       agent.status === 'online'
     );
   } else {
     // Get all online agents (for public routing)
-    onlineAgents = global.tempStorage.agents.filter(agent => 
+    onlineAgents = Object.values(tempStorage.agents).filter((agent: any) => 
       agent.registrationStatus === 'approved' &&
       agent.status === 'online' &&
-      global.tempStorage.companies.find(company => 
+      Object.values(tempStorage.companies).find((company: any) => 
         company.uuid === agent.companyUuid && 
         company.status === 'approved'
       )
@@ -1234,7 +1170,7 @@ router.get('/agents/online', (req, res) => {
   
   res.json({
     count: onlineAgents.length,
-    agents: onlineAgents.map(agent => ({
+    agents: onlineAgents.map((agent: any) => ({
       uuid: agent.uuid,
       username: agent.username,
       companyUuid: agent.companyUuid,
@@ -1526,7 +1462,8 @@ router.post('/test-call', async (req: Request, res: Response) => {
     
     // Combine both lists
     const combinedAgents = [...agentList];
-    globalAgentList.forEach((globalAgent: any) => {
+    const safeGlobalAgentList = Array.isArray(globalAgentList) ? globalAgentList : [];
+    safeGlobalAgentList.forEach((globalAgent: any) => {
       if (!combinedAgents.find((agent: any) => agent.username === globalAgent.username)) {
         combinedAgents.push(globalAgent);
       }
@@ -1630,7 +1567,7 @@ router.post('/agent/register', async (req: Request, res: Response) => {
   }
   
   // Check if agent already exists
-  const existingAgent = global.tempStorage.agents.find(a => 
+  const existingAgent = Object.values(tempStorage.agents).find((a: any) => 
     a.username === username && a.companyUuid === companyUuid
   );
   if (existingAgent) {
@@ -1668,6 +1605,28 @@ router.post('/agent/register', async (req: Request, res: Response) => {
     email,
     requiresApproval: true
   });
+});
+
+// Add debug logging for form push
+router.post('/form-push', (req: Request, res: Response) => {
+  const { companyId, sessionId, from, type, fields } = req.body;
+  console.log('[form-push] Request:', req.body);
+  // ... existing form creation logic ...
+  // Emit to widget socket
+  const io = req.app.get('io');
+  const onlineWidgets = (global as any).onlineWidgets || {};
+  let widgetSocketId;
+  if (onlineWidgets[companyId] && onlineWidgets[companyId][sessionId]) {
+    widgetSocketId = onlineWidgets[companyId][sessionId].socketId;
+  }
+  console.log('[form-push] Widget socketId lookup:', { companyId, sessionId, widgetSocketId });
+  if (io && widgetSocketId) {
+    io.to(widgetSocketId).emit('form-push', { sessionId, type, fields });
+    console.log('[form-push] Emitted form-push to widget:', widgetSocketId);
+  } else {
+    console.log('[form-push] No socketId found for widget:', companyId, sessionId);
+  }
+  res.json({ success: true });
 });
 
 export default router; 

@@ -1,5 +1,5 @@
 import { Server, Socket } from 'socket.io';
-import { agents, calls, callQueue, chatSessions } from '../data/tempDB';
+import { agents, calls, callQueue, chatSessions, sessions } from '../data/tempDB';
 import type { TempStorage } from '../server';
 
 declare global {
@@ -20,6 +20,15 @@ export function registerSignalingHandlers(io: Server) {
       agents[uuid][agentId] = { socketId: socket.id, online: true, registeredAt: new Date().toISOString() };
       socket.data = { uuid, agentId };
       socket.emit('agent-registered', { success: true, uuid, agentId });
+
+      // PATCH: Also update tempStorage.agents
+      if (global.tempStorage && Array.isArray(global.tempStorage.agents)) {
+        const agent = global.tempStorage.agents.find(a => a.companyUuid === uuid && a.username === agentId);
+        if (agent) {
+          agent.status = 'online';
+          agent.registrationStatus = 'approved';
+        }
+      }
     });
 
     // Call request and queueing
@@ -70,14 +79,19 @@ export function registerSignalingHandlers(io: Server) {
 
     // Agent accepts call
     socket.on('accept-call', (data) => {
-      const { uuid, agentId, fromSocketId } = data;
-      if (!uuid || !agentId || !fromSocketId) return;
+      const { uuid, agentId, fromSocketId, sessionId } = data;
+      if (!uuid || !agentId || !fromSocketId || !sessionId) return;
       // Remove caller from queue
       if (callQueue[uuid]) callQueue[uuid] = callQueue[uuid].filter(id => id !== fromSocketId);
       // Update call log
       if (calls[uuid]) {
         const call = calls[uuid].find((c: any) => c.from === fromSocketId && c.to === agentId && c.status === 'routed');
         if (call) call.status = 'accepted';
+      }
+      // Update session status
+      if (global.tempStorage && Array.isArray(global.tempStorage.sessions)) {
+        const session = global.tempStorage.sessions.find(s => s.sessionId === sessionId);
+        if (session) session.status = 'active';
       }
       // Notify widget/client
       io.to(fromSocketId).emit('call-status', { status: 'accepted', agentId });
@@ -92,14 +106,19 @@ export function registerSignalingHandlers(io: Server) {
 
     // Agent rejects call
     socket.on('reject-call', (data) => {
-      const { uuid, agentId, fromSocketId } = data;
-      if (!uuid || !agentId || !fromSocketId) return;
+      const { uuid, agentId, fromSocketId, sessionId } = data;
+      if (!uuid || !agentId || !fromSocketId || !sessionId) return;
       // Remove caller from queue
       if (callQueue[uuid]) callQueue[uuid] = callQueue[uuid].filter(id => id !== fromSocketId);
       // Update call log
       if (calls[uuid]) {
         const call = calls[uuid].find((c: any) => c.from === fromSocketId && c.to === agentId && c.status === 'routed');
         if (call) call.status = 'rejected';
+      }
+      // Update session status
+      if (global.tempStorage && Array.isArray(global.tempStorage.sessions)) {
+        const session = global.tempStorage.sessions.find(s => s.sessionId === sessionId);
+        if (session) session.status = 'ended';
       }
       // Notify widget/client
       io.to(fromSocketId).emit('call-status', { status: 'rejected', agentId });

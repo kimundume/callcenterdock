@@ -1,11 +1,12 @@
 import React from 'react';
 import './style.css';
 import { useNavigate } from 'react-router-dom';
-import { Modal, Button } from 'antd';
+import { Modal, Button, Input, message } from 'antd';
 import IVRChatWidget from './IVRChatWidget';
-import { FaWhatsapp, FaUsers, FaChartLine, FaGlobe, FaLink, FaChartPie, FaPlug, FaPhoneAlt, FaUserCircle, FaUserTie, FaUserNurse, FaStar } from 'react-icons/fa';
+import { FaWhatsapp, FaUsers, FaChartLine, FaGlobe, FaLink, FaChartPie, FaPlug, FaPhoneAlt, FaUserCircle, FaUserTie, FaUserNurse, FaStar, FaCogs } from 'react-icons/fa';
 import logoLight from '/logo-light.png';
 import logoDark from '/logo-dark.png';
+import Navbar from './Navbar';
 
 // Placeholder icons and images
 const FeatureIcon = ({ children }: { children: React.ReactNode }) => (
@@ -43,6 +44,7 @@ export default function LandingPage() {
   const [useCase, setUseCase] = React.useState(0);
   const [billing, setBilling] = React.useState<'monthly' | 'yearly'>('monthly');
   const [widgetOpen, setWidgetOpen] = React.useState(false);
+  const [isOnline, setIsOnline] = React.useState(true);
   const navigate = useNavigate();
   const demoRef = React.useRef<HTMLDivElement>(null);
 
@@ -52,11 +54,38 @@ export default function LandingPage() {
     }
   };
 
+  const checkAvailabilityAndOpenWidget = async () => {
+    console.log('[LandingPage] Call Us button clicked');
+    try {
+      // Check availability for public landing page widget (no companyUuid)
+      const res = await fetch('http://localhost:5001/api/widget/availability');
+      const data = await res.json();
+      
+      console.log('[LandingPage] Availability response:', data);
+      
+      if (data.online) {
+        setIsOnline(true);
+        setWidgetOpen(true);
+        console.log('[LandingPage] Widget should open (online) - Routing type:', data.routingType, 'Available agents:', data.availableAgents);
+      } else {
+        setIsOnline(false);
+        setWidgetOpen(true);
+        console.log('[LandingPage] Widget should open (offline) - Routing type:', data.routingType);
+      }
+    } catch (e) {
+      console.error('[LandingPage] Error checking availability:', e);
+      setIsOnline(false);
+      setWidgetOpen(true);
+      console.log('[LandingPage] Widget should open (error/offline)');
+    }
+  };
+
   return (
-    <div className="landing-root" style={{ fontFamily: 'Inter, sans-serif', background: 'linear-gradient(120deg, #f7fafd 0%, #e8f1ff 100%)', color: '#0a2239', minHeight: '100vh' }}>
+    <>
+      <Navbar />
       {/* Hero Section */}
       <section className="hero" style={{ minHeight: 520, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', textAlign: 'center', padding: '64px 16px 32px' }}>
-        <img src={logoLight} alt="Calldock Logo" style={{ width: 120, height: 120, marginBottom: 16, marginTop: 8, filter: 'drop-shadow(0 4px 24px #00e6ef33)' }} />
+        <img src={logoLight} alt="Calldock Logo" className="animated-icon-bounce" style={{ width: 80, height: 80, marginBottom: 16, borderRadius: '50%', border: '3px solid #F6C23E', background: '#fff', boxShadow: '0 2px 12px #F6C23E22' }} />
         <div className="hero-bg-anim" style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
           {/* Animated bubbles or flowing lines (placeholder) */}
           <svg width="100%" height="100%" style={{ position: 'absolute', left: 0, top: 0 }}>
@@ -73,8 +102,6 @@ export default function LandingPage() {
           Calldocker turns your visitors into conversations — instantly. Host multi-agent voice and chat widgets with ease.
         </p>
         <div style={{ display: 'flex', gap: 16, justifyContent: 'center', zIndex: 1 }}>
-          <Button type="primary" size="large" style={{ marginRight: 16 }} onClick={() => navigate('/dashboard')}>Admin Login / Register</Button>
-          <Button type="default" size="large" style={{ background: '#fff', color: '#2E73FF', border: '2px solid #2E73FF' }} onClick={() => navigate('/agent-login')}>Agent Login</Button>
           <button className="cta-btn" style={{ background: 'linear-gradient(90deg, #00e6ef 0%, #2E73FF 100%)', color: '#fff', fontWeight: 700, fontSize: 18, border: 'none', borderRadius: 32, padding: '16px 40px', boxShadow: '0 4px 24px #00e6ef33', cursor: 'pointer', transition: 'transform 0.2s' }} onClick={() => navigate('/dashboard')}>Try It Now</button>
           <button className="cta-btn" style={{ background: '#fff', color: '#2E73FF', fontWeight: 700, fontSize: 18, border: '2px solid #2E73FF', borderRadius: 32, padding: '16px 40px', boxShadow: '0 2px 8px #2E73FF11', cursor: 'pointer', transition: 'transform 0.2s' }} onClick={scrollToDemo}>See Demo</button>
         </div>
@@ -92,8 +119,14 @@ export default function LandingPage() {
       </section>
 
       {/* How It Works */}
-      <section className="how-it-works" style={{ maxWidth: 1100, margin: '0 auto', padding: '64px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <h2 style={{ fontSize: 32, fontWeight: 800, marginBottom: 32 }}>How It Works</h2>
+      <section id="features" className="how-it-works" style={{ maxWidth: 1100, margin: '0 auto', padding: '64px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <h2 style={{ fontSize: 32, fontWeight: 800, marginBottom: 16 }}>How It Works</h2>
+        <div style={{ maxWidth: 700, marginBottom: 32, width: '100%', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ background: 'linear-gradient(120deg, #f7fafd 60%, #e8f1ff 100%)', borderRadius: 20, boxShadow: '0 2px 16px #2E73FF11', padding: 32, color: '#213547', fontSize: 18, textAlign: 'center', fontWeight: 500, minWidth: 320, maxWidth: 480, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 48, marginBottom: 8, color: '#00e6ef' }}><FaPlug /></span>
+            Calldocker is a cloud-based platform that lets you add a voice and chat widget to your website in minutes. Visitors can instantly connect with your team via browser calls or chat, and you can manage all conversations from a unified dashboard. No phone numbers or downloads required.
+          </div>
+        </div>
         <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap', justifyContent: 'center' }}>
           {[
             { icon: <FaPlug color="#00e6ef" />, label: 'Embed Widget' },
@@ -112,20 +145,29 @@ export default function LandingPage() {
       <section className="live-demo" ref={demoRef} style={{ background: 'rgba(0,230,239,0.06)', padding: '48px 0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <h2 style={{ fontSize: 28, fontWeight: 800, marginBottom: 24 }}>See Calldocker in Action</h2>
         <div style={{ background: '#fff', borderRadius: 24, boxShadow: '0 4px 24px #00e6ef22', padding: 24, minWidth: 320, minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'bounce 2s infinite alternate' }}>
-          {/* Placeholder for widget iframe preview */}
+          {/* Widget preview with only logo and 'Call Us' text, no extra icon */}
           <div style={{ width: 220, height: 60, background: 'linear-gradient(90deg, #00e6ef 0%, #2E73FF 100%)', borderRadius: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 20, boxShadow: '0 2px 8px #2E73FF22' }}>
-            <span style={{ marginRight: 12 }}>🤖</span> Call Us
+            <div style={{ width: 38, height: 38, borderRadius: 19, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 12, border: '2px solid #F6C23E' }}>
+              <img src={logoLight} alt="Calldock Widget Logo" style={{ width: 32, height: 32, borderRadius: '50%', background: '#fff', border: '2px solid #F6C23E', padding: 2, boxShadow: '0 2px 8px #F6C23E22' }} />
+            </div>
+            Call Us
           </div>
         </div>
         <div style={{ marginTop: 16, color: '#888', fontSize: 15 }}>Interactive widget preview coming soon</div>
       </section>
 
       {/* Features Grid */}
-      <section className="features" style={{ maxWidth: 1100, margin: '0 auto', padding: '64px 16px' }}>
-        <h2 style={{ fontSize: 32, fontWeight: 800, marginBottom: 32 }}>Features</h2>
+      <section id="features-grid" className="features" style={{ maxWidth: 1100, margin: '0 auto', padding: '64px 16px' }}>
+        <h2 style={{ fontSize: 32, fontWeight: 800, marginBottom: 16 }}>Features</h2>
+        <div style={{ maxWidth: 700, marginBottom: 32, width: '100%', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ background: 'linear-gradient(120deg, #f7fafd 60%, #e8f1ff 100%)', borderRadius: 20, boxShadow: '0 2px 16px #2E73FF11', padding: 32, color: '#213547', fontSize: 18, textAlign: 'center', fontWeight: 500, minWidth: 320, maxWidth: 480, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 48, marginBottom: 8, color: '#2E73FF' }}><FaCogs /></span>
+            Calldocker offers multi-agent support, WhatsApp integration, real-time logs, analytics, and more. Our widget is fully embeddable and can be customized to match your brand. All calls and chats are browser-based and secure.
+          </div>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 32 }}>
           {features.map(f => (
-            <div key={f.title} className="feature-card" style={{ background: '#fff', borderRadius: 20, boxShadow: '0 2px 16px #2E73FF11', padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', transition: 'transform 0.2s', fontWeight: 600, fontSize: 18 }}>
+            <div key={f.title} className="feature-card" style={{ background: '#fff', borderRadius: 20, padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', transition: 'transform 0.2s', fontWeight: 600, fontSize: 18, border: '2px solid #F6C23E33', boxShadow: '0 4px 24px #F6C23E22, 0 2px 8px #00e6ef22' }}>
               <FeatureIcon>{f.icon}</FeatureIcon>
               <div style={{ marginTop: 16 }}>{f.title}</div>
             </div>
@@ -133,9 +175,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Use Cases / Target Markets */}
-      <section className="use-cases" style={{ background: 'rgba(46,115,255,0.04)', padding: '64px 0' }}>
-        <h2 style={{ fontSize: 32, fontWeight: 800, marginBottom: 32, textAlign: 'center' }}>Who is Calldocker for?</h2>
+      {/* Integrations / Use Cases */}
+      <section id="integrations" className="use-cases" style={{ background: 'rgba(46,115,255,0.04)', padding: '64px 0' }}>
+        <h2 style={{ fontSize: 32, fontWeight: 800, marginBottom: 16, textAlign: 'center' }}>Integrations & Use Cases</h2>
+        <div style={{ maxWidth: 700, margin: '0 auto', marginBottom: 32, width: '100%', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ background: 'linear-gradient(120deg, #f7fafd 60%, #e8f1ff 100%)', borderRadius: 20, boxShadow: '0 2px 16px #2E73FF11', padding: 32, color: '#213547', fontSize: 18, textAlign: 'center', fontWeight: 500, minWidth: 320, maxWidth: 480, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 48, marginBottom: 8, color: '#25D366' }}><FaGlobe /></span>
+            Calldocker integrates with your website, CRM, and communication tools. Use webhooks to connect with your favorite apps, or embed the widget anywhere. Perfect for hotels, clinics, travel sites, law firms, eCommerce, and more.
+          </div>
+        </div>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginBottom: 32, flexWrap: 'wrap' }}>
           {useCases.map((uc, i) => (
             <button key={uc} onClick={() => setUseCase(i)} style={{ padding: '12px 28px', borderRadius: 24, border: 'none', background: i === useCase ? 'linear-gradient(90deg, #00e6ef 0%, #2E73FF 100%)' : '#fff', color: i === useCase ? '#fff' : '#2E73FF', fontWeight: 700, fontSize: 18, boxShadow: i === useCase ? '0 2px 8px #00e6ef33' : '0 1px 4px #2E73FF11', cursor: 'pointer', marginBottom: 8, transition: 'background 0.2s, color 0.2s' }}>{uc}</button>
@@ -147,7 +195,7 @@ export default function LandingPage() {
       </section>
 
       {/* Testimonials Carousel */}
-      <section className="testimonials" style={{ maxWidth: 900, margin: '0 auto', padding: '64px 16px', position: 'relative' }}>
+      <section id="docs" className="testimonials" style={{ maxWidth: 900, margin: '0 auto', padding: '64px 16px', position: 'relative' }}>
         <h2 style={{ fontSize: 32, fontWeight: 800, marginBottom: 32, textAlign: 'center' }}>What Our Users Say</h2>
         <div style={{ display: 'flex', gap: 32, overflowX: 'auto', scrollSnapType: 'x mandatory', paddingBottom: 16 }}>
           {testimonials.map((t, i) => (
@@ -166,7 +214,7 @@ export default function LandingPage() {
       </section>
 
       {/* Pricing Section */}
-      <section className="pricing" style={{ background: 'rgba(0,230,239,0.06)', padding: '64px 0' }}>
+      <section id="pricing" className="pricing" style={{ background: 'rgba(0,230,239,0.06)', padding: '64px 0' }}>
         <h2 style={{ fontSize: 32, fontWeight: 800, marginBottom: 32, textAlign: 'center' }}>Pricing</h2>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginBottom: 32 }}>
           <button onClick={() => setBilling('monthly')} style={{ padding: '10px 32px', borderRadius: 24, border: 'none', background: billing === 'monthly' ? 'linear-gradient(90deg, #00e6ef 0%, #2E73FF 100%)' : '#fff', color: billing === 'monthly' ? '#fff' : '#2E73FF', fontWeight: 700, fontSize: 16, boxShadow: billing === 'monthly' ? '0 2px 8px #00e6ef33' : '0 1px 4px #2E73FF11', cursor: 'pointer', transition: 'background 0.2s, color 0.2s' }}>Monthly</button>
@@ -209,7 +257,7 @@ export default function LandingPage() {
       </section>
 
       {/* CTA Footer */}
-      <footer className="cta-footer" style={{ background: 'linear-gradient(90deg, #2E73FF 0%, #00e6ef 100%)', color: '#fff', textAlign: 'center', padding: '48px 16px', fontWeight: 700, fontSize: 28, position: 'relative' }}>
+      <footer id="contact" className="cta-footer" style={{ background: 'linear-gradient(90deg, #2E73FF 0%, #00e6ef 100%)', color: '#fff', textAlign: 'center', padding: '48px 16px', fontWeight: 700, fontSize: 28, position: 'relative' }}>
         <div style={{ marginBottom: 24 }}>Your business should never miss a call again.</div>
         <div style={{ display: 'flex', gap: 16, justifyContent: 'center' }}>
           <button style={{ background: '#fff', color: '#2E73FF', fontWeight: 700, fontSize: 18, border: 'none', borderRadius: 32, padding: '16px 40px', boxShadow: '0 2px 8px #fff8', cursor: 'pointer', transition: 'transform 0.2s' }} onClick={() => navigate('/dashboard')}>Get Started Free</button>
@@ -218,12 +266,22 @@ export default function LandingPage() {
       </footer>
 
       {/* Sticky Widget Preview */}
-      <div className="sticky-widget" style={{ position: 'fixed', right: 24, bottom: 24, zIndex: 100, animation: 'fadein 1.2s 1.2s both' }}>
-        <div style={{ width: 80, height: 80, borderRadius: 40, background: 'linear-gradient(120deg, #00e6ef 0%, #2E73FF 100%)', boxShadow: '0 4px 24px #00e6ef33', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 32, cursor: 'pointer', border: '4px solid #fff', transition: 'transform 0.2s', overflow: 'hidden' }} onClick={() => setWidgetOpen(true)}>
-          <img src={logoLight} alt="Calldock Widget Logo" style={{ width: 56, height: 56, objectFit: 'contain' }} />
+      <div className="sticky-widget" style={{ position: 'fixed', right: 24, bottom: 24, zIndex: 100, animation: 'fadein 1.2s 1.2s both', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', background: 'linear-gradient(90deg, #fff 60%, #F6C23E 100%)', borderRadius: 40, boxShadow: '0 4px 24px #00e6ef33', border: '3px solid #F6C23E', padding: '8px 20px 8px 8px', transition: 'box-shadow 0.2s, transform 0.2s', minWidth: 0 }} onClick={checkAvailabilityAndOpenWidget}>
+          <div style={{ width: 56, height: 56, borderRadius: 28, background: 'linear-gradient(120deg, #00e6ef 0%, #2E73FF 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '3px solid #F6C23E', boxShadow: '0 2px 8px #2E73FF33', marginRight: 12 }}>
+            <img src={logoLight} alt="Calldock Widget Logo" style={{ width: 38, height: 38, objectFit: 'contain', borderRadius: 19, background: '#fff' }} />
+          </div>
+          <span style={{ fontWeight: 800, fontSize: 20, color: '#2E73FF', letterSpacing: 1, textShadow: '0 2px 8px #F6C23E33' }}>Call Us</span>
         </div>
-        <IVRChatWidget open={widgetOpen} onClose={() => setWidgetOpen(false)} />
+        <IVRChatWidget 
+          open={widgetOpen} 
+          // Debug log for widget open state
+          key={widgetOpen ? 'open' : 'closed'}
+          onClose={() => setWidgetOpen(false)} 
+          companyUuid={null}
+          logoSrc={logoLight}
+        />
       </div>
-    </div>
+    </>
   );
 } 

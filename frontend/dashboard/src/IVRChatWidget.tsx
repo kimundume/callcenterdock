@@ -6,12 +6,48 @@ import logoLight from '/logo-light.png';
 import logoDark from '/logo-dark.png';
 import { v4 as uuidv4 } from 'uuid';
 
-const SOCKET_URL = 'http://localhost:5000';
+const SOCKET_URL = 'http://localhost:5001';
 
-const demoIVR = [
+interface IVRStep {
+  prompt: string;
+  audio: string | null;
+  routes: Record<string, { prompt: string; audio: string | null }>;
+  fallback: { prompt: string };
+  holdMusic?: string;
+}
+
+interface IVRConfig {
+  steps: IVRStep[];
+}
+
+interface Message {
+  from: 'user' | 'system';
+  text: string;
+  audio?: string;
+}
+
+interface ChatMessage {
+  sessionId: string;
+  message: string;
+  from: 'visitor' | 'agent';
+  timestamp: string;
+}
+
+interface FormField {
+  label: string;
+  type: string;
+  required?: boolean;
+}
+
+interface Form {
+  _id: string;
+  fields: FormField[];
+}
+
+const demoIVR: IVRStep[] = [
   {
     prompt: 'Welcome to CallDocker! Press 1 for Sales, 2 for Support.',
-    audio: null, // Optionally add audio file URL
+    audio: null,
     routes: {
       '1': { prompt: 'Connecting you to Sales...', audio: null },
       '2': { prompt: 'Connecting you to Support...', audio: null },
@@ -22,33 +58,41 @@ const demoIVR = [
   }
 ];
 
-export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
-  const [ivrConfig, setIvrConfig] = useState(null);
-  const [messages, setMessages] = useState([]);
+interface IVRChatWidgetProps {
+  open: boolean;
+  onClose: () => void;
+  companyUuid: string | null;
+  logoSrc: string;
+}
+
+export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: IVRChatWidgetProps) {
+  console.log('[IVRChatWidget] Rendered with open:', open, 'companyUuid:', companyUuid, 'logoSrc:', logoSrc);
+  const [ivrConfig, setIvrConfig] = useState<IVRConfig | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [listening, setListening] = useState(false);
   const [loading, setLoading] = useState(false);
   const [ivrStep, setIvrStep] = useState(0);
-  const recognitionRef = useRef(null);
-  const chatEndRef = useRef(null);
-  const audioRef = useRef(null);
-  const holdAudioRef = useRef(null);
+  const recognitionRef = useRef<any>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const holdAudioRef = useRef<HTMLAudioElement | null>(null);
   const [onHold, setOnHold] = useState(false);
   const [inCall, setInCall] = useState(false);
-  const [callStart, setCallStart] = useState(null);
+  const [callStart, setCallStart] = useState<Date | null>(null);
   const [callTimer, setCallTimer] = useState('00:00');
-  const callTimerRef = useRef(null);
+  const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [callState, setCallState] = useState<'idle' | 'ringing' | 'in-call' | 'ended'>('idle');
   const [callError, setCallError] = useState('');
-  const [agentSocketId, setAgentSocketId] = useState(null);
-  const socketRef = useRef(null);
-  const [queuePosition, setQueuePosition] = useState(null);
-  const [queueEstimate, setQueueEstimate] = useState(null);
+  const [agentSocketId, setAgentSocketId] = useState<string | null>(null);
+  const socketRef = useRef<any>(null);
+  const [queuePosition, setQueuePosition] = useState<number | null>(null);
+  const [queueEstimate, setQueueEstimate] = useState<number | null>(null);
   const [webrtcState, setWebrtcState] = useState<'idle' | 'connecting' | 'connected'>('idle');
-  const [localStream, setLocalStream] = useState(null);
-  const [remoteStream, setRemoteStream] = useState(null);
-  const peerRef = useRef(null);
-  const remoteAudioRef = useRef(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const peerRef = useRef<RTCPeerConnection | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   // Mute state
   const [muted, setMuted] = useState(false);
   // Hold state
@@ -57,25 +101,31 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
   const [mode, setMode] = useState<'call' | 'chat'>('call');
 
   // Chat state
-  const [chatSessionId, setChatSessionId] = useState(null);
-  const [chatMessages, setChatMessages] = useState([]);
+  const [chatSessionId, setChatSessionId] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
-  const chatWidgetEndRef = useRef(null);
+  const chatWidgetEndRef = useRef<HTMLDivElement>(null);
   // Typing indicator state
   const [agentTyping, setAgentTyping] = useState(false);
   const [agentsOnline, setAgentsOnline] = useState(true);
 
   // Form push state
-  const [activeForm, setActiveForm] = useState(null);
-  const [formValues, setFormValues] = useState({});
+  const [activeForm, setActiveForm] = useState<Form | null>(null);
+  const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formResponseMsg, setFormResponseMsg] = useState('');
+
+  // Add state for contact form inside IVRChatWidget
+  const [showContactForm, setShowContactForm] = useState(false);
+  const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', message: '' });
+  const [contactLoading, setContactLoading] = useState(false);
+  const [contactSuccess, setContactSuccess] = useState(false);
 
   // Check agent online status when widget opens or companyUuid changes
   useEffect(() => {
     if (!open || !companyUuid) return;
     console.log('[Widget] companyUuid:', companyUuid);
-    fetch(`http://localhost:5000/api/agents/${companyUuid}`)
+    fetch(`http://localhost:5001/api/agents/${companyUuid}`)
       .then(res => res.json())
       .then(list => setAgentsOnline(Array.isArray(list) && list.some(a => a.online)))
       .catch(() => setAgentsOnline(false));
@@ -84,15 +134,18 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
   // Fetch IVR config when opened or companyUuid changes
   useEffect(() => {
     if (!open) return;
+    console.log('[IVRChatWidget] Widget opened. companyUuid:', companyUuid);
     if (companyUuid) {
-      fetch(`http://localhost:5000/api/widget/ivr/${companyUuid}`)
+      fetch(`http://localhost:5001/api/widget/ivr/${companyUuid}`)
         .then(res => res.json())
         .then(config => {
+          console.log('[IVRChatWidget] IVR config loaded:', config);
           setIvrConfig(config);
           setMessages([{ from: 'system', text: config.steps[0].prompt }]);
           setIvrStep(0);
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error('[IVRChatWidget] Error loading IVR config:', err);
           setIvrConfig({ steps: demoIVR });
           setMessages([{ from: 'system', text: demoIVR[0].prompt }]);
           setIvrStep(0);
@@ -377,7 +430,7 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
   useEffect(() => {
     if (!socketRef.current) return;
     const socket = socketRef.current;
-    const onMsg = (data) => {
+    const onMsg = (data: ChatMessage) => {
       console.log('[Widget] received chat:message', data);
       setChatMessages(msgs => [...msgs, data]);
     };
@@ -388,24 +441,22 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
   // Load chat messages from backend when chatSessionId changes
   useEffect(() => {
     if (!chatSessionId || !companyUuid) return;
-    fetch(`http://localhost:5000/api/chat-messages?companyId=${companyUuid}&sessionId=${chatSessionId}`)
+    fetch(`http://localhost:5001/api/chat-messages?companyId=${companyUuid}&sessionId=${chatSessionId}`)
       .then(res => res.json())
-      .then(messages => {
+      .then((messages: ChatMessage[]) => {
         setChatMessages(messages);
       });
       
     // Also fetch form responses
-    fetch(`http://localhost:5000/api/form-response?companyId=${companyUuid}&sessionId=${chatSessionId}`)
+    fetch(`http://localhost:5001/api/form-response?companyId=${companyUuid}&sessionId=${chatSessionId}`)
       .then(res => res.json())
-      .then(responses => {
+      .then((responses: any[]) => {
         // Convert form responses to chat messages
-        const formMessages = responses.map(response => ({
+        const formMessages: ChatMessage[] = responses.map(response => ({
           sessionId: response.sessionId,
           message: `📋 **Form Submitted**\n${Object.entries(response.values).map(([field, value]) => `**${field}:** ${value}`).join('\n')}`,
           from: 'visitor',
           timestamp: response.timestamp,
-          type: 'form-response',
-          formData: response
         }));
         
         // Combine regular messages and form responses, sorted by timestamp
@@ -434,117 +485,91 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
     return () => clearTimeout(timeout);
   }, [chatInput, mode, open, chatSessionId]);
 
-  // Listen for agent typing
+  // Listen for typing indicators
   useEffect(() => {
-    if (!socketRef.current || mode !== 'chat' || !open) return;
+    if (!socketRef.current) return;
     const socket = socketRef.current;
-    const onTyping = (data) => {
+    const onTyping = (data: { from: string; typing: boolean }) => {
       if (data.from === 'agent') {
-        setAgentTyping(true);
-        setTimeout(() => setAgentTyping(false), 1200);
+        setAgentTyping(data.typing);
       }
     };
     socket.on('chat:typing', onTyping);
     return () => socket.off('chat:typing', onTyping);
   }, [mode, open]);
 
-  // Send chat message
   const handleSendChat = async () => {
     if (!chatInput.trim() || !chatSessionId || !socketRef.current) return;
-    const msg = {
+    
+    const msg: ChatMessage = {
       sessionId: chatSessionId,
       message: chatInput.trim(),
       from: 'visitor',
       timestamp: new Date().toISOString()
     };
-    // Persist to backend
-    if (companyUuid) {
-      await fetch('http://localhost:5000/api/chat-messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          companyId: companyUuid,
-          sessionId: chatSessionId,
-          from: 'visitor',
-          message: chatInput.trim(),
-          timestamp: msg.timestamp
-        })
-      });
-    }
+    
     socketRef.current.emit('chat:message', msg);
     setChatMessages(msgs => [...msgs, msg]);
     setChatInput('');
   };
 
-  // Handle speech recognition
   const startListening = () => {
     if (!('webkitSpeechRecognition' in window)) {
       setMessages(msgs => [...msgs, { from: 'system', text: 'Speech recognition not supported in this browser.' }]);
       return;
     }
-    setListening(true);
-    const recognition = new window.webkitSpeechRecognition();
-    recognition.lang = 'en-US';
+    
+    const recognition = new (window as any).webkitSpeechRecognition();
+    recognition.continuous = false;
     recognition.interimResults = false;
-    recognition.onresult = (event) => {
+    recognition.lang = 'en-US';
+    
+    recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
       setInput(transcript);
-      setListening(false);
       handleSend(transcript);
     };
-    recognition.onerror = () => setListening(false);
-    recognition.onend = () => setListening(false);
+    
     recognition.start();
+    setListening(true);
     recognitionRef.current = recognition;
   };
+
   const stopListening = () => {
     if (recognitionRef.current) recognitionRef.current.stop();
-    setListening(false);
   };
 
-  // Handle sending input with multi-step logic
-  const handleSend = (val) => {
-    if (!ivrConfig) return;
-    const value = (val || input).trim();
-    if (!value) return;
-    setMessages(msgs => [...msgs, { from: 'user', text: value }]);
+  const handleSend = (val: string) => {
+    if (!val.trim()) return;
+    
+    setMessages(msgs => [...msgs, { from: 'user', text: val }]);
     setInput('');
-    setLoading(true);
-    setTimeout(() => {
-      const step = ivrConfig.steps[ivrStep];
-      const key = value.toLowerCase();
-      let route = step.routes[key];
-      if (!route && key === '1') route = step.routes['1'];
-      if (!route && key === '2') route = step.routes['2'];
-      if (!route && key.includes('sales')) route = step.routes['sales'];
-      if (!route && key.includes('support')) route = step.routes['support'];
-      if (route) {
-        // If route has nextStep, move to that step
-        if (typeof route.nextStep === 'number' && ivrConfig.steps[route.nextStep]) {
-          setIvrStep(route.nextStep);
-          setMessages(msgs => [...msgs, { from: 'system', text: ivrConfig.steps[route.nextStep].prompt, audio: ivrConfig.steps[route.nextStep].audio }]);
-        } else if (route.prompt) {
-          setMessages(msgs => [...msgs, { from: 'system', text: route.prompt, audio: route.audio }]);
-        } else {
-          setMessages(msgs => [...msgs, { from: 'system', text: 'Thank you. (End of IVR)' }]);
-        }
+    
+    if (!ivrConfig) return;
+    
+    const step = ivrConfig.steps[ivrStep];
+    const route = step.routes[val.toLowerCase()];
+    
+    if (route) {
+      if (typeof route.nextStep === 'number' && ivrConfig.steps[route.nextStep]) {
+        setIvrStep(route.nextStep);
+        setMessages(msgs => [...msgs, { from: 'system', text: ivrConfig.steps[route.nextStep].prompt, audio: ivrConfig.steps[route.nextStep].audio }]);
       } else {
-        setMessages(msgs => [...msgs, { from: 'system', text: step.fallback?.prompt || 'Sorry, try again.' }]);
+        setMessages(msgs => [...msgs, { from: 'system', text: route.prompt, audio: route.audio }]);
       }
-      setLoading(false);
-    }, 900);
+    } else {
+      setMessages(msgs => [...msgs, { from: 'system', text: step.fallback?.prompt || 'Sorry, try again.' }]);
+    }
   };
 
-  // Handle form field change
-  const handleFormFieldChange = (label, value) => {
-    setFormValues(vals => ({ ...vals, [label]: value }));
+  const handleFormFieldChange = (label: string, value: string) => {
+    setFormValues(prev => ({ ...prev, [label]: value }));
   };
 
-  // Handle form submit
   const handleFormSubmit = async () => {
     if (!activeForm || !companyUuid || !chatSessionId) return;
     setFormSubmitting(true);
-    const res = await fetch('http://localhost:5000/api/form-response', {
+    const res = await fetch('http://localhost:5001/api/form-response', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -564,21 +589,45 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
     setFormSubmitting(false);
   };
 
-  // Start call handler
-  const handleStartCall = () => {
+  const handleStartCall = async () => {
     setCallState('ringing');
     setCallError('');
     setAgentSocketId(null);
     setInCall(false);
     setCallStart(null);
-    setTimeout(() => {
-      if (socketRef.current && companyUuid) {
-        socketRef.current.emit('call-request', { uuid: companyUuid });
+    try {
+      const visitorId = uuidv4();
+      const pageUrl = window.location.href;
+      console.log('[IVRChatWidget] Starting call. Params:', { companyUuid, visitorId, pageUrl });
+      const response = await fetch('http://localhost:5001/api/widget/route-call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyUuid, visitorId, pageUrl, callType: 'chat' }),
+      });
+      const data = await response.json();
+      console.log('[IVRChatWidget] /api/widget/route-call response:', data);
+      if (response.ok && data.success) {
+        setCallState('in-call');
+        setInCall(true);
+        setCallStart(new Date());
+        if (data.sessionId) {
+          console.log('[IVRChatWidget] Chat session created:', data.sessionId);
+        }
+        setMessages(prev => [...prev, { from: 'system', text: data.message || 'Call connected successfully!' }]);
+      } else {
+        console.error('[IVRChatWidget] Call routing failed:', data);
+        setCallError(data.error || 'Failed to connect call');
+        setCallState('ended');
+        setTimeout(() => setCallState('idle'), 2000);
       }
-    }, 200);
+    } catch (error) {
+      console.error('[IVRChatWidget] Error starting call:', error);
+      setCallError('Network error - please try again');
+      setCallState('ended');
+      setTimeout(() => setCallState('idle'), 2000);
+    }
   };
 
-  // Hang up handler
   const handleHangUp = () => {
     setCallState('ended');
     setInCall(false);
@@ -617,31 +666,35 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
   const agentBubbleStyle = {
     background: '#fff',
     color: '#222',
-    borderRadius: 16,
-    padding: '10px 16px',
-    margin: '4px 0',
+    borderRadius: 18,
+    padding: '12px 18px',
+    margin: '6px 0',
     maxWidth: '80%',
     alignSelf: 'flex-start',
-    boxShadow: '0 1px 4px rgba(44,62,80,0.07)'
+    border: '2px solid #F6C23E33',
+    boxShadow: '0 2px 8px #F6C23E22, 0 1px 4px #00e6ef11',
   };
   const visitorBubbleStyle = {
-    background: 'linear-gradient(90deg, #2E73FF 0%, #6C47FF 100%)',
+    background: 'linear-gradient(90deg, #2E73FF 0%, #00e6ef 100%)',
     color: '#fff',
-    borderRadius: 16,
-    padding: '10px 16px',
-    margin: '4px 0',
+    borderRadius: 18,
+    padding: '12px 18px',
+    margin: '6px 0',
     maxWidth: '80%',
     alignSelf: 'flex-end',
-    boxShadow: '0 1px 4px rgba(44,62,80,0.12)'
+    border: '2px solid #F6C23E33',
+    boxShadow: '0 2px 8px #F6C23E22, 0 1px 4px #00e6ef11',
   };
   const chatContainerStyle = {
-    display: 'flex', flexDirection: 'column', height: 340, overflowY: 'auto', background: '#f7fafd', padding: 16, borderRadius: 16, marginBottom: 8
+    display: 'flex', flexDirection: 'column', height: 340, overflowY: 'auto', background: '#fff', padding: 18, borderRadius: 20, marginBottom: 8,
+    border: '2px solid #F6C23E33',
+    boxShadow: '0 4px 24px #F6C23E22, 0 2px 8px #00e6ef22',
   };
   const inputBarStyle = {
-    display: 'flex', alignItems: 'center', background: '#fff', borderRadius: 24, boxShadow: '0 1px 4px rgba(44,62,80,0.07)', padding: '4px 12px', margin: '0 8px 8px 8px'
+    display: 'flex', alignItems: 'center', background: '#fff', borderRadius: 24, boxShadow: '0 1px 4px #F6C23E22', padding: '4px 12px', margin: '0 8px 8px 8px', border: '2px solid #F6C23E33'
   };
   const sendBtnStyle = {
-    background: 'linear-gradient(90deg, #2E73FF 0%, #6C47FF 100%)',
+    background: 'linear-gradient(90deg, #2E73FF 0%, #00e6ef 100%)',
     borderRadius: '50%',
     width: 40,
     height: 40,
@@ -649,11 +702,11 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 8,
-    boxShadow: '0 2px 8px rgba(44,62,80,0.12)',
+    boxShadow: '0 2px 8px #F6C23E22',
     color: '#fff',
     fontSize: 22,
-    border: 'none',
-    cursor: 'pointer'
+    border: '2px solid #F6C23E',
+    cursor: 'pointer',
   };
 
   // Responsive modal width
@@ -686,6 +739,67 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
     return null;
   }
 
+  // When agentsOnline changes to false in chat mode, show contact form
+  useEffect(() => {
+    if (mode === 'chat' && !agentsOnline && open) {
+      setShowContactForm(true);
+    } else {
+      setShowContactForm(false);
+    }
+  }, [mode, agentsOnline, open]);
+
+  const handleContactFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setContactForm(f => ({ ...f, [e.target.name]: e.target.value }));
+  };
+
+  const handleContactFormSubmit = async () => {
+    setContactLoading(true);
+    try {
+      const res = await fetch('/api/widget/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contactForm)
+      });
+      if (res.ok) {
+        setContactSuccess(true);
+        setContactForm({ name: '', email: '', phone: '', message: '' });
+        setTimeout(() => setShowContactForm(false), 2000);
+      } else {
+        setContactSuccess(false);
+      }
+    } catch (e) {
+      setContactSuccess(false);
+    }
+    setContactLoading(false);
+  };
+
+  // In chat mode, show offline contact form if no agents online
+  if (mode === 'chat' && !agentsOnline && showContactForm) {
+    return (
+      <Modal open={open} onCancel={onClose} footer={null} width={400} centered>
+        <div style={{ padding: 32, textAlign: 'center' }}>
+          <RobotOutlined style={{ fontSize: 48, color: '#aaa', marginBottom: 16 }} />
+          <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>All agents are offline</div>
+          <div style={{ color: '#888', marginBottom: 24 }}>Leave us a message and we will get back to you.</div>
+          {contactSuccess ? (
+            <div style={{ color: '#2E73FF', fontWeight: 700, fontSize: 18, margin: '24px 0' }}>Thank you! Your message has been sent.</div>
+          ) : (
+            <form onSubmit={e => { e.preventDefault(); handleContactFormSubmit(); }} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <Input name="name" value={contactForm.name} onChange={handleContactFormChange} placeholder="Your Name" size="large" style={{ borderRadius: 12, border: '2px solid #F6C23E' }} required />
+              <Input name="email" value={contactForm.email} onChange={handleContactFormChange} placeholder="Email Address" size="large" style={{ borderRadius: 12, border: '2px solid #F6C23E' }} required />
+              <Input name="phone" value={contactForm.phone} onChange={handleContactFormChange} placeholder="Phone Number" size="large" style={{ borderRadius: 12, border: '2px solid #F6C23E' }} />
+              <Input.TextArea name="message" value={contactForm.message} onChange={handleContactFormChange} placeholder="How can we help you?" rows={4} style={{ borderRadius: 12, border: '2px solid #F6C23E' }} required />
+              <Button type="primary" size="large" loading={contactLoading} style={{ borderRadius: 12, background: 'linear-gradient(90deg, #2E73FF 0%, #00e6ef 100%)', fontWeight: 700, fontSize: 18, marginTop: 8 }} htmlType="submit" block>
+                Send Message
+              </Button>
+            </form>
+          )}
+          <Button style={{ marginTop: 16 }} onClick={() => setMode('call')}>Back</Button>
+        </div>
+      </Modal>
+    );
+  }
+
   // In chat mode, show offline banner if no agents online
   if (mode === 'chat' && !agentsOnline) {
     return (
@@ -706,45 +820,51 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
       onCancel={onClose}
       footer={null}
       width={400}
-      centered
+      centered={false}
       styles={{
-        body: { 
-          padding: 0, 
-          borderRadius: (callState === 'in-call' || callState === 'ringing') ? 32 : 24, 
-          overflow: 'hidden', 
-          background: '#f7fafd',
+        body: {
+          padding: 0,
+          borderRadius: 28,
+          overflow: 'hidden',
+          background: 'linear-gradient(120deg, #2E73FF 0%, #00e6ef 100%)',
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          boxShadow: (callState === 'in-call' || callState === 'ringing') 
-            ? '0 20px 40px rgba(46, 115, 255, 0.15), 0 8px 16px rgba(0, 0, 0, 0.1)' 
-            : '0 8px 24px rgba(0, 0, 0, 0.12)',
-          transform: (callState === 'in-call' || callState === 'ringing') ? 'scale(1.02)' : 'scale(1)',
-          border: (callState === 'in-call' || callState === 'ringing') ? '2px solid rgba(46, 115, 255, 0.2)' : 'none'
+          boxShadow: '0 8px 32px #2E73FF33, 0 2px 8px #00e6ef22, 0 1.5px 6px #F6C23E22',
+          border: '3px solid #F6C23E',
+          position: 'fixed',
+          right: 24,
+          bottom: 24,
+          margin: 0,
         }
       }}
-      style={{ 
-        top: 'auto', 
-        bottom: 24, 
-        right: 24, 
-        margin: 0, 
+      style={{
+        top: 'auto',
+        bottom: 24,
+        right: 24,
+        left: 'auto',
+        margin: 0,
         padding: 0,
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+        position: 'fixed',
+        boxShadow: 'none',
+        zIndex: 1200,
       }}
       closeIcon={
-        <span style={{ 
-          fontSize: 22, 
-          color: '#2E73FF',
+        <span style={{
+          fontSize: 22,
+          color: '#F6C23E',
+          background: 'rgba(46, 115, 255, 0.08)',
           transition: 'all 0.2s ease',
           cursor: 'pointer',
           padding: '4px',
           borderRadius: '50%',
-          display: 'inline-block'
-        }} 
-        onMouseEnter={(e) => {
-          e.target.style.background = 'rgba(46, 115, 255, 0.1)';
+          display: 'inline-block',
+          border: '2px solid #F6C23E',
+        }}
+        onMouseEnter={e => {
+          e.target.style.background = '#F6C23E22';
           e.target.style.transform = 'scale(1.1)';
         }}
-        onMouseLeave={(e) => {
-          e.target.style.background = 'transparent';
+        onMouseLeave={e => {
+          e.target.style.background = 'rgba(46, 115, 255, 0.08)';
           e.target.style.transform = 'scale(1)';
         }}
         >×</span>
@@ -753,30 +873,50 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
       maskClosable={true}
       zIndex={1200}
     >
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        marginBottom: 16,
-        transition: 'all 0.3s ease'
+      {/* Header with logo and gradient */}
+      <div style={{
+        background: 'linear-gradient(120deg, #2E73FF 0%, #00e6ef 100%)',
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        borderBottom: '2.5px solid #F6C23E',
+        padding: '18px 0 10px 0',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        boxShadow: '0 2px 12px #F6C23E22',
       }}>
-        <img 
-          src={logoSrc || logoLight} 
-          alt="Calldock Widget Logo" 
-          style={{ 
-            width: 48, 
-            height: 48, 
-            objectFit: 'contain', 
-            marginTop: 8,
-            transition: 'all 0.3s ease',
-            transform: (callState === 'in-call' || callState === 'ringing') ? 'scale(1.1)' : 'scale(1)',
-            filter: (callState === 'in-call' || callState === 'ringing') ? 'drop-shadow(0 4px 8px rgba(46, 115, 255, 0.3))' : 'none'
-          }} 
-        />
+        <div style={{
+          width: 56,
+          height: 56,
+          borderRadius: '50%',
+          background: '#fff',
+          border: '3px solid #F6C23E',
+          boxShadow: '0 2px 12px #F6C23E22',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <img
+            src={logoSrc || logoLight}
+            alt="Calldock Widget Logo"
+            style={{ width: 38, height: 38, objectFit: 'contain', borderRadius: '50%' }}
+          />
+        </div>
+        <div style={{
+          color: '#fff',
+          fontWeight: 900,
+          fontSize: 20,
+          marginTop: 8,
+          letterSpacing: 0.5,
+          textShadow: '0 2px 8px #2E73FF55',
+        }}>Chat with Us</div>
       </div>
-      <div style={{ 
-        padding: 16,
-        transition: 'all 0.3s ease'
+      {/* Main chat area, single rounded container */}
+      <div style={{
+        padding: 0,
+        background: 'transparent',
+        borderRadius: 0,
       }}>
         {mode === 'call' && (
           <>
@@ -824,7 +964,7 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
               <Input
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                onPressEnter={() => handleSend()}
+                onPressEnter={() => handleSend(input)}
                 placeholder="Type or speak..."
                 disabled={loading || callState === 'ended'}
                 style={{ 
@@ -848,7 +988,7 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }) {
               <Button 
                 icon={<SendOutlined />} 
                 type="primary" 
-                onClick={() => handleSend()} 
+                onClick={() => handleSend(input)} 
                 disabled={!input || loading}
                 style={{
                   borderRadius: (callState === 'in-call' || callState === 'ringing') ? 20 : 6,

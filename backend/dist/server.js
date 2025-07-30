@@ -29,6 +29,8 @@ exports.generateId = generateId;
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
 const io = new socket_io_1.Server(server, { cors: { origin: '*' } });
+// Expose io on app for use in routes
+app.set('io', io);
 app.use((0, cors_1.default)());
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use('/api/widget', widget_1.default);
@@ -507,6 +509,16 @@ const tempStorage = {
             suspended: false,
             createdAt: new Date().toISOString(),
             status: 'rejected'
+        },
+        {
+            uuid: 'demo-company-uuid',
+            name: 'Demo Company',
+            companyName: 'Demo Company',
+            displayName: 'Demo Company',
+            email: 'demo@company.com',
+            verified: true,
+            createdAt: new Date().toISOString(),
+            status: 'approved'
         }
     ],
     agents: [
@@ -544,6 +556,15 @@ const tempStorage = {
             email: 'rejected@agent.com',
             status: 'offline',
             registrationStatus: 'rejected',
+            createdAt: new Date().toISOString()
+        },
+        {
+            uuid: 'demo-agent-001',
+            companyUuid: 'demo-company-uuid',
+            username: 'agent1',
+            email: 'agent1@demo.com',
+            status: 'online',
+            registrationStatus: 'approved',
             createdAt: new Date().toISOString()
         }
     ],
@@ -853,7 +874,9 @@ const tempStorage = {
     // Agent Management System
     agentAssignments: [],
     // Call Analytics
-    callAnalytics: []
+    callAnalytics: [],
+    // Unified Session Management
+    sessions: []
 };
 // Add sample data for testing
 tempStorage.calls = [
@@ -939,6 +962,40 @@ tempStorage.callAnalytics = [
         satisfaction: 4.2,
         responseTime: 45,
         date: new Date().toISOString()
+    }
+];
+// Add sample data for sessions
+tempStorage.sessions = [
+    {
+        sessionId: 'session-001',
+        companyUuid: 'company-001',
+        visitorId: 'visitor-123',
+        agentId: 'agent-001',
+        type: 'call',
+        status: 'active',
+        createdAt: new Date(Date.now() - 300000).toISOString(),
+        startedAt: new Date(Date.now() - 300000).toISOString()
+    },
+    {
+        sessionId: 'session-002',
+        companyUuid: 'company-002',
+        visitorId: 'visitor-456',
+        agentId: 'agent-002',
+        type: 'call',
+        status: 'active',
+        createdAt: new Date(Date.now() - 600000).toISOString(),
+        startedAt: new Date(Date.now() - 600000).toISOString()
+    },
+    {
+        sessionId: 'session-003',
+        companyUuid: 'company-001',
+        visitorId: 'visitor-789',
+        agentId: 'agent-001',
+        type: 'call',
+        status: 'ended',
+        createdAt: new Date(Date.now() - 3600000).toISOString(),
+        startedAt: new Date(Date.now() - 3600000).toISOString(),
+        endedAt: new Date(Date.now() - 3540000).toISOString()
     }
 ];
 // Make tempStorage globally accessible for socket handlers

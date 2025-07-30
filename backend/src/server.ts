@@ -26,6 +26,9 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
+// Expose io on app for use in routes
+app.set('io', io);
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
@@ -750,6 +753,20 @@ export interface TempStorage {
     responseTime: number;
     date: string;
   }>;
+  // Unified Session Management
+  sessions: Array<{
+    sessionId: string;
+    companyUuid: string;
+    visitorId: string;
+    agentId?: string;
+    type: 'call' | 'chat';
+    status: 'waiting' | 'ringing' | 'active' | 'ended';
+    createdAt: string;
+    startedAt?: string;
+    endedAt?: string;
+    pageUrl?: string;
+    queuePosition?: number;
+  }>;
 }
 
 // Initialize temporary storage with sample data
@@ -792,6 +809,16 @@ const tempStorage: TempStorage = {
       suspended: false,
       createdAt: new Date().toISOString(),
       status: 'rejected'
+    },
+    {
+      uuid: 'demo-company-uuid',
+      name: 'Demo Company',
+      companyName: 'Demo Company',
+      displayName: 'Demo Company',
+      email: 'demo@company.com',
+      verified: true,
+      createdAt: new Date().toISOString(),
+      status: 'approved'
     }
   ],
   agents: [
@@ -829,6 +856,15 @@ const tempStorage: TempStorage = {
       email: 'rejected@agent.com',
       status: 'offline',
       registrationStatus: 'rejected',
+      createdAt: new Date().toISOString()
+    },
+    {
+      uuid: 'demo-agent-001',
+      companyUuid: 'demo-company-uuid',
+      username: 'agent1',
+      email: 'agent1@demo.com',
+      status: 'online',
+      registrationStatus: 'approved',
       createdAt: new Date().toISOString()
     }
   ],
@@ -1138,7 +1174,9 @@ const tempStorage: TempStorage = {
   // Agent Management System
   agentAssignments: [],
   // Call Analytics
-  callAnalytics: []
+  callAnalytics: [],
+  // Unified Session Management
+  sessions: []
 };
 
 // Add sample data for testing
@@ -1227,6 +1265,41 @@ tempStorage.callAnalytics = [
     satisfaction: 4.2,
     responseTime: 45,
     date: new Date().toISOString()
+  }
+];
+
+// Add sample data for sessions
+tempStorage.sessions = [
+  {
+    sessionId: 'session-001',
+    companyUuid: 'company-001',
+    visitorId: 'visitor-123',
+    agentId: 'agent-001',
+    type: 'call',
+    status: 'active',
+    createdAt: new Date(Date.now() - 300000).toISOString(),
+    startedAt: new Date(Date.now() - 300000).toISOString()
+  },
+  {
+    sessionId: 'session-002',
+    companyUuid: 'company-002',
+    visitorId: 'visitor-456',
+    agentId: 'agent-002',
+    type: 'call',
+    status: 'active',
+    createdAt: new Date(Date.now() - 600000).toISOString(),
+    startedAt: new Date(Date.now() - 600000).toISOString()
+  },
+  {
+    sessionId: 'session-003',
+    companyUuid: 'company-001',
+    visitorId: 'visitor-789',
+    agentId: 'agent-001',
+    type: 'call',
+    status: 'ended',
+    createdAt: new Date(Date.now() - 3600000).toISOString(),
+    startedAt: new Date(Date.now() - 3600000).toISOString(),
+    endedAt: new Date(Date.now() - 3540000).toISOString()
   }
 ];
 

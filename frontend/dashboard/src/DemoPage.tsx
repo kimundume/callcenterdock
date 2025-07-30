@@ -82,7 +82,7 @@ export default function DemoPage() {
   // Save & reload widget (simulate reloading with new config)
   const handleReloadWidget = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/widget/demo/settings/${config.companyUuid}`, {
+      const res = await fetch(`http://localhost:5001/api/widget/demo/settings/${config.companyUuid}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -97,7 +97,7 @@ export default function DemoPage() {
       });
       if (!res.ok) throw new Error('Failed to save widget config');
       // Fetch latest config
-      const getRes = await fetch(`http://localhost:5000/api/widget/settings/${config.companyUuid}`);
+      const getRes = await fetch(`http://localhost:5001/api/widget/settings/${config.companyUuid}`);
       const saved = await getRes.json();
       setConfig(prev => ({ ...prev, ...saved, imageUrl: saved.img, img: saved.img }));
       setWidgetKey(prev => prev + 1);
@@ -115,7 +115,7 @@ export default function DemoPage() {
 
   const createDemoAgent = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/widget/demo/create-demo-agent', {
+      const res = await fetch('http://localhost:5001/api/widget/demo/create-demo-agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyUuid: config.companyUuid, username: DEMO_AGENT_USERNAME, password: DEMO_AGENT_PASSWORD })
@@ -204,7 +204,7 @@ export default function DemoPage() {
               style={widgetBtnStyle}
               onClick={() => setWidgetOpen(true)}
             >
-              {(config.imageUrl || config.img) ? <img src={config.imageUrl || config.img} alt="icon" style={{ width: 32, height: 32, borderRadius: 8 }} /> : '🤖'}
+              {(config.imageUrl || config.img) ? <img src={config.imageUrl || config.img} alt="icon" style={{ width: 32, height: 32, borderRadius: 8 }} /> : <img src={logoLight} alt="Calldock Widget Logo" style={{ width: 32, height: 32, borderRadius: 16, background: '#fff', border: '2px solid #F6C23E', padding: 2 }} />}
               <span style={{ marginLeft: 8, fontWeight: 700, fontSize: 18 }}>{config.buttonText}</span>
             </Button>
             {/* Key forces remount for config reload */}

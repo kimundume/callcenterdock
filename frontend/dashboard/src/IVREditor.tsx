@@ -20,7 +20,7 @@ export default function IVREditor() {
 
   useEffect(() => {
     if (!companyUuid) return;
-    fetch(`http://localhost:5000/api/widget/ivr/${companyUuid}`)
+    fetch(`http://localhost:5001/api/widget/ivr/${companyUuid}`)
       .then(res => res.json())
       .then(cfg => {
         if (cfg && cfg.steps) {
@@ -85,7 +85,7 @@ export default function IVREditor() {
     setLoading(true);
     try {
       console.log('IVREditor: Saving steps:', steps);
-      const res = await fetch(`http://localhost:5000/api/widget/demo/ivr/${companyUuid}`, {
+      const res = await fetch(`http://localhost:5001/api/widget/demo/ivr/${companyUuid}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ steps })
@@ -93,7 +93,7 @@ export default function IVREditor() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save IVR');
       // Reload config after save
-      fetch(`http://localhost:5000/api/widget/ivr/${companyUuid}`)
+      fetch(`http://localhost:5001/api/widget/ivr/${companyUuid}`)
         .then(res => res.json())
         .then(cfg => {
           if (cfg && cfg.steps) {
