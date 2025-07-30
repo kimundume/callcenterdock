@@ -1,0 +1,9 @@
+{
+  "demo-company-uuid": {
+    "uuid": "demo-company-uuid",
+    "name": "Demo Company",
+    "email": "demo@company.com",
+    "verified": true,
+    "createdAt": "2025-07-30T00:00:00.000Z"
+  }
+} 

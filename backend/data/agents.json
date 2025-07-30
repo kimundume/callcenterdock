@@ -1,0 +1,12 @@
+{
+  "agent1": {
+    "uuid": "demo-agent-uuid",
+    "companyUuid": "demo-company-uuid",
+    "username": "agent1",
+    "password": "password",
+    "email": "agent1@demo.com",
+    "status": "online",
+    "registrationStatus": "approved",
+    "createdAt": "2025-07-30T00:00:00.000Z"
+  }
+} 
