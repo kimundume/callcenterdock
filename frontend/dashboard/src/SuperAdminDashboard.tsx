@@ -66,8 +66,8 @@ import {
   LinearScale,
   BarElement,
   LineElement,
-  Title,
-  Tooltip,
+  Title as ChartTitle,
+  Tooltip as ChartTooltip,
   Legend,
   PointElement,
 } from 'chart.js';
@@ -141,8 +141,8 @@ ChartJS.register(
   LinearScale,
   BarElement,
   LineElement,
-  Title,
-  Tooltip,
+  ChartTitle,
+  ChartTooltip,
   Legend,
   PointElement
 );
