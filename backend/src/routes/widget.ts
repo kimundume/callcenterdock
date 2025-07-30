@@ -1573,6 +1573,26 @@ router.post('/test-call', async (req: Request, res: Response) => {
     
     console.log(`[Widget] Test call created: ${sessionId} assigned to agent ${randomAgent.username}`);
     
+    // Emit socket event to notify the agent dashboard
+    // We need to access the io instance from the server
+    const io = (req as any).app.get('io');
+    if (io) {
+      // Emit to the specific agent's socket room
+      io.to(`agent-${randomAgent.username}`).emit('incoming-call', {
+        sessionId,
+        companyUuid,
+        visitorId: `test-visitor-${Date.now()}`,
+        pageUrl: 'Test Widget',
+        callType: 'test',
+        fromSocketId: 'test-widget',
+        test: true,
+        agent: randomAgent.username
+      });
+      console.log(`[Widget] Emitted incoming-call event to agent ${randomAgent.username}`);
+    } else {
+      console.log('[Widget] Warning: io instance not available for socket emission');
+    }
+    
     res.json({ 
       success: true, 
       message: `Test call sent to agent ${randomAgent.username}`,

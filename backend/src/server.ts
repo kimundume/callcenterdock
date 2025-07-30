@@ -1670,6 +1670,9 @@ app.put('/api/contacts/:contactId/tags', async (req, res) => {
 
 registerSignalingHandlers(io);
 
+// Make io instance available to routes
+app.set('io', io);
+
 // Serve widget files
 app.get('/widget.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');

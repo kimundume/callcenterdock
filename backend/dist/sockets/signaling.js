@@ -21,6 +21,15 @@ function registerSignalingHandlers(io) {
                 socket.emit('agent-registered', { success: true });
             }
         });
+        // Join room for agent-specific events
+        socket.on('join-room', (data) => {
+            const { room } = data;
+            if (room) {
+                socket.join(room);
+                console.log(`Socket ${socket.id} joined room: ${room}`);
+            }
+        });
+        // Agent status update
         // Call request and queueing
         socket.on('call-request', (data) => {
             const { uuid } = data;

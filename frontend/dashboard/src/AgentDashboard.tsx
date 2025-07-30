@@ -147,6 +147,10 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
     socketRef.current = socket;
     socket.emit('register-agent', { uuid: companyUuid, agentId: agentUsername });
     
+    // Join agent-specific room for receiving calls
+    socket.emit('join-room', { room: `agent-${agentUsername}` });
+    console.log(`[AgentDashboard] Joined room: agent-${agentUsername}`);
+    
     // Set agent status to online when connecting
     const setAgentOnline = async () => {
       try {
