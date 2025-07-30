@@ -59,6 +59,18 @@ import {
   theme,
   App
 } from 'antd';
+import { Bar, Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  PointElement,
+} from 'chart.js';
 import {
   DashboardOutlined,
   UserOutlined,
@@ -122,6 +134,18 @@ import {
 } from '@ant-design/icons';
 import { API_ENDPOINTS, getBackendUrl } from './config';
 import SuperAdminSidebar from './SuperAdminSidebar';
+
+// Register Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  PointElement
+);
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;

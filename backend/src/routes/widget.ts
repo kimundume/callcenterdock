@@ -1110,7 +1110,7 @@ router.post('/agent/status', (req, res) => {
     return res.status(400).json({ error: 'Invalid agent UUID or status' });
   }
   
-  const agent = global.tempStorage.agents.find((a: any) => a.uuid === agentUuid);
+  const agent = agents[agentUuid];
   if (!agent) {
     return res.status(404).json({ error: 'Agent not found' });
   }
@@ -1121,19 +1121,9 @@ router.post('/agent/status', (req, res) => {
   
   agent.status = status;
   agent.updatedAt = new Date().toISOString();
+  saveAgents();
   
-  console.log(`[Widget] Agent ${agent.username} (${agentUuid}) status changed to ${status}`);
-  
-  res.json({ 
-    success: true, 
-    message: `Agent status updated to ${status}`,
-    agent: {
-      uuid: agent.uuid,
-      username: agent.username,
-      status: agent.status,
-      updatedAt: agent.updatedAt
-    }
-  });
+  res.json({ success: true, agent });
 });
 
 // GET /api/widget/agent/status/:agentUuid
@@ -1162,17 +1152,17 @@ router.get('/agents/online', (req, res) => {
   
   if (companyUuid) {
     // Get online agents for specific company
-    onlineAgents = global.tempStorage.agents.filter((agent: any) => 
+    onlineAgents = Object.values(agents).filter((agent: any) => 
       agent.companyUuid === companyUuid &&
       agent.registrationStatus === 'approved' &&
       agent.status === 'online'
     );
   } else {
     // Get all online agents (for public routing)
-    onlineAgents = global.tempStorage.agents.filter((agent: any) => 
+    onlineAgents = Object.values(agents).filter((agent: any) => 
       agent.registrationStatus === 'approved' &&
       agent.status === 'online' &&
-      Object.values(global.tempStorage.companies).find((company: any) => 
+      Object.values(companies).find((company: any) => 
         company.uuid === agent.companyUuid && 
         company.status === 'approved'
       )
