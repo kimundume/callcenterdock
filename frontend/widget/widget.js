@@ -13,7 +13,16 @@
   };
 
   const BACKEND_URL = getBackendUrl();
-  const COMPANY_UUID = window.CALLDOCKER_COMPANY_UUID || 'demo-company-uuid'; // ✅ Use correct company UUID
+  
+  // Get company UUID from widget configuration
+  const getCompanyUuid = () => {
+    // Check if widget config is available
+    if (window.CallDockerWidget && window.CallDockerWidget.config && window.CallDockerWidget.config.uuid) {
+      return window.CallDockerWidget.config.uuid;
+    }
+    // Fallback to global variable or demo UUID
+    return window.CALLDOCKER_COMPANY_UUID || 'demo-company-uuid';
+  };
 
   let socket = null;
   let peerConnection = null;
@@ -75,7 +84,7 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        companyUuid: COMPANY_UUID,
+        companyUuid: getCompanyUuid(),
         visitorId: getVisitorId(),
         pageUrl: window.location.href,
         callType: 'call'
@@ -105,7 +114,7 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        companyUuid: COMPANY_UUID,
+        companyUuid: getCompanyUuid(),
         visitorId: getVisitorId(),
         pageUrl: window.location.href,
         callType: 'chat'
@@ -302,5 +311,67 @@
     muteBtn.innerText = isMuted ? 'Unmute' : 'Mute';
   }
 
-  loadSocketIo(createWidget);
+  // Widget initialization function
+  function init(config, widgetId) {
+    console.log('[Widget] Initializing with config:', config);
+    
+    // Store config globally
+    window.CallDockerWidget = window.CallDockerWidget || {};
+    window.CallDockerWidget.config = config;
+    window.CallDockerWidget.widgetId = widgetId;
+    
+    // Create widget with custom styling
+    const callBtn = document.createElement('button');
+    callBtn.innerText = config.text || 'Call Us';
+    callBtn.style = `
+      position: fixed; 
+      bottom: 20px; 
+      right: 20px; 
+      z-index: 9999; 
+      padding: 12px 24px; 
+      background: ${config.color || '#007bff'}; 
+      color: #fff; 
+      border: none; 
+      border-radius: ${config.shape === 'round' ? '24px' : '8px'}; 
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15); 
+      cursor: pointer; 
+      font-size: 16px;
+      animation: ${config.animation || 'none'};
+    `;
+    callBtn.onclick = startCall;
+    callBtn.id = widgetId + '-call';
+    document.body.appendChild(callBtn);
+
+    const chatBtn = document.createElement('button');
+    chatBtn.innerText = 'Chat Us';
+    chatBtn.style = `
+      position: fixed; 
+      bottom: 20px; 
+      right: ${config.position === 'bottom-right' ? '120px' : '20px'}; 
+      z-index: 9999; 
+      padding: 12px 24px; 
+      background: #6c757d; 
+      color: #fff; 
+      border: none; 
+      border-radius: ${config.shape === 'round' ? '24px' : '8px'}; 
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15); 
+      cursor: pointer; 
+      font-size: 16px;
+      animation: ${config.animation || 'none'};
+    `;
+    chatBtn.onclick = startChat;
+    chatBtn.id = widgetId + '-chat';
+    document.body.appendChild(chatBtn);
+    
+    console.log('[Widget] Widget initialized successfully');
+  }
+
+  // Expose init function globally
+  window.CallDockerWidget = window.CallDockerWidget || {};
+  window.CallDockerWidget.init = init;
+
+  // Auto-initialize if no config is provided (for backward compatibility)
+  if (!window.CallDockerWidget.config) {
+    loadSocketIo(createWidget);
+  }
 })(); 
