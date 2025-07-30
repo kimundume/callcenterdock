@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import './App.css';
+import './style.css';
 // import logoLight from '/logo-light.png'; // Removed problematic import
 import LandingPage from './LandingPage';
 import AdminDashboard from './AdminDashboard';
