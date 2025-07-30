@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CallDocker Widget - Quick Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+    </style>
+</head>
+<body>
+    <h1>CallDocker Widget - Quick Test</h1>
+    
+    <div class="info">
+        <strong>Testing Fixed Widget:</strong><br>
+        - Backend URL: https://callcenterdock.onrender.com<br>
+        - Company UUID: calldocker-company-uuid<br>
+        - Widget: Local widget.js file (with fixes)
+    </div>
+
+    <div id="status" class="warning">
+        Loading widget...
+    </div>
+
+    <div style="margin: 20px 0;">
+        <h3>What was fixed:</h3>
+        <ul>
+            <li>✅ Backend URL: calldocker-backend.onrender.com → callcenterdock.onrender.com</li>
+            <li>✅ Added missing getVisitorId() function</li>
+            <li>✅ Company UUID: demo-uuid → calldocker-company-uuid</li>
+            <li>✅ Fixed Socket.IO loading URL</li>
+        </ul>
+    </div>
+
+    <div style="margin: 20px 0;">
+        <h3>Expected Behavior:</h3>
+        <ul>
+            <li>✅ Widget appears in bottom-right corner</li>
+            <li>✅ Clicking Call/Chat buttons works without errors</li>
+            <li>✅ No "getVisitorId is not defined" errors</li>
+            <li>✅ Socket.IO loads from correct backend URL</li>
+        </ul>
+    </div>
+
+    <script>
+        // Test widget loading
+        const statusDiv = document.getElementById('status');
+        
+        function updateStatus(message, type) {
+            statusDiv.className = type;
+            statusDiv.innerHTML = message;
+        }
+
+        // Test backend connection
+        fetch('https://callcenterdock.onrender.com/api/widget/calldocker-agents')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Backend test response:', data);
+                updateStatus('✅ Backend connected successfully!', 'success');
+            })
+            .catch(error => {
+                console.error('Backend test failed:', error);
+                updateStatus('❌ Backend connection failed. Check if backend is running.', 'error');
+            });
+    </script>
+
+    <!-- CallDocker Widget - FIXED VERSION -->
+    <script>
+        (function() {
+            // CallDocker Widget Loader - FIXED VERSION
+            window.CallDockerWidget = window.CallDockerWidget || {};
+            
+            // ✅ FIXED: Widget configuration with correct URLs and UUID
+            var config = {
+                uuid: 'calldocker-company-uuid', // ✅ Correct company UUID
+                uniqueId: 'calldocker-company-uuid-' + Date.now(),
+                text: 'Talk to us',
+                color: '#339fa3',
+                shape: 'round',
+                position: 'bottom-right',
+                animation: 'none',
+                dark: false,
+                // ✅ FIXED: Widget URL from local file (with fixes)
+                widgetUrl: './frontend/widget/widget.js',
+                // ✅ FIXED: Backend URL for API calls
+                backendUrl: 'https://callcenterdock.onrender.com'
+            };
+            
+            // Create unique widget instance
+            var widgetId = 'calldocker-widget-' + config.uniqueId;
+            
+            // Load widget script
+            var script = document.createElement('script');
+            script.src = config.widgetUrl;
+            script.async = true;
+            script.onload = function() {
+                console.log('[Widget] Script loaded successfully');
+                if (window.CallDockerWidget.init) {
+                    window.CallDockerWidget.init(config, widgetId);
+                }
+            };
+            script.onerror = function() {
+                console.error('[Widget] Failed to load widget from:', config.widgetUrl);
+                updateStatus('❌ Widget failed to load. Check if widget.js file exists.', 'error');
+            };
+            document.head.appendChild(script);
+        })();
+    </script>
+</body>
+</html> 

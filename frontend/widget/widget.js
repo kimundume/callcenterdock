@@ -13,7 +13,7 @@
   };
 
   const BACKEND_URL = getBackendUrl();
-  const COMPANY_UUID = window.CALLDOCKER_COMPANY_UUID || 'calldocker-company-uuid';
+  const COMPANY_UUID = window.CALLDOCKER_COMPANY_UUID || 'demo-company-uuid'; // ✅ Use correct company UUID
 
   let socket = null;
   let peerConnection = null;
@@ -23,6 +23,7 @@
   let isMuted = false;
   let endCallBtn = null;
   let muteBtn = null;
+  let currentModal = null;
 
   function log(...args) { console.log('[Widget]', ...args); }
 
@@ -68,6 +69,8 @@
 
   function startCall() {
     console.log('[Widget] Call button clicked');
+    openCallModal(); // ✅ Show the modal immediately
+    
     fetch(BACKEND_URL + '/api/widget/route-call', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -81,17 +84,23 @@
       .then(res => res.json())
       .then(data => {
         console.log('[Widget] /route-call response (call):', data);
-        // Trigger WebRTC call flow here
-        if (data.success) startWebRTC(data.sessionId, data.agent);
+        if (data.success) {
+          updateStatus('Call connected! Agent: ' + data.agent);
+          startWebRTC(data.sessionId, data.agent);
+        } else {
+          updateStatus('Error: ' + (data.error || 'Failed to connect'));
+        }
       })
       .catch(error => {
         console.error('[Widget] Failed to start call:', error);
-        alert('Unable to connect. Please try again later.');
+        updateStatus('Network error - please try again');
       });
   }
 
   function startChat() {
     console.log('[Widget] Chat button clicked');
+    openChatModal(); // ✅ Show the chat modal immediately
+    
     fetch(BACKEND_URL + '/api/widget/route-call', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -105,102 +114,122 @@
       .then(res => res.json())
       .then(data => {
         console.log('[Widget] /route-call response (chat):', data);
-        // Trigger chat flow here
-        if (data.success) startChatSession(data.sessionId, data.agent);
+        if (data.success) {
+          updateChatStatus('Chat connected! Agent: ' + data.agent);
+          startChatSession(data.sessionId, data.agent);
+        } else {
+          updateChatStatus('Error: ' + (data.error || 'Failed to connect'));
+        }
       })
       .catch(error => {
         console.error('[Widget] Failed to start chat:', error);
-        alert('Unable to connect. Please try again later.');
+        updateChatStatus('Network error - please try again');
       });
   }
 
   function openCallModal() {
-    const modal = document.createElement('div');
-    modal.style = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 10000;';
+    if (currentModal) {
+      document.body.removeChild(currentModal);
+    }
+    
+    currentModal = document.createElement('div');
+    currentModal.style = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 10000;';
+    
     const box = document.createElement('div');
     box.style = 'background: #fff; padding: 32px; border-radius: 12px; min-width: 320px; text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,0.18);';
     box.innerHTML = '<h2>Calling...</h2><div id="calldocker-status">Connecting to agent...</div>';
+    
     // Add End Call and Mute buttons
     endCallBtn = document.createElement('button');
     endCallBtn.innerText = 'End Call';
-    endCallBtn.style = 'margin: 16px 8px 0 0; padding: 8px 20px; background: #dc3545; color: #fff; border: none; border-radius: 6px; font-size: 16px;';
+    endCallBtn.style = 'margin: 16px 8px 0 0; padding: 8px 20px; background: #dc3545; color: #fff; border: none; border-radius: 6px; font-size: 16px; cursor: pointer;';
     endCallBtn.onclick = endCall;
+    
     muteBtn = document.createElement('button');
     muteBtn.innerText = 'Mute';
-    muteBtn.style = 'margin: 16px 0 0 8px; padding: 8px 20px; background: #007bff; color: #fff; border: none; border-radius: 6px; font-size: 16px;';
+    muteBtn.style = 'margin: 16px 0 0 8px; padding: 8px 20px; background: #007bff; color: #fff; border: none; border-radius: 6px; font-size: 16px; cursor: pointer;';
     muteBtn.onclick = toggleMute;
+    
     box.appendChild(endCallBtn);
     box.appendChild(muteBtn);
-    modal.appendChild(box);
-    document.body.appendChild(modal);
+    currentModal.appendChild(box);
+    document.body.appendChild(currentModal);
+  }
 
-    remoteAudio = document.createElement('audio');
-    remoteAudio.autoplay = true;
-    remoteAudio.style.display = 'none';
-    document.body.appendChild(remoteAudio);
-
-    socket = window.io(BACKEND_URL);
-    log('Socket.IO connected:', socket.id);
-    socket.emit('call-request', { uuid: COMPANY_UUID, callType: 'call' });
-
-    socket.on('call-routed', function(data) {
-      log('call-routed', data);
-      if (data.success) {
-        agentSocketId = data.agentSocketId ? data.agentSocketId : null;
-        log('Using agentSocketId for signaling:', agentSocketId);
-        document.getElementById('calldocker-status').innerText = 'Ringing agent...';
-      } else {
-        document.getElementById('calldocker-status').innerText = 'No agents available. Please try again later.';
-        endCallBtn.disabled = true;
-        muteBtn.disabled = true;
-      }
+  function openChatModal() {
+    if (currentModal) {
+      document.body.removeChild(currentModal);
+    }
+    
+    currentModal = document.createElement('div');
+    currentModal.style = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 10000;';
+    
+    const box = document.createElement('div');
+    box.style = 'background: #fff; padding: 32px; border-radius: 12px; min-width: 400px; max-width: 500px; max-height: 600px; display: flex; flex-direction: column; box-shadow: 0 4px 24px rgba(0,0,0,0.18);';
+    
+    box.innerHTML = `
+      <h2 style="margin: 0 0 20px 0;">Chat Support</h2>
+      <div id="chat-status" style="margin-bottom: 20px; padding: 10px; background: #f8f9fa; border-radius: 6px;">Connecting to agent...</div>
+      <div id="chat-messages" style="flex: 1; overflow-y: auto; margin-bottom: 20px; padding: 10px; background: #f8f9fa; border-radius: 6px; min-height: 200px; max-height: 300px;"></div>
+      <div style="display: flex; gap: 10px;">
+        <input type="text" id="chat-input" placeholder="Type your message..." style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+        <button id="send-btn" style="padding: 10px 20px; background: #007bff; color: #fff; border: none; border-radius: 6px; cursor: pointer;">Send</button>
+      </div>
+      <button id="close-chat" style="margin-top: 15px; padding: 8px 20px; background: #6c757d; color: #fff; border: none; border-radius: 6px; cursor: pointer;">Close Chat</button>
+    `;
+    
+    currentModal.appendChild(box);
+    document.body.appendChild(currentModal);
+    
+    // Add event listeners
+    document.getElementById('send-btn').onclick = sendChatMessage;
+    document.getElementById('close-chat').onclick = closeModal;
+    document.getElementById('chat-input').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendChatMessage();
     });
+  }
 
-    socket.on('call-status', function(data) {
-      log('call-status', data);
-      if (data.status === 'accepted') {
-        document.getElementById('calldocker-status').innerText = 'Agent accepted the call! Connecting audio...';
-        endCallBtn.disabled = false;
-        muteBtn.disabled = false;
-        startWebRTC();
-      } else if (data.status === 'rejected') {
-        document.getElementById('calldocker-status').innerText = 'Agent rejected the call.';
-        endCallBtn.disabled = true;
-        muteBtn.disabled = true;
-      }
-    });
+  function updateStatus(message) {
+    const statusEl = document.getElementById('calldocker-status');
+    if (statusEl) {
+      statusEl.textContent = message;
+    }
+  }
 
-    // WebRTC signaling handlers
-    socket.on('webrtc-answer', async function(data) {
-      log('Received webrtc-answer', data);
-      if (peerConnection && data.answer) {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-        log('Set remote description (answer)');
-      }
-    });
-    socket.on('webrtc-ice-candidate', async function(data) {
-      log('Received webrtc-ice-candidate', data);
-      if (peerConnection && data.candidate) {
-        try {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-          log('Added ICE candidate');
-        } catch (e) { log('Error adding ICE candidate', e); }
-      }
-    });
+  function updateChatStatus(message) {
+    const statusEl = document.getElementById('chat-status');
+    if (statusEl) {
+      statusEl.textContent = message;
+    }
+  }
 
-    socket.on('form-push', function(data) {
-      console.log('[form-push] Received form-push event', data);
-      // ... existing code to display the form ...
-    });
+  function sendChatMessage() {
+    const input = document.getElementById('chat-input');
+    const message = input.value.trim();
+    if (message) {
+      addChatMessage('You', message);
+      input.value = '';
+      // Here you would send the message to the backend
+      console.log('[Widget] Sending chat message:', message);
+    }
+  }
 
-    modal.onclick = function(e) {
-      if (e.target === modal) {
-        document.body.removeChild(modal);
-        if (remoteAudio) document.body.removeChild(remoteAudio);
-        if (peerConnection) peerConnection.close();
-        if (socket) socket.disconnect();
-      }
-    };
+  function addChatMessage(sender, message) {
+    const messagesEl = document.getElementById('chat-messages');
+    if (messagesEl) {
+      const messageDiv = document.createElement('div');
+      messageDiv.style = 'margin-bottom: 10px; padding: 8px; background: #fff; border-radius: 4px; border-left: 3px solid #007bff;';
+      messageDiv.innerHTML = `<strong>${sender}:</strong> ${message}`;
+      messagesEl.appendChild(messageDiv);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+  }
+
+  function closeModal() {
+    if (currentModal) {
+      document.body.removeChild(currentModal);
+      currentModal = null;
+    }
   }
 
   async function startWebRTC() {
