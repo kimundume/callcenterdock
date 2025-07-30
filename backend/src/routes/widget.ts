@@ -572,7 +572,7 @@ router.post('/agent/register', async (req: Request, res: Response) => {
   }
   
   // Check if agent already exists
-  const existingAgent = Object.values(tempStorage.agents).find((a: any) => 
+  const existingAgent = global.tempStorage.agents.find((a: any) => 
     a.username === username && a.companyUuid === companyUuid
   );
   if (existingAgent) {
@@ -1033,20 +1033,20 @@ router.post('/route-call', (req: Request, res: Response) => {
       pageUrl,
       queuePosition
     };
-    tempStorage.sessions.push(session);
+    global.tempStorage.sessions.push(session);
     console.log('[route-call] Session created:', session);
     return session;
   }
 
   // Find company
-  const company = tempStorage.companies[companyUuid];
+  const company = global.tempStorage.companies.find((c: any) => c.uuid === companyUuid);
   if (!company) {
     console.log('[route-call] Company not found:', companyUuid);
     return res.status(404).json({ success: false, error: 'Company not found' });
   }
 
   // Find available agents
-  const availableAgents = Object.values(tempStorage.agents).filter((a: any) => a.companyUuid === companyUuid && a.status === 'online' && a.registrationStatus === 'approved');
+  const availableAgents = global.tempStorage.agents.filter((a: any) => a.companyUuid === companyUuid && a.status === 'online' && a.registrationStatus === 'approved');
   console.log('[route-call] Available agents:', availableAgents.map((a: any) => a.username));
   if (availableAgents.length === 0) {
     return res.status(200).json({ success: false, error: 'No agents online' });
@@ -1099,7 +1099,7 @@ router.post('/agent/status', (req, res) => {
     return res.status(400).json({ error: 'Invalid agent UUID or status' });
   }
   
-  const agent = Object.values(tempStorage.agents).find((a: any) => a.uuid === agentUuid);
+  const agent = global.tempStorage.agents.find((a: any) => a.uuid === agentUuid);
   if (!agent) {
     return res.status(404).json({ error: 'Agent not found' });
   }
@@ -1120,7 +1120,7 @@ router.post('/agent/status', (req, res) => {
       uuid: agent.uuid,
       username: agent.username,
       status: agent.status,
-      companyUuid: agent.companyUuid
+      updatedAt: agent.updatedAt
     }
   });
 });
@@ -1129,7 +1129,7 @@ router.post('/agent/status', (req, res) => {
 router.get('/agent/status/:agentUuid', (req, res) => {
   const { agentUuid } = req.params;
   
-  const agent = Object.values(tempStorage.agents).find((a: any) => a.uuid === agentUuid);
+  const agent = global.tempStorage.agents.find((a: any) => a.uuid === agentUuid);
   if (!agent) {
     return res.status(404).json({ error: 'Agent not found' });
   }
@@ -1151,17 +1151,17 @@ router.get('/agents/online', (req, res) => {
   
   if (companyUuid) {
     // Get online agents for specific company
-    onlineAgents = Object.values(tempStorage.agents).filter((agent: any) => 
+    onlineAgents = global.tempStorage.agents.filter((agent: any) => 
       agent.companyUuid === companyUuid &&
       agent.registrationStatus === 'approved' &&
       agent.status === 'online'
     );
   } else {
     // Get all online agents (for public routing)
-    onlineAgents = Object.values(tempStorage.agents).filter((agent: any) => 
+    onlineAgents = global.tempStorage.agents.filter((agent: any) => 
       agent.registrationStatus === 'approved' &&
       agent.status === 'online' &&
-      Object.values(tempStorage.companies).find((company: any) => 
+      Object.values(global.tempStorage.companies).find((company: any) => 
         company.uuid === agent.companyUuid && 
         company.status === 'approved'
       )
@@ -1567,7 +1567,7 @@ router.post('/agent/register', async (req: Request, res: Response) => {
   }
   
   // Check if agent already exists
-  const existingAgent = Object.values(tempStorage.agents).find((a: any) => 
+  const existingAgent = global.tempStorage.agents.find((a: any) => 
     a.username === username && a.companyUuid === companyUuid
   );
   if (existingAgent) {
