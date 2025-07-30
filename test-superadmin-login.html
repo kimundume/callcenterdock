@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Admin Login Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            background: #f5f5f5;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .log {
+            background: #000;
+            color: #0f0;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            height: 300px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+        input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Super Admin Login Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Configuration</h2>
+        <p><strong>Backend URL:</strong> <span id="backend-url">https://callcenterdock.onrender.com</span></p>
+        <p><strong>Expected Credentials:</strong></p>
+        <ul>
+            <li>Username: <code>superadmin</code></li>
+            <li>Password: <code>password</code></li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>Super Admin Login Test</h2>
+        <div>
+            <input type="text" id="username" placeholder="Username" value="superadmin">
+            <input type="password" id="password" placeholder="Password" value="password">
+            <button onclick="testSuperAdminLogin()">Test Login</button>
+        </div>
+        <div id="login-status" class="status info">Ready to test...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>Companies Data Test</h2>
+        <button onclick="testCompaniesData()">Test Companies Data</button>
+        <button onclick="testAccountsEndpoint()">Test Accounts Endpoint</button>
+        <div id="companies-status" class="status info">Ready to test...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test Log</h2>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'https://callcenterdock.onrender.com';
+        let authToken = null;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#f00' : type === 'success' ? '#0f0' : '#0f0';
+            logDiv.innerHTML += `<div style="color: ${color}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(`[Test] ${message}`);
+        }
+
+        function updateStatus(elementId, message, type = 'info') {
+            const statusDiv = document.getElementById(elementId);
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        async function testSuperAdminLogin() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            log('Testing Super Admin login...');
+            updateStatus('login-status', 'Testing login...', 'info');
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/super-admin/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+                log(`Response status: ${response.status}`);
+                log(`Response data: ${JSON.stringify(data, null, 2)}`);
+
+                if (response.ok && data.token) {
+                    authToken = data.token;
+                    updateStatus('login-status', 'Login successful! Token received.', 'success');
+                    log('✅ Super Admin login successful', 'success');
+                    log(`Token: ${data.token.substring(0, 20)}...`, 'success');
+                } else {
+                    updateStatus('login-status', `Login failed: ${data.error}`, 'error');
+                    log(`❌ Login failed: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                updateStatus('login-status', `Network error: ${error.message}`, 'error');
+                log(`❌ Network error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testCompaniesData() {
+            log('Testing companies data...');
+            
+            try {
+                // Test direct companies endpoint
+                const response = await fetch(`${BACKEND_URL}/api/super-admin/companies`);
+                const data = await response.json();
+                
+                log(`Companies response status: ${response.status}`);
+                log(`Companies data: ${JSON.stringify(data, null, 2)}`);
+                
+                if (response.ok) {
+                    updateStatus('companies-status', `Found ${Object.keys(data).length} companies`, 'success');
+                } else {
+                    updateStatus('companies-status', `Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                updateStatus('companies-status', `Network error: ${error.message}`, 'error');
+                log(`❌ Network error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testAccountsEndpoint() {
+            if (!authToken) {
+                updateStatus('companies-status', 'Please login first', 'error');
+                return;
+            }
+
+            log('Testing accounts endpoint...');
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/super-admin/accounts`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                log(`Accounts response status: ${response.status}`);
+                log(`Accounts data: ${JSON.stringify(data, null, 2)}`);
+                
+                if (response.ok) {
+                    updateStatus('companies-status', `Found ${data.length} accounts`, 'success');
+                } else {
+                    updateStatus('companies-status', `Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                updateStatus('companies-status', `Network error: ${error.message}`, 'error');
+                log(`❌ Network error: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-run tests on page load
+        window.addEventListener('load', () => {
+            log('Page loaded, ready for testing...');
+        });
+    </script>
+</body>
+</html> 

@@ -47,8 +47,11 @@ const authenticateSuperAdmin = (req: any, res: any, next: any) => {
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
+    
+    console.log('Super Admin login attempt:', { username, password: password ? '[HIDDEN]' : 'undefined' });
 
     if (!username || !password) {
+      console.log('Login failed: Missing username or password');
       return res.status(400).json({ error: 'Username and password required' });
     }
 
@@ -60,12 +63,20 @@ router.post('/login', async (req, res) => {
       role: 'super-admin'
     };
 
+    console.log('Expected username:', superAdminCredentials.username);
+    console.log('Provided username:', username);
+    console.log('Username match:', username === superAdminCredentials.username);
+
     if (username !== superAdminCredentials.username) {
+      console.log('Login failed: Invalid username');
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const isValidPassword = await bcrypt.compare(password, superAdminCredentials.password);
+    console.log('Password validation result:', isValidPassword);
+    
     if (!isValidPassword) {
+      console.log('Login failed: Invalid password');
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
@@ -77,6 +88,8 @@ router.post('/login', async (req, res) => {
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '24h' }
     );
+
+    console.log('Super Admin login successful for user:', username);
 
     res.json({
       token,
@@ -112,6 +125,28 @@ router.get('/accounts', authenticateSuperAdmin, (req, res) => {
     res.json(accounts);
   } catch (error) {
     console.error('Error fetching accounts:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get raw companies data (for debugging)
+router.get('/companies', (req, res) => {
+  try {
+    console.log('Companies data requested:', companies);
+    res.json(companies);
+  } catch (error) {
+    console.error('Error fetching companies:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get raw users data (for debugging)
+router.get('/users', (req, res) => {
+  try {
+    console.log('Users data requested:', users);
+    res.json(users);
+  } catch (error) {
+    console.error('Error fetching users:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
