@@ -1207,16 +1207,25 @@ const AgentManagementTab = () => {
   const [agentForm] = Form.useForm();
   const [callDockerAgentForm] = Form.useForm();
 
+  // Get backend URL from environment or global variable
+  const getBackendUrl = () => {
+    return (window as any).BACKEND_URL || 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+        ? 'http://localhost:5001' 
+        : 'https://callcenterdock.onrender.com');
+  };
+
   // Fetch CallDocker agents from backend
   const fetchCallDockerAgents = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5001/api/widget/calldocker-agents');
+      const backendUrl = getBackendUrl();
+      const response = await fetch(`${backendUrl}/api/widget/calldocker-agents`);
       if (response.ok) {
         const data = await response.json();
         setCallDockerAgents(data.agents || []);
       } else {
-        console.error('Failed to fetch CallDocker agents');
+        console.error('Failed to fetch CallDocker agents:', response.status);
         setCallDockerAgents([]); // No fallback to mock data
       }
     } catch (error) {
@@ -1230,12 +1239,13 @@ const AgentManagementTab = () => {
   // Fetch company agents from backend
   const fetchCompanyAgents = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/widget/company-agents');
+      const backendUrl = getBackendUrl();
+      const response = await fetch(`${backendUrl}/api/widget/company-agents`);
       if (response.ok) {
         const data = await response.json();
         setAgents(data.agents || []);
       } else {
-        console.error('Failed to fetch company agents');
+        console.error('Failed to fetch company agents:', response.status);
         setAgents([]); // No fallback to mock data
       }
     } catch (error) {
@@ -1292,7 +1302,8 @@ const AgentManagementTab = () => {
       console.log('Creating CallDocker agent with data:', formData);
 
       // Call backend API to create CallDocker agent
-      const response = await fetch('http://localhost:5001/api/widget/calldocker-agent/create', {
+      const backendUrl = getBackendUrl();
+      const response = await fetch(`${backendUrl}/api/widget/calldocker-agent/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1301,47 +1312,20 @@ const AgentManagementTab = () => {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        
-        // Show success message with credentials
-        Modal.info({
-          title: 'CallDocker Agent Created Successfully!',
-          content: (
-            <div>
-              <p><strong>Username:</strong> {data.agent.username}</p>
-              <p><strong>Password:</strong> {data.agent.password}</p>
-              <p><strong>Company UUID:</strong> {data.agent.companyUuid}</p>
-              <p><strong>Login URL:</strong> <a href={`/agent-login?username=${data.agent.username}&password=${data.agent.password}&companyUuid=${data.agent.companyUuid}`} target="_blank">Click here to login</a></p>
-              <Button
-                type="primary"
-                onClick={() => {
-                  navigator.clipboard.writeText(`Username: ${data.agent.username}\nPassword: ${data.agent.password}\nCompany UUID: ${data.agent.companyUuid}`);
-                  message.success('Credentials copied to clipboard!');
-                }}
-                style={{ marginTop: 10 }}
-              >
-                Copy Credentials
-              </Button>
-            </div>
-          ),
-          width: 500,
-        });
-
-        // Close modal and reset form
+        const result = await response.json();
+        console.log('CallDocker agent created successfully:', result);
+        message.success('CallDocker agent created successfully!');
         setCallDockerAgentModalVisible(false);
         callDockerAgentForm.resetFields();
-        
-        // Refresh the CallDocker agents list
-        fetchCallDockerAgents();
-        
-        message.success('CallDocker agent created successfully!');
+        fetchCallDockerAgents(); // Refresh the list
       } else {
         const errorData = await response.json();
-        message.error(`Error creating CallDocker agent: ${errorData.error || 'Unknown error'}`);
+        console.error('Failed to create CallDocker agent:', errorData);
+        message.error(errorData.message || 'Failed to create CallDocker agent');
       }
     } catch (error) {
       console.error('Error creating CallDocker agent:', error);
-      message.error('Error creating CallDocker agent: Server error');
+      message.error('Error creating CallDocker agent');
     }
   };
 
@@ -1365,10 +1349,9 @@ const AgentManagementTab = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active': return 'green';
-      case 'pending_approval': return 'orange';
-      case 'suspended': return 'red';
-      case 'rejected': return 'red';
+      case 'active': return 'success';
+      case 'suspended': return 'error';
+      case 'pending_approval': return 'warning';
       default: return 'default';
     }
   };
@@ -1389,10 +1372,14 @@ const AgentManagementTab = () => {
       key: 'fullName',
       render: (name: string, record: any) => (
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <Avatar style={{ marginRight: 8 }}>{name.charAt(0)}</Avatar>
+          <Avatar style={{ marginRight: 8 }}>
+            {name && name.charAt ? name.charAt(0) : '?'}
+          </Avatar>
           <div>
-            <div style={{ fontWeight: 500 }}>{name}</div>
-            <div style={{ fontSize: 12, color: '#666' }}>@{record.username}</div>
+            <div style={{ fontWeight: 500 }}>{name || 'Unknown'}</div>
+            <div style={{ fontSize: 12, color: '#666' }}>
+              @{record?.username || 'unknown'}
+            </div>
           </div>
         </div>
       )
@@ -1402,7 +1389,7 @@ const AgentManagementTab = () => {
       dataIndex: 'companyName',
       key: 'companyName',
       render: (companyName: string) => (
-        <Tag color="blue">{companyName}</Tag>
+        <Tag color="blue">{companyName || 'N/A'}</Tag>
       )
     },
     {
@@ -1410,8 +1397,10 @@ const AgentManagementTab = () => {
       key: 'contact',
       render: (_, record: any) => (
         <div>
-          <div>{record.email}</div>
-          <div style={{ fontSize: 12, color: '#666' }}>{record.phone}</div>
+          <div>{record?.email || 'N/A'}</div>
+          <div style={{ fontSize: 12, color: '#666' }}>
+            {record?.phone || 'N/A'}
+          </div>
         </div>
       )
     },
@@ -1421,7 +1410,7 @@ const AgentManagementTab = () => {
       key: 'role',
       render: (role: string) => (
         <Tag color={getRoleColor(role)}>
-          {role.replace('_', ' ').toUpperCase()}
+          {role ? role.replace('_', ' ').toUpperCase() : 'N/A'}
         </Tag>
       )
     },
@@ -1430,7 +1419,10 @@ const AgentManagementTab = () => {
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => (
-        <Badge status={getStatusColor(status) as any} text={status.replace('_', ' ').toUpperCase()} />
+        <Badge 
+          status={getStatusColor(status) as any} 
+          text={status ? status.replace('_', ' ').toUpperCase() : 'N/A'} 
+        />
       )
     },
     {
@@ -1438,11 +1430,14 @@ const AgentManagementTab = () => {
       key: 'skills',
       render: (_, record: any) => (
         <div>
-          {record.skills.map((skill: string) => (
-            <Tag key={skill} color="green" style={{ marginBottom: 4 }}>
-              {skill.replace('_', ' ')}
-            </Tag>
-          ))}
+          {record?.skills && Array.isArray(record.skills) ? 
+            record.skills.map((skill: string) => (
+              <Tag key={skill} color="green" style={{ marginBottom: 4 }}>
+                {skill ? skill.replace('_', ' ') : 'N/A'}
+              </Tag>
+            )) : 
+            <span>No skills</span>
+          }
         </div>
       )
     },
@@ -1451,9 +1446,9 @@ const AgentManagementTab = () => {
       key: 'performance',
       render: (_, record: any) => (
         <div>
-          <div>Calls: {record.performance.callsHandled}</div>
-          <div>Rating: {record.performance.avgRating}/5</div>
-          <div>Success: {record.performance.successRate}%</div>
+          <div>Calls: {record?.performance?.callsHandled || 0}</div>
+          <div>Rating: {record?.performance?.avgRating || 0}/5</div>
+          <div>Success: {record?.performance?.successRate || 0}%</div>
         </div>
       )
     },
@@ -1468,7 +1463,7 @@ const AgentManagementTab = () => {
           }}>
             View Details
           </Button>
-          {record.status === 'pending_approval' && (
+          {record?.status === 'pending_approval' && (
             <>
               <Button type="link" size="small" onClick={() => handleApproveAgent(record.id)}>
                 Approve
@@ -1478,12 +1473,12 @@ const AgentManagementTab = () => {
               </Button>
             </>
           )}
-          {record.status === 'active' && (
+          {record?.status === 'active' && (
             <Button type="link" size="small" danger onClick={() => handleSuspendAgent(record.id)}>
               Suspend
             </Button>
           )}
-          {record.status === 'suspended' && (
+          {record?.status === 'suspended' && (
             <Button type="link" size="small" onClick={() => handleApproveAgent(record.id)}>
               Activate
             </Button>
