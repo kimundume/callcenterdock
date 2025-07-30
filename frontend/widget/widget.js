@@ -9,11 +9,11 @@
     
     // Production: Use Render backend URL
     // You can override this by setting window.CALLDOCKER_BACKEND_URL
-    return window.CALLDOCKER_BACKEND_URL || 'https://calldocker-backend.onrender.com';
+    return window.CALLDOCKER_BACKEND_URL || 'https://callcenterdock.onrender.com';
   };
 
   const BACKEND_URL = getBackendUrl();
-  const COMPANY_UUID = window.CALLDOCKER_COMPANY_UUID || 'demo-uuid';
+  const COMPANY_UUID = window.CALLDOCKER_COMPANY_UUID || 'calldocker-company-uuid';
 
   let socket = null;
   let peerConnection = null;
@@ -25,6 +25,16 @@
   let muteBtn = null;
 
   function log(...args) { console.log('[Widget]', ...args); }
+
+  // Generate a unique visitor ID
+  function getVisitorId() {
+    let visitorId = localStorage.getItem('calldocker_visitor_id');
+    if (!visitorId) {
+      visitorId = 'visitor_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('calldocker_visitor_id', visitorId);
+    }
+    return visitorId;
+  }
 
   function loadSocketIo(callback) {
     if (window.io) return callback();
@@ -62,7 +72,7 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        companyUuid: window.CALLDOCKER_COMPANY_UUID || 'demo-company-uuid',
+        companyUuid: COMPANY_UUID,
         visitorId: getVisitorId(),
         pageUrl: window.location.href,
         callType: 'call'
@@ -86,7 +96,7 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        companyUuid: window.CALLDOCKER_COMPANY_UUID || 'demo-company-uuid',
+        companyUuid: COMPANY_UUID,
         visitorId: getVisitorId(),
         pageUrl: window.location.href,
         callType: 'chat'

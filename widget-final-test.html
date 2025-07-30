@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CallDocker Widget - Final Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 20px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>CallDocker Widget - Final Test</h1>
+    
+    <div class="info">
+        <strong>Testing with Correct Configuration:</strong><br>
+        - Widget URL: https://calldocker.netlify.app/widget.js<br>
+        - Backend URL: https://callcenterdock.onrender.com<br>
+        - Company UUID: calldocker-company-uuid<br>
+        - Text: "Talk to us"<br>
+        - Color: #339fa3
+    </div>
+
+    <div id="status" class="warning">
+        Loading widget...
+    </div>
+
+    <div style="margin: 20px 0;">
+        <h3>Test Instructions:</h3>
+        <ol>
+            <li>Wait for Netlify to finish redeploying (check status below)</li>
+            <li>The widget should appear in the bottom-right corner</li>
+            <li>Click the widget to test call/chat functionality</li>
+            <li>Check the browser console for any errors</li>
+        </ol>
+    </div>
+
+    <div style="margin: 20px 0;">
+        <h3>Expected Behavior:</h3>
+        <ul>
+            <li>✅ Widget appears in bottom-right corner</li>
+            <li>✅ Clicking opens chat/call interface</li>
+            <li>✅ Backend API calls work (check console)</li>
+            <li>✅ No JavaScript errors in console</li>
+        </ul>
+    </div>
+
+    <div style="margin: 20px 0;">
+        <h3>Final Working Embed Code:</h3>
+        <div class="code-block">
+&lt;script&gt;
+(function() {
+  // CallDocker Widget Loader - FINAL WORKING VERSION
+  window.CallDockerWidget = window.CallDockerWidget || {};
+  
+  // ✅ CORRECTED: Widget configuration with proper URLs and UUID
+  var config = {
+    uuid: 'calldocker-company-uuid', // ✅ Correct company UUID
+    uniqueId: 'calldocker-company-uuid-' + Date.now(),
+    text: 'Talk to us',
+    color: '#339fa3',
+    shape: 'round',
+    position: 'bottom-right',
+    animation: 'none',
+    dark: false,
+    // ✅ CORRECTED: Widget URL from Netlify (after redeploy)
+    widgetUrl: 'https://calldocker.netlify.app/widget.js',
+    // ✅ CORRECTED: Backend URL for API calls
+    backendUrl: 'https://callcenterdock.onrender.com'
+  };
+  
+  // Create unique widget instance
+  var widgetId = 'calldocker-widget-' + config.uniqueId;
+  
+  // Load widget script
+  var script = document.createElement('script');
+  script.src = config.widgetUrl;
+  script.async = true;
+  script.onload = function() {
+    console.log('[Widget] Script loaded successfully');
+    if (window.CallDockerWidget.init) {
+      window.CallDockerWidget.init(config, widgetId);
+    }
+  };
+  script.onerror = function() {
+    console.error('[Widget] Failed to load widget from:', config.widgetUrl);
+  };
+  document.head.appendChild(script);
+})();
+&lt;/script&gt;</div>
+    </div>
+
+    <script>
+        // Test widget loading
+        const statusDiv = document.getElementById('status');
+        
+        function updateStatus(message, type) {
+            statusDiv.className = type;
+            statusDiv.innerHTML = message;
+        }
+
+        // Test backend connection
+        fetch('https://callcenterdock.onrender.com/api/widget/calldocker-agents')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Backend test response:', data);
+                updateStatus('✅ Backend connected successfully!', 'success');
+            })
+            .catch(error => {
+                console.error('Backend test failed:', error);
+                updateStatus('❌ Backend connection failed. Check if backend is running.', 'error');
+            });
+
+        // Test widget file availability
+        fetch('https://calldocker.netlify.app/widget.js')
+            .then(response => {
+                if (response.ok) {
+                    return response.text();
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            })
+            .then(content => {
+                if (content.includes('<!doctype html>')) {
+                    updateStatus('⚠️ Widget file still returning HTML. Netlify redeploy in progress...', 'warning');
+                } else if (content.includes('CallDocker Widget')) {
+                    updateStatus('✅ Widget file loaded successfully!', 'success');
+                } else {
+                    updateStatus('⚠️ Widget file content unexpected. Check deployment.', 'warning');
+                }
+            })
+            .catch(error => {
+                console.error('Widget file test failed:', error);
+                updateStatus('❌ Widget file not accessible. Netlify redeploy needed.', 'error');
+            });
+    </script>
+
+    <!-- CallDocker Widget - FINAL WORKING VERSION -->
+    <script>
+        (function() {
+            // CallDocker Widget Loader - FINAL WORKING VERSION
+            window.CallDockerWidget = window.CallDockerWidget || {};
+            
+            // ✅ CORRECTED: Widget configuration with proper URLs and UUID
+            var config = {
+                uuid: 'calldocker-company-uuid', // ✅ Correct company UUID
+                uniqueId: 'calldocker-company-uuid-' + Date.now(),
+                text: 'Talk to us',
+                color: '#339fa3',
+                shape: 'round',
+                position: 'bottom-right',
+                animation: 'none',
+                dark: false,
+                // ✅ CORRECTED: Widget URL from Netlify (after redeploy)
+                widgetUrl: 'https://calldocker.netlify.app/widget.js',
+                // ✅ CORRECTED: Backend URL for API calls
+                backendUrl: 'https://callcenterdock.onrender.com'
+            };
+            
+            // Create unique widget instance
+            var widgetId = 'calldocker-widget-' + config.uniqueId;
+            
+            // Load widget script
+            var script = document.createElement('script');
+            script.src = config.widgetUrl;
+            script.async = true;
+            script.onload = function() {
+                console.log('[Widget] Script loaded successfully');
+                if (window.CallDockerWidget.init) {
+                    window.CallDockerWidget.init(config, widgetId);
+                }
+            };
+            script.onerror = function() {
+                console.error('[Widget] Failed to load widget from:', config.widgetUrl);
+                updateStatus('❌ Widget failed to load. Check if Netlify has redeployed.', 'error');
+            };
+            document.head.appendChild(script);
+        })();
+    </script>
+</body>
+</html> 
