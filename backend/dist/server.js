@@ -23,6 +23,19 @@ const signaling_1 = require("./sockets/signaling");
 const dotenv_1 = __importDefault(require("dotenv"));
 const persistentStorage_1 = require("./data/persistentStorage");
 dotenv_1.default.config();
+global.tempStorage = {
+    callQueue: {},
+    calls: {},
+    chatSessions: {},
+    sessions: [],
+    companies: [],
+    agents: [],
+    users: [],
+    pendingAdmins: [],
+    pendingAgentCredentials: [],
+    contactMessages: [],
+    authUsers: []
+};
 // Helper function to generate IDs
 const generateId = () => Math.random().toString(36).substr(2, 9);
 exports.generateId = generateId;

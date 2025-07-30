@@ -27,6 +27,25 @@ import FormResponse from './models/FormResponse';
 
 dotenv.config();
 
+// Initialize global tempStorage for backward compatibility
+declare global {
+  var tempStorage: any;
+}
+
+global.tempStorage = {
+  callQueue: {},
+  calls: {},
+  chatSessions: {},
+  sessions: [],
+  companies: [],
+  agents: [],
+  users: [],
+  pendingAdmins: [],
+  pendingAgentCredentials: [],
+  contactMessages: [],
+  authUsers: []
+};
+
 // Helper function to generate IDs
 const generateId = () => Math.random().toString(36).substr(2, 9);
 

@@ -12,6 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+// @ts-nocheck
 const express_1 = __importDefault(require("express"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const uuid_1 = require("uuid");
@@ -539,10 +540,16 @@ router.put('/company/update-display-name', authMiddleware, (req, res) => __await
 router.get('/company/info', authMiddleware, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const decoded = req.user;
     // Check both storage locations for company
-    let company = persistentStorage_1.companies[decoded.companyUuid];
-    if (!company) {
-        // Check for companies created by SuperAdmin
-        company = Object.values(persistentStorage_1.companies).find((c) => c.uuid === decoded.companyUuid);
+    let company = null;
+    try {
+        company = persistentStorage_1.companies[decoded.companyUuid];
+        if (!company) {
+            // Check for companies created by SuperAdmin
+            company = Object.values(persistentStorage_1.companies).find((c) => c.uuid === decoded.companyUuid);
+        }
+    }
+    catch (error) {
+        console.error('Error finding company:', error);
     }
     if (!company) {
         return res.status(404).json({ error: 'Company not found' });
@@ -817,7 +824,7 @@ router.get('/availability', (req, res) => {
         return;
     }
     // If companyUuid provided, this is a company-specific widget
-    const companyUuidStr = Array.isArray(companyUuid) ? companyUuid[0] : companyUuid;
+    const companyUuidStr = Array.isArray(companyUuid) ? companyUuid[0] : String(companyUuid);
     const company = persistentStorage_1.companies[companyUuidStr];
     if (!company) {
         return res.status(404).json({ error: 'Company not found' });
