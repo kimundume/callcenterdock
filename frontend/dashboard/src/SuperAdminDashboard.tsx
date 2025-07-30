@@ -2455,8 +2455,6 @@ const CompanyCreationModal = ({ visible, onCancel, onSuccess }: { visible: boole
 export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardProps) {
   // Get token from localStorage
   const token = localStorage.getItem('superAdminToken');
-  // Get token from localStorage
-  const token = localStorage.getItem('superAdminToken');
 
   // State for modals and forms
   const [accountModalVisible, setAccountModalVisible] = useState(false);
