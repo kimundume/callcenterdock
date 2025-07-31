@@ -10,151 +10,43 @@ import {
   Input, 
   Select, 
   message, 
-  Typography, 
+  Tag, 
+  Badge, 
+  Avatar, 
+  Space, 
   Row, 
   Col, 
   Statistic, 
   Progress, 
-  Tag, 
-  Space,
+  List, 
+  Switch, 
+  InputNumber, 
   Tabs,
-  List,
-  Avatar,
-  Badge,
-  Tooltip,
-  Switch,
-  InputNumber,
-  DatePicker,
-  Divider,
-  Alert,
-  Descriptions,
-  Steps,
-  Timeline,
-  Rate,
-  Upload,
-  Image,
-  Carousel,
-  Collapse,
-  Tree,
-  Transfer,
-  Cascader,
-  Slider,
-  Radio,
-  Checkbox,
-  TimePicker,
-  Calendar,
-  Mentions,
-  AutoComplete,
-  TreeSelect,
-  Drawer,
-  Popconfirm,
-  Skeleton,
-  Empty,
-  Result,
-  PageHeader,
-  Breadcrumb,
-  Dropdown,
-  notification,
-  ConfigProvider,
-  theme,
-  App
+  Typography
 } from 'antd';
-import { Bar, Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  Title as ChartTitle,
-  Tooltip as ChartTooltip,
-  Legend,
-  PointElement,
-} from 'chart.js';
-import {
-  DashboardOutlined,
-  UserOutlined,
-  TeamOutlined,
-  SettingOutlined,
-  BarChartOutlined,
-  FileTextOutlined,
-  MailOutlined,
-  PhoneOutlined,
-  GlobalOutlined,
-  KeyOutlined,
-  CrownOutlined,
-  LogoutOutlined,
-  PlusOutlined,
-  EditOutlined,
+import { 
+  DashboardOutlined, 
+  UserOutlined, 
+  SettingOutlined, 
+  LogoutOutlined, 
+  PlusOutlined, 
+  EditOutlined, 
   DeleteOutlined,
-  EyeOutlined,
-  SearchOutlined,
-  FilterOutlined,
-  DownloadOutlined,
-  UploadOutlined,
-  SyncOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  ExclamationCircleOutlined,
-  InfoCircleOutlined,
-  ClockCircleOutlined,
-  StarOutlined,
-  HeartOutlined,
-  LikeOutlined,
-  DislikeOutlined,
-  MessageOutlined,
+  PhoneOutlined,
+  TeamOutlined,
+  FileTextOutlined,
+  CustomerServiceOutlined,
+  KeyOutlined,
   BellOutlined,
-  CalendarOutlined,
-  HomeOutlined,
-  ShopOutlined,
-  GiftOutlined,
-  TrophyOutlined,
-  FireOutlined,
-  ThunderboltOutlined,
-  RocketOutlined,
-  BulbOutlined,
-  ExperimentOutlined,
-  SafetyOutlined,
-  SecurityScanOutlined,
-  LockOutlined,
-  UnlockOutlined,
-  DatabaseOutlined,
-  CloudOutlined,
-  ApiOutlined,
-  CodeOutlined,
-  BugOutlined,
-  ToolOutlined,
-  BuildOutlined,
-  CompassOutlined,
-  AimOutlined,
-  TargetOutlined,
-  FlagOutlined,
-  MedalOutlined,
-  TagOutlined
+  HeartOutlined,
+  CrownOutlined
 } from '@ant-design/icons';
+import { Bar, Line } from 'react-chartjs-2';
 import config from './config';
-import SuperAdminSidebar from './SuperAdminSidebar';
-
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  ChartTitle,
-  ChartTooltip,
-  Legend,
-  PointElement
-);
 
 const { Header, Sider, Content } = Layout;
-const { Title, Text, Paragraph } = Typography;
-const { TabPane } = Tabs;
-const { Step } = Steps;
-const { Panel } = Collapse;
-const { RangePicker } = DatePicker;
-const { TextArea } = Input;
 const { Option } = Select;
+const { Text } = Typography;
 
 interface Account {
   id: string;
@@ -1287,10 +1179,7 @@ const AgentManagementTab = () => {
 
   // Get backend URL from environment or global variable
   const getBackendUrl = () => {
-    return (window as any).BACKEND_URL || 
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-        ? 'http://localhost:5001' 
-        : 'https://callcenterdock.onrender.com');
+    return config.backendUrl;
   };
 
   // Fetch CallDocker agents from backend
@@ -2344,7 +2233,7 @@ const CompanyCreationModal = ({ visible, onCancel, onSuccess }: { visible: boole
     setLoading(true);
     try {
       const token = localStorage.getItem('superAdminToken');
-      const response = await fetch(`${getBackendUrl()}/api/super-admin/create-company`, {
+      const response = await fetch(`${config.backendUrl}/api/super-admin/create-company`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -2457,6 +2346,11 @@ const CompanyCreationModal = ({ visible, onCancel, onSuccess }: { visible: boole
 export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardProps) {
   // Get token from localStorage
   const token = localStorage.getItem('superAdminToken');
+
+  // Helper function to get backend URL
+  const getBackendUrl = () => {
+    return config.backendUrl;
+  };
 
   // State for modals and forms
   const [accountModalVisible, setAccountModalVisible] = useState(false);
@@ -2703,7 +2597,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch accounts data
   const fetchAccounts = async () => {
     try {
-      const response = await fetch(`${getBackendUrl()}/api/super-admin/accounts`);
+      const response = await fetch(`${config.backendUrl}/api/super-admin/accounts`);
       if (response.ok) {
         const data = await response.json();
         setAccounts(data);
@@ -2716,7 +2610,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch blog posts
   const fetchBlogPosts = async () => {
     try {
-      const response = await fetch(`${getBackendUrl()}/api/super-admin/content/blog-posts`);
+      const response = await fetch(`${config.backendUrl}/api/super-admin/content/blog-posts`);
       if (response.ok) {
         const data = await response.json();
         setBlogPosts(data);
@@ -2729,7 +2623,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch packages
   const fetchPackages = async () => {
     try {
-      const response = await fetch(`${getBackendUrl()}/api/super-admin/packages`);
+      const response = await fetch(`${config.backendUrl}/api/super-admin/packages`);
       if (response.ok) {
         const data = await response.json();
         setPackages(data);
@@ -2742,7 +2636,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch support tickets
   const fetchSupportTickets = async () => {
     try {
-      const response = await fetch(`${getBackendUrl()}/api/super-admin/support/tickets`);
+      const response = await fetch(`${config.backendUrl}/api/super-admin/support/tickets`);
       if (response.ok) {
         const data = await response.json();
         setSupportTickets(data);
@@ -2755,7 +2649,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch frontpage content
   const fetchFrontpageContent = async () => {
     try {
-      const response = await fetch(`${getBackendUrl()}/api/super-admin/content/frontpage`);
+      const response = await fetch(`${config.backendUrl}/api/super-admin/content/frontpage`);
       if (response.ok) {
         const data = await response.json();
         setFrontpageContent(data);
@@ -2768,7 +2662,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch analytics
   const fetchAnalytics = async () => {
     try {
-      const response = await fetch(`${getBackendUrl()}/api/super-admin/analytics/advanced`);
+      const response = await fetch(`${config.backendUrl}/api/super-admin/analytics/advanced`);
       if (response.ok) {
         const data = await response.json();
         setAnalytics(data);
@@ -2781,7 +2675,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch system config
   const fetchSystemConfig = async () => {
     try {
-      const response = await fetch(`${getBackendUrl()}/api/super-admin/system/config`);
+      const response = await fetch(`${config.backendUrl}/api/super-admin/system/config`);
       if (response.ok) {
         const data = await response.json();
         setSystemConfig(data);
@@ -2794,7 +2688,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch API keys
   const fetchApiKeys = async () => {
     try {
-      const response = await fetch(`${getBackendUrl()}/api/super-admin/api-keys`);
+      const response = await fetch(`${config.backendUrl}/api/super-admin/api-keys`);
       if (response.ok) {
         const data = await response.json();
         setApiKeys(data);
@@ -2807,7 +2701,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch pending registrations
   const fetchPendingRegistrations = async () => {
     try {
-      const response = await fetch(`${getBackendUrl()}/api/super-admin/pending-registrations`);
+      const response = await fetch(`${config.backendUrl}/api/super-admin/pending-registrations`);
       if (response.ok) {
         const data = await response.json();
         setPendingRegistrations(data);
@@ -2820,7 +2714,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch users
   const fetchUsers = async () => {
     try {
-      const response = await fetch(`${getBackendUrl()}/api/super-admin/users`);
+      const response = await fetch(`${config.backendUrl}/api/super-admin/users`);
       if (response.ok) {
         const data = await response.json();
         setUsers(data);
@@ -2833,7 +2727,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch contact messages
   const fetchContactMessages = async () => {
     try {
-      const response = await fetch(`${getBackendUrl()}/api/super-admin/contact-messages`);
+      const response = await fetch(`${config.backendUrl}/api/super-admin/contact-messages`);
       if (response.ok) {
         const data = await response.json();
         setContactMessages(data);
@@ -2845,7 +2739,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
 
   const handleAccountAction = async (accountId: string, action: 'suspend' | 'activate' | 'delete') => {
     try {
-      const response = await fetch(`${getBackendUrl()}/api/super-admin/accounts/${accountId}/${action}`, {
+      const response = await fetch(`${config.backendUrl}/api/super-admin/accounts/${accountId}/${action}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -2865,7 +2759,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Handle pending registration approval/rejection
   const handlePendingAction = async (type: 'company' | 'agent', id: string, action: 'approve' | 'reject') => {
     try {
-      const response = await fetch(`${getBackendUrl()}/api/super-admin/${action}`, {
+      const response = await fetch(`${config.backendUrl}/api/super-admin/${action}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, id })
