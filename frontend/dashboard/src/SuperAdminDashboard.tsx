@@ -836,47 +836,37 @@ const CallManagementTab = () => {
 
   const fetchCallAnalytics = async () => {
     try {
-      const response = await fetch('${API_ENDPOINTS.WIDGET}/calls/analytics?period=7d');
+      const response = await fetch(`${getBackendUrl()}/api/widget/calls/analytics?period=7d`);
       if (response.ok) {
         const data = await response.json();
-        setCallAnalytics(data.analytics || {});
+        setCallAnalytics(data);
       } else {
         console.error('Failed to fetch call analytics');
-        // Fallback to mock data with proper structure
+        // Fallback to mock data
         setCallAnalytics({
-          totalCalls: 156,
-          avgDuration: 1800,
-          satisfaction: 4.8,
-          responseTime: 45,
-          callsByStatus: {
-            active: 5,
-            waiting: 2,
-            ended: 149,
-            missed: 0
-          }
+          totalCalls: 0,
+          activeCalls: 0,
+          avgDuration: 0,
+          callsByStatus: { waiting: 0, active: 0, ended: 0, missed: 0 },
+          callsByType: { chat: 0, voice: 0 }
         });
       }
     } catch (error) {
       console.error('Error fetching call analytics:', error);
-      // Fallback to mock data with proper structure
+      // Fallback to mock data
       setCallAnalytics({
-        totalCalls: 156,
-        avgDuration: 1800,
-        satisfaction: 4.8,
-        responseTime: 45,
-        callsByStatus: {
-          active: 5,
-          waiting: 2,
-          ended: 149,
-          missed: 0
-        }
+        totalCalls: 0,
+        activeCalls: 0,
+        avgDuration: 0,
+        callsByStatus: { waiting: 0, active: 0, ended: 0, missed: 0 },
+        callsByType: { chat: 0, voice: 0 }
       });
     }
   };
 
   const fetchAgents = async () => {
     try {
-      const response = await fetch('${API_ENDPOINTS.WIDGET}/agents/online');
+      const response = await fetch(`${getBackendUrl()}/api/widget/agents/online`);
       if (response.ok) {
         const data = await response.json();
         setAgents(data.agents || []);
@@ -892,22 +882,17 @@ const CallManagementTab = () => {
 
   const assignCallToAgent = async (callId: string, agentId: string) => {
     try {
-      const token = localStorage.getItem('superAdminToken');
-      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/calls/${callId}/assign`, {
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/calls/${callId}/assign`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agentId })
       });
-      const data = await response.json();
-      if (data.success) {
+      
+      if (response.ok) {
         message.success('Call assigned successfully');
         fetchActiveCalls();
-        setAssignModalVisible(false);
       } else {
-        message.error(data.error || 'Failed to assign call');
+        message.error('Failed to assign call');
       }
     } catch (error) {
       console.error('Error assigning call:', error);
@@ -917,23 +902,18 @@ const CallManagementTab = () => {
 
   const updateCallStatus = async (callId: string, status: string, notes?: string) => {
     try {
-      const token = localStorage.getItem('superAdminToken');
-      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/calls/${callId}/status`, {
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/calls/${callId}/status`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status, notes })
       });
-      const data = await response.json();
-      if (data.success) {
+      
+      if (response.ok) {
         message.success('Call status updated successfully');
         fetchActiveCalls();
         fetchCallHistory();
-        setCallModalVisible(false);
       } else {
-        message.error(data.error || 'Failed to update call status');
+        message.error('Failed to update call status');
       }
     } catch (error) {
       console.error('Error updating call status:', error);
@@ -1398,7 +1378,7 @@ const AgentManagementTab = () => {
       console.log('Creating CallDocker agent with data:', formData);
 
       // Call backend API to create CallDocker agent
-      const response = await fetch(`${API_ENDPOINTS.WIDGET}/calldocker-agent/create`, {
+      const response = await fetch(`${getBackendUrl()}/api/widget/calldocker-agent/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1718,7 +1698,7 @@ const AgentManagementTab = () => {
       skills: ['enquiry_handling']
     };
     try {
-      const response = await fetch('${API_ENDPOINTS.WIDGET}/calldocker-agent/create', {
+      const response = await fetch(`${getBackendUrl()}/api/widget/calldocker-agent/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(testAgent)
@@ -2364,7 +2344,7 @@ const CompanyCreationModal = ({ visible, onCancel, onSuccess }: { visible: boole
     setLoading(true);
     try {
       const token = localStorage.getItem('superAdminToken');
-      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/create-company`, {
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/create-company`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -2723,12 +2703,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch accounts data
   const fetchAccounts = async () => {
     try {
-      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/accounts`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/accounts`);
       if (response.ok) {
         const data = await response.json();
         setAccounts(data);
@@ -2741,12 +2716,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch blog posts
   const fetchBlogPosts = async () => {
     try {
-      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/content/blog-posts`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/content/blog-posts`);
       if (response.ok) {
         const data = await response.json();
         setBlogPosts(data);
@@ -2759,12 +2729,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch packages
   const fetchPackages = async () => {
     try {
-      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/packages`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/packages`);
       if (response.ok) {
         const data = await response.json();
         setPackages(data);
@@ -2777,12 +2742,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch support tickets
   const fetchSupportTickets = async () => {
     try {
-      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/support/tickets`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/support/tickets`);
       if (response.ok) {
         const data = await response.json();
         setSupportTickets(data);
@@ -2795,12 +2755,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch frontpage content
   const fetchFrontpageContent = async () => {
     try {
-      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/content/frontpage`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/content/frontpage`);
       if (response.ok) {
         const data = await response.json();
         setFrontpageContent(data);
@@ -2813,12 +2768,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch analytics
   const fetchAnalytics = async () => {
     try {
-      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/analytics/advanced`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/analytics/advanced`);
       if (response.ok) {
         const data = await response.json();
         setAnalytics(data);
@@ -2831,12 +2781,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch system config
   const fetchSystemConfig = async () => {
     try {
-      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/system/config`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/system/config`);
       if (response.ok) {
         const data = await response.json();
         setSystemConfig(data);
@@ -2849,12 +2794,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch API keys
   const fetchApiKeys = async () => {
     try {
-      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/api-keys`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/api-keys`);
       if (response.ok) {
         const data = await response.json();
         setApiKeys(data);
@@ -2867,12 +2807,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch pending registrations
   const fetchPendingRegistrations = async () => {
     try {
-      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/pending-registrations`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/pending-registrations`);
       if (response.ok) {
         const data = await response.json();
         setPendingRegistrations(data);
@@ -2885,12 +2820,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch users
   const fetchUsers = async () => {
     try {
-      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/users`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/users`);
       if (response.ok) {
         const data = await response.json();
         setUsers(data);
@@ -2903,12 +2833,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Fetch contact messages
   const fetchContactMessages = async () => {
     try {
-      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/contact-messages`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/contact-messages`);
       if (response.ok) {
         const data = await response.json();
         setContactMessages(data);
@@ -2920,7 +2845,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
 
   const handleAccountAction = async (accountId: string, action: 'suspend' | 'activate' | 'delete') => {
     try {
-      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/accounts/${accountId}/${action}`, {
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/accounts/${accountId}/${action}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -2940,7 +2865,7 @@ export default function SuperAdminDashboard({ onLogout }: SuperAdminDashboardPro
   // Handle pending registration approval/rejection
   const handlePendingAction = async (type: 'company' | 'agent', id: string, action: 'approve' | 'reject') => {
     try {
-      const response = await fetch(`${API_ENDPOINTS.SUPER_ADMIN}/${action}`, {
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/${action}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, id })
