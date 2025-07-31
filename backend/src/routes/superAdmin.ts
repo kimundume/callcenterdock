@@ -86,6 +86,88 @@ const companies = readJsonFile(COMPANIES_FILE, defaultCompanies);
 const users = readJsonFile(USERS_FILE, {});
 const agents = readJsonFile(AGENTS_FILE, defaultAgents);
 
+// Ensure we have some sample companies for testing
+if (Object.keys(companies).length === 0) {
+  console.log('[DEBUG] No companies found, creating sample companies');
+  const sampleCompany1 = {
+    uuid: 'sample-company-001',
+    name: 'Sample Company 1',
+    email: 'sample1@company.com',
+    verified: true,
+    suspended: false,
+    createdAt: new Date().toISOString(),
+    status: 'approved'
+  };
+  
+  const sampleCompany2 = {
+    uuid: 'sample-company-002',
+    name: 'Sample Company 2',
+    email: 'sample2@company.com',
+    verified: true,
+    suspended: false,
+    createdAt: new Date().toISOString(),
+    status: 'approved'
+  };
+  
+  companies[sampleCompany1.uuid] = sampleCompany1;
+  companies[sampleCompany2.uuid] = sampleCompany2;
+  
+  // Create sample agents for these companies
+  const sampleAgent1 = {
+    uuid: 'sample-agent-001',
+    username: 'agent1',
+    email: 'agent1@sample1.com',
+    companyUuid: sampleCompany1.uuid,
+    status: 'online',
+    assignedToPublic: true,
+    currentCalls: 1,
+    maxCalls: 5,
+    availability: 'online',
+    callsHandled: 15,
+    avgDuration: 240,
+    satisfaction: 4.5,
+    responseTime: 45,
+    totalCalls: 20,
+    missedCalls: 2,
+    skills: ['sales', 'support'],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  
+  const sampleAgent2 = {
+    uuid: 'sample-agent-002',
+    username: 'agent2',
+    email: 'agent2@sample2.com',
+    companyUuid: sampleCompany2.uuid,
+    status: 'offline',
+    assignedToPublic: false,
+    currentCalls: 0,
+    maxCalls: 3,
+    availability: 'offline',
+    callsHandled: 8,
+    avgDuration: 180,
+    satisfaction: 4.2,
+    responseTime: 60,
+    totalCalls: 10,
+    missedCalls: 1,
+    skills: ['technical'],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  
+  agents[sampleAgent1.uuid] = sampleAgent1;
+  agents[sampleAgent2.uuid] = sampleAgent2;
+  
+  // Save the sample data
+  saveCompanies();
+  saveAgents();
+  
+  console.log('[DEBUG] Sample companies and agents created');
+}
+
+console.log('[DEBUG] Loaded companies:', Object.keys(companies).length);
+console.log('[DEBUG] Loaded agents:', Object.keys(agents).length);
+
 // Save functions
 function saveCompanies(): void {
   console.log(`💾 Saving ${Object.keys(companies).length} companies...`);
@@ -180,6 +262,104 @@ router.get('/debug/agents', (req, res) => {
     });
   } catch (error) {
     console.error('Debug agents error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Simple endpoint to create a test company (no auth required)
+router.post('/debug/create-test-company', async (req, res) => {
+  try {
+    console.log('[DEBUG] Create test company request received');
+    
+    const uuid = uuidv4();
+    const testCompany = {
+      uuid,
+      name: 'Test Company ' + new Date().toISOString().slice(0, 19),
+      email: 'test@company.com',
+      verified: true,
+      suspended: false,
+      createdAt: new Date().toISOString(),
+      status: 'approved'
+    };
+    
+    companies[uuid] = testCompany;
+    saveCompanies();
+    
+    // Create test agents for this company
+    const testAgent1 = {
+      uuid: uuidv4(),
+      username: 'testagent1',
+      email: 'agent1@testcompany.com',
+      companyUuid: uuid,
+      status: 'online',
+      assignedToPublic: true,
+      currentCalls: 1,
+      maxCalls: 5,
+      availability: 'online',
+      callsHandled: 5,
+      avgDuration: 120,
+      satisfaction: 4.0,
+      responseTime: 30,
+      totalCalls: 5,
+      missedCalls: 0,
+      skills: ['sales'],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    agents[testAgent1.uuid] = testAgent1;
+    saveAgents();
+    
+    console.log('[DEBUG] Test company created:', testCompany);
+    
+    res.json({
+      success: true,
+      message: 'Test company created successfully',
+      company: testCompany,
+      agent: testAgent1,
+      totalCompanies: Object.keys(companies).length,
+      totalAgents: Object.keys(agents).length
+    });
+  } catch (error) {
+    console.error('Create test company error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Simple endpoint to check accounts without authentication (for testing)
+router.get('/debug/accounts', (req, res) => {
+  try {
+    console.log('[DEBUG] Debug accounts request received');
+    console.log('[DEBUG] Raw companies object:', companies);
+    console.log('[DEBUG] Companies keys:', Object.keys(companies));
+    console.log('[DEBUG] Companies values:', Object.values(companies));
+    
+    // Transform existing companies data to match the expected format
+    const accounts = Object.values(companies).map((company: any) => ({
+      id: company.uuid,
+      companyName: company.name,
+      email: company.email,
+      status: company.suspended ? 'suspended' : (company.verified ? 'active' : 'pending'),
+      createdAt: company.createdAt || new Date().toISOString(),
+      lastLogin: company.lastLogin || new Date().toISOString(),
+      subscription: 'pro', // Default subscription
+      agents: Object.values(agents).filter((agent: any) => agent.companyUuid === company.uuid).length,
+      calls: 0, // This would be calculated from call logs
+      revenue: Math.floor(Math.random() * 5000) + 1000 // Mock revenue data
+    }));
+
+    console.log('[DEBUG] Transformed accounts:', accounts);
+    
+    res.json({
+      message: 'Accounts debug data',
+      count: Object.keys(companies).length,
+      companies: companies,
+      companiesArray: Object.values(companies),
+      accounts: accounts,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Debug accounts error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
