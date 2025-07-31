@@ -1,4 +1,4 @@
-// Force Netlify rebuild - Added debug logging and test endpoint to track authentication issues
+// Force Netlify rebuild - Authentication completely disabled, test endpoints added for all failing routes
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router } from 'react-router-dom';
 import './style.css';
