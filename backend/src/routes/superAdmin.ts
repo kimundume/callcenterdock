@@ -2,7 +2,7 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { persistentStorage, saveCompanies, saveAgents, saveUsers, findUserByCompanyAndRole, findCompanyByEmail } from '../data/persistentStorage';
+import { persistentStorage } from '../data/persistentStorage';
 
 // In-memory storage for temporary data
 const pendingAdmins: any[] = [];
@@ -155,7 +155,7 @@ router.put('/accounts/:id/suspend', authenticateSuperAdmin, (req, res) => {
 
     // Add suspended status to company
     company.suspended = true;
-    saveCompanies(); // Save to file
+    persistentStorage.saveCompanies(); // Save to file
     
     res.json({ message: 'Account suspended successfully' });
   } catch (error) {
@@ -177,7 +177,7 @@ router.put('/accounts/:id/activate', authenticateSuperAdmin, (req, res) => {
 
     // Remove suspended status from company
     company.suspended = false;
-    saveCompanies(); // Save to file
+    persistentStorage.saveCompanies(); // Save to file
     
     res.json({ message: 'Account activated successfully' });
   } catch (error) {
@@ -198,7 +198,7 @@ router.put('/accounts/:id/delete', authenticateSuperAdmin, (req, res) => {
 
     // Remove company and related data
     delete persistentStorage.companies[id];
-    saveCompanies(); // Save to file
+    persistentStorage.saveCompanies(); // Save to file
     
     // Remove related agents
     Object.keys(persistentStorage.agents).forEach(agentId => {
@@ -206,7 +206,7 @@ router.put('/accounts/:id/delete', authenticateSuperAdmin, (req, res) => {
         delete persistentStorage.agents[agentId];
       }
     });
-    saveAgents(); // Save to file
+    persistentStorage.saveAgents(); // Save to file
     
     res.json({ message: 'Account deleted successfully' });
   } catch (error) {
@@ -597,7 +597,7 @@ router.post('/approve', (req, res) => {
     if (company) {
       company.status = 'approved';
       company.verified = true;
-      saveCompanies();
+      persistentStorage.saveCompanies();
       
       // Create admin user from pending admin credentials
       const pendingAdmin = pendingAdmins.find((pa: any) => pa.uuid === id);
@@ -616,7 +616,7 @@ router.post('/approve', (req, res) => {
           createdAt: new Date().toISOString()
         };
         persistentStorage.users[adminUser.uuid] = adminUser;
-        saveUsers();
+        persistentStorage.saveUsers();
         
         // Remove from pending admins
         const index = pendingAdmins.findIndex((pa: any) => pa.uuid === id);
@@ -632,7 +632,7 @@ router.post('/approve', (req, res) => {
     if (agent) {
       agent.registrationStatus = 'approved';
       agent.status = 'offline'; // Set initial status to offline
-      saveAgents();
+      persistentStorage.saveAgents();
       
       // Create agent user from pending agent credentials
       const pendingAgentCred = pendingAgentCredentials.find((pac: any) => pac.uuid === id);
@@ -651,7 +651,7 @@ router.post('/approve', (req, res) => {
           createdAt: new Date().toISOString()
         };
         persistentStorage.users[agentUser.uuid] = agentUser;
-        saveUsers();
+        persistentStorage.saveUsers();
         
         // Remove from pending agent credentials
         const index = pendingAgentCredentials.findIndex((pac: any) => pac.uuid === id);
@@ -674,14 +674,14 @@ router.post('/reject', (req, res) => {
     const company = persistentStorage.companies[id];
     if (company) {
       company.status = 'rejected';
-      saveCompanies();
+      persistentStorage.saveCompanies();
       return res.json({ success: true });
     }
   } else if (type === 'agent') {
     const agent = persistentStorage.agents[id];
     if (agent) {
       agent.status = 'rejected';
-      saveAgents();
+      persistentStorage.saveAgents();
       return res.json({ success: true });
     }
   }
@@ -967,7 +967,7 @@ router.post('/create-company', authenticateSuperAdmin, async (req, res) => {
     
     // Add to companies object
     persistentStorage.companies[uuid] = newCompany;
-    saveCompanies(); // Save to file
+    persistentStorage.saveCompanies(); // Save to file
     
     // Create admin user
     const adminUser = {
@@ -982,7 +982,7 @@ router.post('/create-company', authenticateSuperAdmin, async (req, res) => {
     
     // Add to users object
     persistentStorage.users[adminUser.uuid] = adminUser;
-    saveUsers(); // Save to file
+    persistentStorage.saveUsers(); // Save to file
     
     // Generate JWT token for admin
     const token = jwt.sign({ 

@@ -145,7 +145,7 @@ router.put('/accounts/:id/suspend', authenticateSuperAdmin, (req, res) => {
         }
         // Add suspended status to company
         company.suspended = true;
-        (0, persistentStorage_1.saveCompanies)(); // Save to file
+        persistentStorage_1.persistentStorage.saveCompanies(); // Save to file
         res.json({ message: 'Account suspended successfully' });
     }
     catch (error) {
@@ -164,7 +164,7 @@ router.put('/accounts/:id/activate', authenticateSuperAdmin, (req, res) => {
         }
         // Remove suspended status from company
         company.suspended = false;
-        (0, persistentStorage_1.saveCompanies)(); // Save to file
+        persistentStorage_1.persistentStorage.saveCompanies(); // Save to file
         res.json({ message: 'Account activated successfully' });
     }
     catch (error) {
@@ -182,14 +182,14 @@ router.put('/accounts/:id/delete', authenticateSuperAdmin, (req, res) => {
         }
         // Remove company and related data
         delete persistentStorage_1.persistentStorage.companies[id];
-        (0, persistentStorage_1.saveCompanies)(); // Save to file
+        persistentStorage_1.persistentStorage.saveCompanies(); // Save to file
         // Remove related agents
         Object.keys(persistentStorage_1.persistentStorage.agents).forEach(agentId => {
             if (persistentStorage_1.persistentStorage.agents[agentId].companyUuid === id) {
                 delete persistentStorage_1.persistentStorage.agents[agentId];
             }
         });
-        (0, persistentStorage_1.saveAgents)(); // Save to file
+        persistentStorage_1.persistentStorage.saveAgents(); // Save to file
         res.json({ message: 'Account deleted successfully' });
     }
     catch (error) {
@@ -538,7 +538,7 @@ router.post('/approve', (req, res) => {
         if (company) {
             company.status = 'approved';
             company.verified = true;
-            (0, persistentStorage_1.saveCompanies)();
+            persistentStorage_1.persistentStorage.saveCompanies();
             // Create admin user from pending admin credentials
             const pendingAdmin = pendingAdmins.find((pa) => pa.uuid === id);
             if (pendingAdmin) {
@@ -555,7 +555,7 @@ router.post('/approve', (req, res) => {
                     createdAt: new Date().toISOString()
                 };
                 persistentStorage_1.persistentStorage.users[adminUser.uuid] = adminUser;
-                (0, persistentStorage_1.saveUsers)();
+                persistentStorage_1.persistentStorage.saveUsers();
                 // Remove from pending admins
                 const index = pendingAdmins.findIndex((pa) => pa.uuid === id);
                 if (index > -1) {
@@ -570,7 +570,7 @@ router.post('/approve', (req, res) => {
         if (agent) {
             agent.registrationStatus = 'approved';
             agent.status = 'offline'; // Set initial status to offline
-            (0, persistentStorage_1.saveAgents)();
+            persistentStorage_1.persistentStorage.saveAgents();
             // Create agent user from pending agent credentials
             const pendingAgentCred = pendingAgentCredentials.find((pac) => pac.uuid === id);
             if (pendingAgentCred) {
@@ -587,7 +587,7 @@ router.post('/approve', (req, res) => {
                     createdAt: new Date().toISOString()
                 };
                 persistentStorage_1.persistentStorage.users[agentUser.uuid] = agentUser;
-                (0, persistentStorage_1.saveUsers)();
+                persistentStorage_1.persistentStorage.saveUsers();
                 // Remove from pending agent credentials
                 const index = pendingAgentCredentials.findIndex((pac) => pac.uuid === id);
                 if (index > -1) {
@@ -606,7 +606,7 @@ router.post('/reject', (req, res) => {
         const company = persistentStorage_1.persistentStorage.companies[id];
         if (company) {
             company.status = 'rejected';
-            (0, persistentStorage_1.saveCompanies)();
+            persistentStorage_1.persistentStorage.saveCompanies();
             return res.json({ success: true });
         }
     }
@@ -614,7 +614,7 @@ router.post('/reject', (req, res) => {
         const agent = persistentStorage_1.persistentStorage.agents[id];
         if (agent) {
             agent.status = 'rejected';
-            (0, persistentStorage_1.saveAgents)();
+            persistentStorage_1.persistentStorage.saveAgents();
             return res.json({ success: true });
         }
     }
@@ -871,7 +871,7 @@ router.post('/create-company', authenticateSuperAdmin, (req, res) => __awaiter(v
         };
         // Add to companies object
         persistentStorage_1.persistentStorage.companies[uuid] = newCompany;
-        (0, persistentStorage_1.saveCompanies)(); // Save to file
+        persistentStorage_1.persistentStorage.saveCompanies(); // Save to file
         // Create admin user
         const adminUser = {
             uuid: (0, uuid_1.v4)(),
@@ -884,7 +884,7 @@ router.post('/create-company', authenticateSuperAdmin, (req, res) => __awaiter(v
         };
         // Add to users object
         persistentStorage_1.persistentStorage.users[adminUser.uuid] = adminUser;
-        (0, persistentStorage_1.saveUsers)(); // Save to file
+        persistentStorage_1.persistentStorage.saveUsers(); // Save to file
         // Generate JWT token for admin
         const token = jsonwebtoken_1.default.sign({
             username: adminUsername,

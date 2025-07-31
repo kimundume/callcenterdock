@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
-import { persistentStorage, saveSessions } from '../data/persistentStorage';
+import { persistentStorage } from '../data/persistentStorage';
 
 // In-memory storage for socket connections
 const socketConnections: Record<string, string> = {}; // agentId -> socketId
@@ -109,7 +109,7 @@ export function registerSignalingHandlers(io: SocketIOServer) {
         const session = Object.values(persistentStorage.sessions).find((s: any) => s.sessionId === sessionId);
         if (session) {
           session.status = status;
-          saveSessions();
+          persistentStorage.saveSessions();
         }
       });
       // Notify widget/client

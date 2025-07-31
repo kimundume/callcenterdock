@@ -82,57 +82,57 @@ const defaultAgents = {
 };
 
 // Load data from files or create with defaults
-export const companies = readJsonFile(COMPANIES_FILE, defaultCompanies);
-export const users = readJsonFile(USERS_FILE, {});
-export const agents = readJsonFile(AGENTS_FILE, defaultAgents);
-export const sessions = readJsonFile(SESSIONS_FILE, []);
-export const widgetSettings = readJsonFile(WIDGET_SETTINGS_FILE, {});
+const companies = readJsonFile(COMPANIES_FILE, defaultCompanies);
+const users = readJsonFile(USERS_FILE, {});
+const agents = readJsonFile(AGENTS_FILE, defaultAgents);
+const sessions = readJsonFile(SESSIONS_FILE, []);
+const widgetSettings = readJsonFile(WIDGET_SETTINGS_FILE, {});
 
 // Other in-memory data (these don't need persistence for now)
-export const calls: Record<string, any> = {};
-export const ivrConfigs: Record<string, any> = {};
-export const callQueue: Record<string, string[]> = {};
-export const chatSessions: Record<string, any> = {};
-export const pendingCompanies: Record<string, any> = {};
+const calls: Record<string, any> = {};
+const ivrConfigs: Record<string, any> = {};
+const callQueue: Record<string, string[]> = {};
+const chatSessions: Record<string, any> = {};
+const pendingCompanies: Record<string, any> = {};
 
 // Save functions with enhanced error handling
-export function saveCompanies(): void {
+function saveCompanies(): void {
   console.log(`💾 Saving ${Object.keys(companies).length} companies...`);
   writeJsonFile(COMPANIES_FILE, companies);
 }
 
-export function saveUsers(): void {
+function saveUsers(): void {
   console.log(`💾 Saving ${Object.keys(users).length} users...`);
   writeJsonFile(USERS_FILE, users);
 }
 
-export function saveAgents(): void {
+function saveAgents(): void {
   console.log(`💾 Saving ${Object.keys(agents).length} agents...`);
   writeJsonFile(AGENTS_FILE, agents);
 }
 
-export function saveSessions(): void {
+function saveSessions(): void {
   console.log(`💾 Saving ${sessions.length} sessions...`);
   writeJsonFile(SESSIONS_FILE, sessions);
 }
 
-export function saveWidgetSettings(): void {
+function saveWidgetSettings(): void {
   console.log(`💾 Saving widget settings...`);
   writeJsonFile(WIDGET_SETTINGS_FILE, widgetSettings);
 }
 
 // Helper functions
-export function findUserByCompanyAndRole(companyUuid: string, username: string, role: string) {
+function findUserByCompanyAndRole(companyUuid: string, username: string, role: string) {
   return Object.values(users).find(
     (u: any) => u.companyUuid === companyUuid && u.username === username && u.role === role
   );
 }
 
-export function findCompanyByEmail(email: string) {
+function findCompanyByEmail(email: string) {
   return Object.values(companies).find((c: any) => c.email === email);
 }
 
-export function findPendingCompanyByEmail(email: string) {
+function findPendingCompanyByEmail(email: string) {
   return Object.values(pendingCompanies).find((c: any) => c.email === email);
 }
 
@@ -250,6 +250,16 @@ export interface PersistentStorage {
     responseTime: number;
     date: string;
   }>;
+  // Save functions
+  saveCompanies: () => void;
+  saveUsers: () => void;
+  saveAgents: () => void;
+  saveSessions: () => void;
+  saveWidgetSettings: () => void;
+  // Helper functions
+  findUserByCompanyAndRole: (companyUuid: string, username: string, role: string) => any;
+  findCompanyByEmail: (email: string) => any;
+  findPendingCompanyByEmail: (email: string) => any;
 }
 
 export const persistentStorage: PersistentStorage = {
@@ -270,7 +280,17 @@ export const persistentStorage: PersistentStorage = {
   chatNotes: [],
   contacts: [],
   agentAssignments: [],
-  callAnalytics: []
+  callAnalytics: [],
+  // Save functions
+  saveCompanies,
+  saveUsers,
+  saveAgents,
+  saveSessions,
+  saveWidgetSettings,
+  // Helper functions
+  findUserByCompanyAndRole,
+  findCompanyByEmail,
+  findPendingCompanyByEmail
 };
 
 console.log('✅ Persistent storage loaded successfully');

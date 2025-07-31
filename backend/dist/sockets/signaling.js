@@ -100,7 +100,7 @@ function registerSignalingHandlers(io) {
                 const session = Object.values(persistentStorage_1.persistentStorage.sessions).find((s) => s.sessionId === sessionId);
                 if (session) {
                     session.status = status;
-                    (0, persistentStorage_1.saveSessions)();
+                    persistentStorage_1.persistentStorage.saveSessions();
                 }
             });
             // Notify widget/client
