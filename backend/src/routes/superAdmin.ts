@@ -120,6 +120,27 @@ const contactMessages: any[] = [];
 
 const router = express.Router();
 
+// Simple endpoint to check companies data (no auth required)
+router.get('/debug/companies', (req, res) => {
+  try {
+    console.log('[DEBUG] Debug companies request received');
+    console.log('[DEBUG] Raw companies object:', companies);
+    console.log('[DEBUG] Companies keys:', Object.keys(companies));
+    console.log('[DEBUG] Companies values:', Object.values(companies));
+    
+    res.json({
+      message: 'Companies debug data',
+      count: Object.keys(companies).length,
+      companies: companies,
+      companiesArray: Object.values(companies),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Debug companies error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Test endpoint to check if server is working
 router.get('/test', (req, res) => {
   res.json({ 
@@ -233,6 +254,10 @@ router.post('/login', async (req, res) => {
 // Get all accounts (protected)
 router.get('/accounts', authenticateSuperAdmin, (req, res) => {
   try {
+    console.log('[DEBUG] Accounts request received');
+    console.log('[DEBUG] Companies data:', companies);
+    console.log('[DEBUG] Users data:', users);
+    
     // Transform existing companies data to match the expected format
     const accounts = Object.values(companies).map((company: any) => ({
       id: company.uuid,
@@ -246,6 +271,9 @@ router.get('/accounts', authenticateSuperAdmin, (req, res) => {
       calls: 0, // This would be calculated from call logs
       revenue: Math.floor(Math.random() * 5000) + 1000 // Mock revenue data
     }));
+
+    console.log('[DEBUG] Transformed accounts:', accounts);
+    console.log('[DEBUG] Returning accounts count:', accounts.length);
 
     res.json(accounts);
   } catch (error) {
@@ -986,6 +1014,9 @@ router.get('/calls/analytics', authenticateSuperAdmin, (req, res) => {
 // Get all agents with status
 router.get('/agents/status', authenticateSuperAdmin, (req, res) => {
   try {
+    console.log('[DEBUG] Agent status request received');
+    console.log('[DEBUG] Agents data:', agents);
+    
     const agentsWithStatus = Object.values(agents).map((agent: any) => {
       const company = companies[agent.companyUuid];
       
@@ -994,15 +1025,20 @@ router.get('/agents/status', authenticateSuperAdmin, (req, res) => {
         username: agent.username,
         email: agent.email,
         companyName: company?.name || 'Unknown',
-        status: agent.status,
-        assignedToPublic: false,
-        currentCalls: 0,
-        maxCalls: 5,
-        availability: 'offline',
-        lastActivity: agent.updatedAt || agent.createdAt,
-        skills: []
+        status: agent.status || 'offline',
+        assignedToPublic: agent.assignedToPublic || false,
+        currentCalls: agent.currentCalls || 0,
+        maxCalls: agent.maxCalls || 5,
+        availability: agent.availability || 'offline',
+        lastActivity: agent.updatedAt || agent.createdAt || new Date().toISOString(),
+        skills: agent.skills || [],
+        callsHandled: agent.callsHandled || 0,
+        avgDuration: agent.avgDuration || 0,
+        satisfaction: agent.satisfaction || 0
       };
     });
+
+    console.log('[DEBUG] Transformed agents:', agentsWithStatus);
 
     res.json({
       success: true,

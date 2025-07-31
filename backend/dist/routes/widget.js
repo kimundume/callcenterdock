@@ -120,21 +120,38 @@ router.get('/calldocker-agents', (req, res) => {
 router.get('/company-agents', (req, res) => {
     try {
         const { companyUuid } = req.query;
-        if (!companyUuid) {
-            return res.status(400).json({ error: 'companyUuid is required' });
-        }
+        // Provide default value if companyUuid is missing
+        const companyId = companyUuid || 'demo-company-uuid';
+        console.log('[DEBUG] Company agents request:', { companyUuid, companyId });
         // Mock company agents data
         const agents = [
             {
                 id: 'agent-001',
                 name: 'Agent 1',
                 online: true,
-                companyUuid: companyUuid,
+                companyUuid: companyId,
                 lastSeen: new Date().toISOString(),
                 status: 'online',
                 assignedToPublic: true,
                 currentCalls: 1,
-                maxCalls: 5
+                maxCalls: 5,
+                callsHandled: 15,
+                avgDuration: 240,
+                satisfaction: 4.5
+            },
+            {
+                id: 'agent-002',
+                name: 'Agent 2',
+                online: false,
+                companyUuid: companyId,
+                lastSeen: new Date(Date.now() - 3600000).toISOString(),
+                status: 'offline',
+                assignedToPublic: false,
+                currentCalls: 0,
+                maxCalls: 3,
+                callsHandled: 8,
+                avgDuration: 180,
+                satisfaction: 4.2
             }
         ];
         res.json({
