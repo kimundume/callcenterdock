@@ -217,6 +217,18 @@ const contactMessages: any[] = [];
 
 const router = express.Router();
 
+// Simple test endpoint to verify backend is working
+router.get('/test-backend', (req, res) => {
+  console.log('[DEBUG] Test backend endpoint hit');
+  res.json({ 
+    message: 'Backend is working!',
+    timestamp: new Date().toISOString(),
+    authDisabled: true,
+    companies: Object.keys(companies).length,
+    agents: Object.keys(agents).length
+  });
+});
+
 // Simple endpoint to check agent data (no auth required)
 router.get('/debug/agents', (req, res) => {
   try {
@@ -481,6 +493,7 @@ router.post('/test-login', async (req, res) => {
 // Super Admin authentication middleware (temporarily disabled for testing)
 const authenticateSuperAdmin = (req: any, res: any, next: any) => {
   // Temporarily disable authentication for testing
+  console.log('[DEBUG] Authentication middleware called for:', req.method, req.path);
   console.log('[DEBUG] Authentication bypassed for testing');
   req.superAdmin = { username: 'test', role: 'super-admin' };
   next();
