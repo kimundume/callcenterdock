@@ -16,7 +16,103 @@ const express_1 = __importDefault(require("express"));
 const uuid_1 = require("uuid");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const persistentStorage_1 = require("../data/persistentStorage");
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
+// Simple in-memory storage with file persistence
+const DATA_DIR = process.env.NODE_ENV === 'production'
+    ? path_1.default.join(process.cwd(), 'data')
+    : path_1.default.join(__dirname, '../../data');
+const COMPANIES_FILE = path_1.default.join(DATA_DIR, 'companies.json');
+const USERS_FILE = path_1.default.join(DATA_DIR, 'users.json');
+const AGENTS_FILE = path_1.default.join(DATA_DIR, 'agents.json');
+// Ensure data directory exists
+function ensureDataDirectory() {
+    try {
+        if (!fs_1.default.existsSync(DATA_DIR)) {
+            fs_1.default.mkdirSync(DATA_DIR, { recursive: true });
+            console.log(`📁 Created data directory: ${DATA_DIR}`);
+        }
+    }
+    catch (error) {
+        console.error(`❌ Error creating data directory: ${error}`);
+        return false;
+    }
+    return true;
+}
+// Helper functions for file operations
+function readJsonFile(filePath, defaultValue = {}) {
+    try {
+        if (fs_1.default.existsSync(filePath)) {
+            const data = fs_1.default.readFileSync(filePath, 'utf8');
+            return JSON.parse(data);
+        }
+    }
+    catch (error) {
+        console.error(`Error reading ${filePath}:`, error);
+    }
+    return defaultValue;
+}
+function writeJsonFile(filePath, data) {
+    try {
+        const dir = path_1.default.dirname(filePath);
+        if (!fs_1.default.existsSync(dir)) {
+            fs_1.default.mkdirSync(dir, { recursive: true });
+        }
+        fs_1.default.writeFileSync(filePath, JSON.stringify(data, null, 2));
+        console.log(`💾 Saved data to: ${filePath}`);
+    }
+    catch (error) {
+        console.error(`Error writing ${filePath}:`, error);
+    }
+}
+// Initialize data directory
+ensureDataDirectory();
+// Initialize default data
+const defaultCompanies = {
+    'demo-company-uuid': {
+        uuid: 'demo-company-uuid',
+        name: 'Demo Company',
+        email: 'demo@company.com',
+        verified: true,
+        createdAt: new Date().toISOString(),
+    }
+};
+const defaultAgents = {
+    'agent1': {
+        uuid: 'demo-agent-uuid',
+        companyUuid: 'demo-company-uuid',
+        username: 'agent1',
+        password: 'password',
+        email: 'agent1@demo.com',
+        status: 'online',
+        registrationStatus: 'approved',
+        createdAt: new Date().toISOString(),
+    }
+};
+// Load data from files or create with defaults
+const companies = readJsonFile(COMPANIES_FILE, defaultCompanies);
+const users = readJsonFile(USERS_FILE, {});
+const agents = readJsonFile(AGENTS_FILE, defaultAgents);
+// Save functions
+function saveCompanies() {
+    console.log(`💾 Saving ${Object.keys(companies).length} companies...`);
+    writeJsonFile(COMPANIES_FILE, companies);
+}
+function saveUsers() {
+    console.log(`💾 Saving ${Object.keys(users).length} users...`);
+    writeJsonFile(USERS_FILE, users);
+}
+function saveAgents() {
+    console.log(`💾 Saving ${Object.keys(agents).length} agents...`);
+    writeJsonFile(AGENTS_FILE, agents);
+}
+// Helper functions
+function findUserByCompanyAndRole(companyUuid, username, role) {
+    return Object.values(users).find((u) => u.companyUuid === companyUuid && u.username === username && u.role === role);
+}
+function findCompanyByEmail(email) {
+    return Object.values(companies).find((c) => c.email === email);
+}
 // In-memory storage for temporary data
 const pendingAdmins = [];
 const pendingAgentCredentials = [];
@@ -93,7 +189,7 @@ router.post('/login', (req, res) => __awaiter(void 0, void 0, void 0, function* 
 router.get('/accounts', authenticateSuperAdmin, (req, res) => {
     try {
         // Transform existing companies data to match the expected format
-        const accounts = Object.values(persistentStorage_1.persistentStorage.companies).map((company) => ({
+        const accounts = Object.values(companies).map((company) => ({
             id: company.uuid,
             companyName: company.name,
             email: company.email,
@@ -101,7 +197,7 @@ router.get('/accounts', authenticateSuperAdmin, (req, res) => {
             createdAt: company.createdAt || new Date().toISOString(),
             lastLogin: company.lastLogin || new Date().toISOString(),
             subscription: 'pro', // Default subscription
-            agents: Object.values(persistentStorage_1.persistentStorage.agents).filter((agent) => agent.companyUuid === company.uuid).length,
+            agents: Object.values(agents).filter((agent) => agent.companyUuid === company.uuid).length,
             calls: 0, // This would be calculated from call logs
             revenue: Math.floor(Math.random() * 5000) + 1000 // Mock revenue data
         }));
@@ -115,8 +211,8 @@ router.get('/accounts', authenticateSuperAdmin, (req, res) => {
 // Get raw companies data (for debugging)
 router.get('/companies', (req, res) => {
     try {
-        console.log('Companies data requested:', persistentStorage_1.persistentStorage.companies);
-        res.json(persistentStorage_1.persistentStorage.companies);
+        console.log('Companies data requested:', companies);
+        res.json(companies);
     }
     catch (error) {
         console.error('Error fetching companies:', error);
@@ -126,8 +222,8 @@ router.get('/companies', (req, res) => {
 // Get raw users data (for debugging)
 router.get('/users', (req, res) => {
     try {
-        console.log('Users data requested:', persistentStorage_1.persistentStorage.users);
-        res.json(persistentStorage_1.persistentStorage.users);
+        console.log('Users data requested:', users);
+        res.json(users);
     }
     catch (error) {
         console.error('Error fetching users:', error);
@@ -139,13 +235,13 @@ router.put('/accounts/:id/suspend', authenticateSuperAdmin, (req, res) => {
     try {
         const { id } = req.params;
         // Find and update the company status
-        const company = persistentStorage_1.persistentStorage.companies[id];
+        const company = companies[id];
         if (!company) {
             return res.status(404).json({ error: 'Account not found' });
         }
         // Add suspended status to company
         company.suspended = true;
-        persistentStorage_1.persistentStorage.saveCompanies(); // Save to file
+        saveCompanies(); // Save to file
         res.json({ message: 'Account suspended successfully' });
     }
     catch (error) {
@@ -158,13 +254,13 @@ router.put('/accounts/:id/activate', authenticateSuperAdmin, (req, res) => {
     try {
         const { id } = req.params;
         // Find and update the company status
-        const company = persistentStorage_1.persistentStorage.companies[id];
+        const company = companies[id];
         if (!company) {
             return res.status(404).json({ error: 'Account not found' });
         }
         // Remove suspended status from company
         company.suspended = false;
-        persistentStorage_1.persistentStorage.saveCompanies(); // Save to file
+        saveCompanies(); // Save to file
         res.json({ message: 'Account activated successfully' });
     }
     catch (error) {
@@ -177,19 +273,19 @@ router.put('/accounts/:id/delete', authenticateSuperAdmin, (req, res) => {
     try {
         const { id } = req.params;
         // Find and remove the company
-        if (!persistentStorage_1.persistentStorage.companies[id]) {
+        if (!companies[id]) {
             return res.status(404).json({ error: 'Account not found' });
         }
         // Remove company and related data
-        delete persistentStorage_1.persistentStorage.companies[id];
-        persistentStorage_1.persistentStorage.saveCompanies(); // Save to file
+        delete companies[id];
+        saveCompanies(); // Save to file
         // Remove related agents
-        Object.keys(persistentStorage_1.persistentStorage.agents).forEach(agentId => {
-            if (persistentStorage_1.persistentStorage.agents[agentId].companyUuid === id) {
-                delete persistentStorage_1.persistentStorage.agents[agentId];
+        Object.keys(agents).forEach(agentId => {
+            if (agents[agentId].companyUuid === id) {
+                delete agents[agentId];
             }
         });
-        persistentStorage_1.persistentStorage.saveAgents(); // Save to file
+        saveAgents(); // Save to file
         res.json({ message: 'Account deleted successfully' });
     }
     catch (error) {
@@ -201,12 +297,12 @@ router.put('/accounts/:id/delete', authenticateSuperAdmin, (req, res) => {
 router.get('/analytics', authenticateSuperAdmin, (req, res) => {
     try {
         const analytics = {
-            totalAccounts: Object.keys(persistentStorage_1.persistentStorage.companies).length,
-            activeAccounts: Object.values(persistentStorage_1.persistentStorage.companies).filter((c) => c.verified && !c.suspended).length,
-            suspendedAccounts: Object.values(persistentStorage_1.persistentStorage.companies).filter((c) => c.suspended).length,
-            pendingAccounts: Object.values(persistentStorage_1.persistentStorage.companies).filter((c) => !c.verified).length,
-            totalAgents: Object.keys(persistentStorage_1.persistentStorage.agents).length,
-            totalRevenue: Object.keys(persistentStorage_1.persistentStorage.companies).length * 2500, // Mock calculation
+            totalAccounts: Object.keys(companies).length,
+            activeAccounts: Object.values(companies).filter((c) => c.verified && !c.suspended).length,
+            suspendedAccounts: Object.values(companies).filter((c) => c.suspended).length,
+            pendingAccounts: Object.values(companies).filter((c) => !c.verified).length,
+            totalAgents: Object.keys(agents).length,
+            totalRevenue: Object.keys(companies).length * 2500, // Mock calculation
             systemHealth: {
                 backend: 'online',
                 database: 'connected',
@@ -382,7 +478,7 @@ router.get('/analytics/advanced', authenticateSuperAdmin, (req, res) => {
             },
             users: {
                 growth: [45, 78, 56, 89, 67, 95],
-                total: Object.keys(persistentStorage_1.persistentStorage.companies).length
+                total: Object.keys(companies).length
             },
             performance: {
                 responseTime: 245,
@@ -526,19 +622,19 @@ router.post('/api-keys', authenticateSuperAdmin, (req, res) => {
 // --- Super Admin: Pending Registrations ---
 // GET /api/superadmin/pending-registrations
 router.get('/pending-registrations', (req, res) => {
-    const pendingCompanies = Object.values(persistentStorage_1.persistentStorage.companies).filter((c) => c.status === 'pending');
-    const pendingAgents = Object.values(persistentStorage_1.persistentStorage.agents).filter((a) => a.status === 'pending');
+    const pendingCompanies = Object.values(companies).filter((c) => c.status === 'pending');
+    const pendingAgents = Object.values(agents).filter((a) => a.status === 'pending');
     res.json({ companies: pendingCompanies, agents: pendingAgents });
 });
 // POST /api/superadmin/approve
 router.post('/approve', (req, res) => {
     const { type, id } = req.body;
     if (type === 'company') {
-        const company = persistentStorage_1.persistentStorage.companies[id];
+        const company = companies[id];
         if (company) {
             company.status = 'approved';
             company.verified = true;
-            persistentStorage_1.persistentStorage.saveCompanies();
+            saveCompanies();
             // Create admin user from pending admin credentials
             const pendingAdmin = pendingAdmins.find((pa) => pa.uuid === id);
             if (pendingAdmin) {
@@ -554,8 +650,8 @@ router.post('/approve', (req, res) => {
                     email: pendingAdmin.email,
                     createdAt: new Date().toISOString()
                 };
-                persistentStorage_1.persistentStorage.users[adminUser.uuid] = adminUser;
-                persistentStorage_1.persistentStorage.saveUsers();
+                users[adminUser.uuid] = adminUser;
+                saveUsers();
                 // Remove from pending admins
                 const index = pendingAdmins.findIndex((pa) => pa.uuid === id);
                 if (index > -1) {
@@ -566,11 +662,11 @@ router.post('/approve', (req, res) => {
         }
     }
     else if (type === 'agent') {
-        const agent = persistentStorage_1.persistentStorage.agents[id];
+        const agent = agents[id];
         if (agent) {
             agent.registrationStatus = 'approved';
             agent.status = 'offline'; // Set initial status to offline
-            persistentStorage_1.persistentStorage.saveAgents();
+            saveAgents();
             // Create agent user from pending agent credentials
             const pendingAgentCred = pendingAgentCredentials.find((pac) => pac.uuid === id);
             if (pendingAgentCred) {
@@ -586,8 +682,8 @@ router.post('/approve', (req, res) => {
                     email: pendingAgentCred.email,
                     createdAt: new Date().toISOString()
                 };
-                persistentStorage_1.persistentStorage.users[agentUser.uuid] = agentUser;
-                persistentStorage_1.persistentStorage.saveUsers();
+                users[agentUser.uuid] = agentUser;
+                saveUsers();
                 // Remove from pending agent credentials
                 const index = pendingAgentCredentials.findIndex((pac) => pac.uuid === id);
                 if (index > -1) {
@@ -603,18 +699,18 @@ router.post('/approve', (req, res) => {
 router.post('/reject', (req, res) => {
     const { type, id } = req.body;
     if (type === 'company') {
-        const company = persistentStorage_1.persistentStorage.companies[id];
+        const company = companies[id];
         if (company) {
             company.status = 'rejected';
-            persistentStorage_1.persistentStorage.saveCompanies();
+            saveCompanies();
             return res.json({ success: true });
         }
     }
     else if (type === 'agent') {
-        const agent = persistentStorage_1.persistentStorage.agents[id];
+        const agent = agents[id];
         if (agent) {
             agent.status = 'rejected';
-            persistentStorage_1.persistentStorage.saveAgents();
+            saveAgents();
             return res.json({ success: true });
         }
     }
@@ -768,8 +864,8 @@ router.get('/calls/analytics', authenticateSuperAdmin, (req, res) => {
 // Get all agents with status
 router.get('/agents/status', authenticateSuperAdmin, (req, res) => {
     try {
-        const agentsWithStatus = Object.values(persistentStorage_1.persistentStorage.agents).map((agent) => {
-            const company = persistentStorage_1.persistentStorage.companies[agent.companyUuid];
+        const agentsWithStatus = Object.values(agents).map((agent) => {
+            const company = companies[agent.companyUuid];
             return {
                 id: agent.uuid,
                 username: agent.username,
@@ -850,7 +946,7 @@ router.post('/create-company', authenticateSuperAdmin, (req, res) => __awaiter(v
             return res.status(400).json({ error: 'Invalid email format' });
         }
         // Check if company already exists (by email)
-        const existingCompany = Object.values(persistentStorage_1.persistentStorage.companies).find((c) => c.email === email);
+        const existingCompany = Object.values(companies).find((c) => c.email === email);
         if (existingCompany) {
             return res.status(400).json({ error: 'A company with this email already exists' });
         }
@@ -870,8 +966,8 @@ router.post('/create-company', authenticateSuperAdmin, (req, res) => __awaiter(v
             status: 'approved' // Directly approved
         };
         // Add to companies object
-        persistentStorage_1.persistentStorage.companies[uuid] = newCompany;
-        persistentStorage_1.persistentStorage.saveCompanies(); // Save to file
+        companies[uuid] = newCompany;
+        saveCompanies(); // Save to file
         // Create admin user
         const adminUser = {
             uuid: (0, uuid_1.v4)(),
@@ -883,8 +979,8 @@ router.post('/create-company', authenticateSuperAdmin, (req, res) => __awaiter(v
             createdAt: new Date().toISOString()
         };
         // Add to users object
-        persistentStorage_1.persistentStorage.users[adminUser.uuid] = adminUser;
-        persistentStorage_1.persistentStorage.saveUsers(); // Save to file
+        users[adminUser.uuid] = adminUser;
+        saveUsers(); // Save to file
         // Generate JWT token for admin
         const token = jsonwebtoken_1.default.sign({
             username: adminUsername,
