@@ -1,4 +1,4 @@
-// Force Netlify rebuild - Debug logging added to all failing routes, NO AUTH applied
+// Force Netlify rebuild - Added comprehensive debug logging to verify backend is running updated code
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router } from 'react-router-dom';
 import './style.css';
