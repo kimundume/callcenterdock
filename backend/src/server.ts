@@ -1008,5 +1008,7 @@ app.get('/widget-config.js', (req, res) => {
 
 const PORT = process.env.PORT || 5001;
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🔧 Authentication disabled for testing - all routes accessible`);
+  console.log(`📅 Server started at: ${new Date().toISOString()}`);
 }); 
