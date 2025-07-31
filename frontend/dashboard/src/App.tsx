@@ -1,4 +1,4 @@
-// Force Netlify rebuild - Authentication completely disabled on backend, dashboard should now load with all data
+// Force Netlify rebuild - Backend authentication completely disabled, server restart triggered
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router } from 'react-router-dom';
 import './style.css';
