@@ -6,17 +6,6 @@ import widgetRoutes from './routes/widget';
 import superAdminRoutes from './routes/superAdmin';
 import { registerSignalingHandlers } from './sockets/signaling';
 import dotenv from 'dotenv';
-import { 
-  companies, 
-  agents, 
-  users, 
-  sessions, 
-  chatSessions,
-  saveCompanies,
-  saveAgents,
-  saveUsers,
-  saveSessions
-} from './data/persistentStorage';
 import mongoose from 'mongoose';
 import CannedResponse from './models/CannedResponse';
 import ChatSession from './models/ChatSession';
@@ -25,6 +14,7 @@ import ChatMessage from './models/ChatMessage';
 import FormPush from './models/FormPush';
 import FormResponse from './models/FormResponse';
 import path from 'path'; // Added for serving static files
+import { persistentStorage as fileStorage } from './data/persistentStorage';
 
 dotenv.config();
 
@@ -102,10 +92,10 @@ app.post('/api/chat/send', (req, res) => {
     from,
     timestamp: new Date().toISOString(),
   };
-  if (!chatSessions[sessionId]) {
+  if (!persistentStorage.chatSessions[sessionId]) {
     return res.status(404).json({ success: false, error: 'Session not found' });
   }
-  chatSessions[sessionId].messages.push(msg);
+  persistentStorage.chatSessions[sessionId].messages.push(msg);
   // Broadcast to all in session via Socket.IO
   io.to(sessionId).emit('chat:message', { ...msg, sessionId });
   res.json({ success: true });
@@ -113,10 +103,10 @@ app.post('/api/chat/send', (req, res) => {
 
 app.get('/api/chat/session/:id', (req, res) => {
   const sessionId = req.params.id;
-  if (!chatSessions[sessionId]) {
+  if (!persistentStorage.chatSessions[sessionId]) {
     return res.status(404).json({ success: false, error: 'Session not found' });
   }
-  res.json({ success: true, session: chatSessions[sessionId] });
+  res.json({ success: true, session: persistentStorage.chatSessions[sessionId] });
 });
 
 // Canned Responses API (multi-tenant) - Using persistent storage
@@ -558,231 +548,6 @@ app.get('/api/agents/:companyUuid', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-
-// Persistent storage interface
-export interface PersistentStorage {
-  companies: Record<string, any>;
-  users: Record<string, any>;
-  agents: Record<string, any>;
-  sessions: any[];
-  widgetSettings: Record<string, any>;
-  formPushes: Array<{
-    _id: string;
-    companyId: string;
-    sessionId: string;
-    from: string;
-    type: string;
-    fields: any[];
-    active: boolean;
-    timestamp: string;
-  }>;
-  formResponses: Array<{
-    _id: string;
-    companyId: string;
-    sessionId: string;
-    formId: string;
-    from: string;
-    values: any;
-    timestamp: string;
-  }>;
-  chatMessages: Array<{
-    _id: string;
-    companyId: string;
-    sessionId: string;
-    message: string;
-    from: string;
-    timestamp: string;
-    type?: string;
-  }>;
-  chatSessions: Array<{
-    _id: string;
-    companyId: string;
-    sessionId: string;
-    visitorId: string;
-    pageUrl: string;
-    startedAt: string;
-    status: string;
-    updatedAt?: string;
-    routingType?: 'public' | 'company';
-    assignedAgent?: string;
-    assignedCompany?: string;
-  }>;
-  cannedResponses: Array<{
-    _id: string;
-    companyId: string;
-    category: string;
-    title: string;
-    message: string;
-    createdAt: string;
-    updatedAt?: string;
-  }>;
-  chatNotes: Array<{
-    _id: string;
-    companyId: string;
-    sessionId: string;
-    author: string;
-    text: string;
-    timestamp: string;
-  }>;
-  contacts: Array<{
-    _id: string;
-    companyId: string;
-    email?: string;
-    phone?: string;
-    firstName?: string;
-    lastName?: string;
-    company?: string;
-    tags: string[];
-    notes: Array<{
-      _id: string;
-      content: string;
-      agentId: string;
-      timestamp: string;
-    }>;
-    interactions: Array<{
-      _id: string;
-      type: 'call' | 'chat' | 'form';
-      sessionId: string;
-      timestamp: string;
-      duration?: number;
-      status: string;
-    }>;
-    createdAt: string;
-    updatedAt: string;
-  }>;
-  blogPosts: Array<{
-    id: string;
-    title: string;
-    excerpt: string;
-    content: string;
-    published: boolean;
-    createdAt: string;
-    updatedAt: string;
-  }>;
-  packages: Array<{
-    id: string;
-    name: string;
-    price: number;
-    features: string[];
-    active: boolean;
-  }>;
-  supportTickets: Array<{
-    id: string;
-    subject: string;
-    customer: string;
-    status: string;
-    priority: string;
-    createdAt: string;
-    description: string;
-  }>;
-  frontpageContent: {
-    heroTitle: string;
-    heroSubtitle: string;
-    features: string[];
-  };
-  // Phase 3: Advanced Analytics & System Management
-  systemUsers: Array<{
-    id: string;
-    username: string;
-    email: string;
-    role: string;
-    status: string;
-    lastLogin?: string;
-    createdAt: string;
-  }>;
-  apiKeys: Array<{
-    id: string;
-    name: string;
-    key: string;
-    permissions: string[];
-    createdAt: string;
-    lastUsed?: string;
-    expiresAt?: string;
-  }>;
-  systemConfig: {
-    maintenanceMode: boolean;
-    emailService: string;
-    storageProvider: string;
-    autoBackup: boolean;
-    maxFileSize: number;
-    sessionTimeout: number;
-    updatedAt: string;
-  };
-  contactMessages: Array<{
-    _id: string;
-    name: string;
-    email: string;
-    phone?: string;
-    message: string;
-    timestamp: string;
-    handled?: boolean;
-  }>;
-  pendingAdmins?: Array<{
-    uuid: string;
-    adminUsername: string;
-    adminPassword: string;
-    email: string;
-    createdAt: string;
-  }>;
-  authUsers?: Array<{
-    uuid: string;
-    username: string;
-    password: string;
-    companyUuid: string;
-    role: string;
-    email: string;
-    createdAt: string;
-  }>;
-  pendingAgentCredentials?: Array<{
-    uuid: string;
-    username: string;
-    password: string;
-    email: string;
-    companyUuid: string;
-    createdAt: string;
-  }>;
-  // Call Management System
-  calls: Array<{
-    id: string;
-    visitorId: string;
-    pageUrl: string;
-    status: 'waiting' | 'connecting' | 'active' | 'ended' | 'missed';
-    assignedAgent?: string;
-    startTime: string;
-    endTime?: string;
-    duration?: number;
-    callType: 'chat' | 'voice';
-    priority: 'normal' | 'urgent' | 'vip';
-    routingType: 'public' | 'company';
-    companyId?: string;
-    sessionId?: string;
-    notes?: string;
-  }>;
-  // Agent Management System
-  agentAssignments: Array<{
-    id: string;
-    agentId: string;
-    assignedToPublic: boolean;
-    maxCalls: number;
-    currentCalls: number;
-    skills: string[];
-    availability: 'available' | 'busy' | 'break' | 'offline';
-    lastActivity: string;
-  }>;
-  // Call Analytics
-  callAnalytics: Array<{
-    id: string;
-    agentId: string;
-    callsHandled: number;
-    avgDuration: number;
-    satisfaction: number;
-    responseTime: number;
-    date: string;
-  }>;
-}
-
-// Import persistent storage from the dedicated module
-import { persistentStorage as fileStorage } from './data/persistentStorage';
 
 // Use the file-based persistent storage
 const persistentStorage = fileStorage;

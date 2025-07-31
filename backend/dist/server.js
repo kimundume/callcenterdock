@@ -21,8 +21,8 @@ const widget_1 = __importDefault(require("./routes/widget"));
 const superAdmin_1 = __importDefault(require("./routes/superAdmin"));
 const signaling_1 = require("./sockets/signaling");
 const dotenv_1 = __importDefault(require("dotenv"));
-const persistentStorage_1 = require("./data/persistentStorage");
 const path_1 = __importDefault(require("path")); // Added for serving static files
+const persistentStorage_1 = require("./data/persistentStorage");
 dotenv_1.default.config();
 // MongoDB connection (commented out to use temporary storage)
 // const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/calldocker';
@@ -84,20 +84,20 @@ app.post('/api/chat/send', (req, res) => {
         from,
         timestamp: new Date().toISOString(),
     };
-    if (!persistentStorage_1.chatSessions[sessionId]) {
+    if (!persistentStorage.chatSessions[sessionId]) {
         return res.status(404).json({ success: false, error: 'Session not found' });
     }
-    persistentStorage_1.chatSessions[sessionId].messages.push(msg);
+    persistentStorage.chatSessions[sessionId].messages.push(msg);
     // Broadcast to all in session via Socket.IO
     io.to(sessionId).emit('chat:message', Object.assign(Object.assign({}, msg), { sessionId }));
     res.json({ success: true });
 });
 app.get('/api/chat/session/:id', (req, res) => {
     const sessionId = req.params.id;
-    if (!persistentStorage_1.chatSessions[sessionId]) {
+    if (!persistentStorage.chatSessions[sessionId]) {
         return res.status(404).json({ success: false, error: 'Session not found' });
     }
-    res.json({ success: true, session: persistentStorage_1.chatSessions[sessionId] });
+    res.json({ success: true, session: persistentStorage.chatSessions[sessionId] });
 });
 // Canned Responses API (multi-tenant) - Using persistent storage
 app.get('/api/canned-responses', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -497,10 +497,8 @@ app.get('/api/agents/:companyUuid', (req, res) => __awaiter(void 0, void 0, void
         res.status(500).json({ error: 'Internal server error' });
     }
 }));
-// Import persistent storage from the dedicated module
-const persistentStorage_2 = require("./data/persistentStorage");
 // Use the file-based persistent storage
-const persistentStorage = persistentStorage_2.persistentStorage;
+const persistentStorage = persistentStorage_1.persistentStorage;
 // Add sample data for testing
 persistentStorage.calls = [
     {
