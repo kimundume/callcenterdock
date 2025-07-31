@@ -13,6 +13,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateId = void 0;
+// @ts-nocheck
 const express_1 = __importDefault(require("express"));
 const http_1 = __importDefault(require("http"));
 const cors_1 = __importDefault(require("cors"));
@@ -22,7 +23,6 @@ const superAdmin_1 = __importDefault(require("./routes/superAdmin"));
 const signaling_1 = require("./sockets/signaling");
 const dotenv_1 = __importDefault(require("dotenv"));
 const path_1 = __importDefault(require("path")); // Added for serving static files
-const persistentStorage_1 = require("./data/persistentStorage");
 dotenv_1.default.config();
 // MongoDB connection (commented out to use temporary storage)
 // const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/calldocker';
@@ -84,20 +84,20 @@ app.post('/api/chat/send', (req, res) => {
         from,
         timestamp: new Date().toISOString(),
     };
-    if (!persistentStorage.chatSessions[sessionId]) {
+    if (!global.tempStorage.chatSessions[sessionId]) {
         return res.status(404).json({ success: false, error: 'Session not found' });
     }
-    persistentStorage.chatSessions[sessionId].messages.push(msg);
+    global.tempStorage.chatSessions[sessionId].messages.push(msg);
     // Broadcast to all in session via Socket.IO
     io.to(sessionId).emit('chat:message', Object.assign(Object.assign({}, msg), { sessionId }));
     res.json({ success: true });
 });
 app.get('/api/chat/session/:id', (req, res) => {
     const sessionId = req.params.id;
-    if (!persistentStorage.chatSessions[sessionId]) {
+    if (!global.tempStorage.chatSessions[sessionId]) {
         return res.status(404).json({ success: false, error: 'Session not found' });
     }
-    res.json({ success: true, session: persistentStorage.chatSessions[sessionId] });
+    res.json({ success: true, session: global.tempStorage.chatSessions[sessionId] });
 });
 // Canned Responses API (multi-tenant) - Using persistent storage
 app.get('/api/canned-responses', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -105,7 +105,7 @@ app.get('/api/canned-responses', (req, res) => __awaiter(void 0, void 0, void 0,
         const { companyId } = req.query;
         if (!companyId)
             return res.status(400).json({ error: 'companyId required' });
-        const responses = persistentStorage.cannedResponses.filter(r => r.companyId === companyId);
+        const responses = global.tempStorage.cannedResponses.filter((r) => r.companyId === companyId);
         res.json(responses);
     }
     catch (error) {
@@ -126,7 +126,7 @@ app.post('/api/canned-responses', (req, res) => __awaiter(void 0, void 0, void 0
             message,
             createdAt: new Date().toISOString()
         };
-        persistentStorage.cannedResponses.push(response);
+        global.tempStorage.cannedResponses.push(response);
         res.json(response);
     }
     catch (error) {
@@ -138,13 +138,13 @@ app.put('/api/canned-responses/:id', (req, res) => __awaiter(void 0, void 0, voi
     try {
         const { id } = req.params;
         const { category, title, message } = req.body;
-        const responseIndex = persistentStorage.cannedResponses.findIndex(r => r._id === id);
+        const responseIndex = global.tempStorage.cannedResponses.findIndex((r) => r._id === id);
         if (responseIndex === -1)
             return res.status(404).json({ error: 'Not found' });
-        persistentStorage.cannedResponses[responseIndex] = Object.assign(Object.assign({}, persistentStorage.cannedResponses[responseIndex]), { category,
+        global.tempStorage.cannedResponses[responseIndex] = Object.assign(Object.assign({}, global.tempStorage.cannedResponses[responseIndex]), { category,
             title,
             message, updatedAt: new Date().toISOString() });
-        res.json(persistentStorage.cannedResponses[responseIndex]);
+        res.json(global.tempStorage.cannedResponses[responseIndex]);
     }
     catch (error) {
         console.error('Error updating canned response:', error);
@@ -154,10 +154,10 @@ app.put('/api/canned-responses/:id', (req, res) => __awaiter(void 0, void 0, voi
 app.delete('/api/canned-responses/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
-        const responseIndex = persistentStorage.cannedResponses.findIndex(r => r._id === id);
+        const responseIndex = global.tempStorage.cannedResponses.findIndex((r) => r._id === id);
         if (responseIndex === -1)
             return res.status(404).json({ error: 'Not found' });
-        persistentStorage.cannedResponses.splice(responseIndex, 1);
+        global.tempStorage.cannedResponses.splice(responseIndex, 1);
         res.json({ success: true });
     }
     catch (error) {
@@ -171,7 +171,7 @@ app.get('/api/chat-sessions', (req, res) => __awaiter(void 0, void 0, void 0, fu
         const { companyId } = req.query;
         if (!companyId)
             return res.status(400).json({ error: 'companyId required' });
-        const sessions = persistentStorage.chatSessions.filter((s) => s.companyId === companyId);
+        const sessions = global.tempStorage.chatSessions.filter((s) => s.companyId === companyId);
         res.json(sessions);
     }
     catch (error) {
@@ -193,7 +193,7 @@ app.post('/api/chat-sessions', (req, res) => __awaiter(void 0, void 0, void 0, f
             startedAt: startedAt || new Date().toISOString(),
             status: 'active'
         };
-        persistentStorage.chatSessions.push(session);
+        global.tempStorage.chatSessions.push(session);
         res.json(session);
     }
     catch (error) {
@@ -205,11 +205,11 @@ app.put('/api/chat-sessions/:id', (req, res) => __awaiter(void 0, void 0, void 0
     try {
         const { id } = req.params;
         const update = req.body;
-        const sessionIndex = persistentStorage.chatSessions.findIndex((s) => s._id === id);
+        const sessionIndex = global.tempStorage.chatSessions.findIndex((s) => s._id === id);
         if (sessionIndex === -1)
             return res.status(404).json({ error: 'Not found' });
-        persistentStorage.chatSessions[sessionIndex] = Object.assign(Object.assign(Object.assign({}, persistentStorage.chatSessions[sessionIndex]), update), { updatedAt: new Date().toISOString() });
-        res.json(persistentStorage.chatSessions[sessionIndex]);
+        global.tempStorage.chatSessions[sessionIndex] = Object.assign(Object.assign(Object.assign({}, global.tempStorage.chatSessions[sessionIndex]), update), { updatedAt: new Date().toISOString() });
+        res.json(global.tempStorage.chatSessions[sessionIndex]);
     }
     catch (error) {
         console.error('Error updating chat session:', error);
@@ -219,7 +219,7 @@ app.put('/api/chat-sessions/:id', (req, res) => __awaiter(void 0, void 0, void 0
 app.get('/api/chat-sessions/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
-        const session = persistentStorage.chatSessions.find((s) => s._id === id);
+        const session = global.tempStorage.chatSessions.find((s) => s._id === id);
         if (!session)
             return res.status(404).json({ error: 'Not found' });
         res.json(session);
@@ -236,7 +236,7 @@ app.get('/api/chat-notes/:sessionId', (req, res) => __awaiter(void 0, void 0, vo
         const { sessionId } = req.params;
         if (!companyId)
             return res.status(400).json({ error: 'companyId required' });
-        const notes = persistentStorage.chatNotes.filter(n => n.companyId === companyId && n.sessionId === sessionId);
+        const notes = global.tempStorage.chatNotes.filter((n) => n.companyId === companyId && n.sessionId === sessionId);
         res.json(notes);
     }
     catch (error) {
@@ -258,7 +258,7 @@ app.post('/api/chat-notes/:sessionId', (req, res) => __awaiter(void 0, void 0, v
             text,
             timestamp: new Date().toISOString()
         };
-        persistentStorage.chatNotes.push(note);
+        global.tempStorage.chatNotes.push(note);
         res.json(note);
     }
     catch (error) {
@@ -280,7 +280,7 @@ app.post('/api/chat-messages', (req, res) => __awaiter(void 0, void 0, void 0, f
             message,
             timestamp: timestamp || new Date().toISOString()
         };
-        persistentStorage.chatMessages.push(msg);
+        global.tempStorage.chatMessages.push(msg);
         res.json(msg);
     }
     catch (error) {
@@ -293,8 +293,8 @@ app.get('/api/chat-messages', (req, res) => __awaiter(void 0, void 0, void 0, fu
         const { companyId, sessionId } = req.query;
         if (!companyId || !sessionId)
             return res.status(400).json({ error: 'companyId and sessionId required' });
-        const messages = persistentStorage.chatMessages
-            .filter(m => m.companyId === companyId && m.sessionId === sessionId)
+        const messages = global.tempStorage.chatMessages
+            .filter((m) => m.companyId === companyId && m.sessionId === sessionId)
             .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
         res.json(messages);
     }
@@ -323,7 +323,7 @@ app.post('/api/form-push', (req, res) => __awaiter(void 0, void 0, void 0, funct
             active: true,
             timestamp: new Date().toISOString()
         };
-        persistentStorage.formPushes.push(form);
+        global.tempStorage.formPushes.push(form);
         console.log('Form created successfully (temp storage):', form);
         // Real-time: emit to session room
         io.to(sessionId).emit('form:push', form);
@@ -343,7 +343,7 @@ app.get('/api/form-push', (req, res) => __awaiter(void 0, void 0, void 0, functi
     if (!companyId || !sessionId)
         return res.status(400).json({ error: 'companyId and sessionId required' });
     // Use temporary storage instead of MongoDB
-    const forms = persistentStorage.formPushes.filter(f => f.companyId === companyId && f.sessionId === sessionId && f.active).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    const forms = global.tempStorage.formPushes.filter(f => f.companyId === companyId && f.sessionId === sessionId && f.active).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     res.json(forms);
 }));
 // --- Form Response Endpoints ---
@@ -364,11 +364,11 @@ app.post('/api/form-response', (req, res) => __awaiter(void 0, void 0, void 0, f
             values,
             timestamp: new Date().toISOString()
         };
-        persistentStorage.formResponses.push(response);
+        global.tempStorage.formResponses.push(response);
         // Mark form as inactive (one-time forms)
-        const formIndex = persistentStorage.formPushes.findIndex(f => f._id === formId);
+        const formIndex = global.tempStorage.formPushes.findIndex(f => f._id === formId);
         if (formIndex !== -1) {
-            persistentStorage.formPushes[formIndex].active = false;
+            global.tempStorage.formPushes[formIndex].active = false;
         }
         // Also save as a chat message so it appears in chat history
         const formMessage = {
@@ -380,7 +380,7 @@ app.post('/api/form-response', (req, res) => __awaiter(void 0, void 0, void 0, f
             timestamp: new Date().toISOString(),
             type: 'form-response'
         };
-        persistentStorage.chatMessages.push(formMessage);
+        global.tempStorage.chatMessages.push(formMessage);
         // Auto-create/update contact if form contains email or phone
         let contactCreated = null;
         const email = values['Email Address'] || values['Email'] || values['email'];
@@ -392,10 +392,10 @@ app.post('/api/form-response', (req, res) => __awaiter(void 0, void 0, void 0, f
             // Check if contact already exists
             let existingContact = null;
             if (email) {
-                existingContact = persistentStorage.contacts.find(c => c.companyId === companyId && c.email === email);
+                existingContact = global.tempStorage.contacts.find(c => c.companyId === companyId && c.email === email);
             }
             if (!existingContact && phone) {
-                existingContact = persistentStorage.contacts.find(c => c.companyId === companyId && c.phone === phone);
+                existingContact = global.tempStorage.contacts.find(c => c.companyId === companyId && c.phone === phone);
             }
             if (existingContact) {
                 // Update existing contact
@@ -438,7 +438,7 @@ app.post('/api/form-response', (req, res) => __awaiter(void 0, void 0, void 0, f
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString()
                 };
-                persistentStorage.contacts.push(contact);
+                global.tempStorage.contacts.push(contact);
                 contactCreated = contact;
                 console.log('New contact created from form submission:', contact);
             }
@@ -465,7 +465,7 @@ app.get('/api/form-response', (req, res) => __awaiter(void 0, void 0, void 0, fu
         return res.status(400).json({ error: 'companyId and sessionId required' });
     try {
         // Use temporary storage instead of MongoDB
-        const responses = persistentStorage.formResponses
+        const responses = global.tempStorage.formResponses
             .filter(r => r.companyId === companyId && r.sessionId === sessionId)
             .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         res.json(responses);
@@ -497,10 +497,8 @@ app.get('/api/agents/:companyUuid', (req, res) => __awaiter(void 0, void 0, void
         res.status(500).json({ error: 'Internal server error' });
     }
 }));
-// Use the file-based persistent storage
-const persistentStorage = persistentStorage_1.persistentStorage;
 // Add sample data for testing
-persistentStorage.calls = [
+global.tempStorage.calls = [
     {
         id: 'call-001',
         visitorId: 'visitor-123',
@@ -543,7 +541,7 @@ persistentStorage.calls = [
         sessionId: 'session-003'
     }
 ];
-persistentStorage.agentAssignments = [
+global.tempStorage.agentAssignments = [
     {
         id: 'assignment-001',
         agentId: 'agent-001',
@@ -565,7 +563,7 @@ persistentStorage.agentAssignments = [
         lastActivity: new Date().toISOString()
     }
 ];
-persistentStorage.callAnalytics = [
+global.tempStorage.callAnalytics = [
     {
         id: 'analytics-001',
         agentId: 'agent-001',
@@ -586,7 +584,7 @@ persistentStorage.callAnalytics = [
     }
 ];
 // Add sample data for sessions
-persistentStorage.sessions = [
+global.tempStorage.sessions = [
     {
         sessionId: 'session-001',
         companyUuid: 'company-001',
@@ -619,8 +617,6 @@ persistentStorage.sessions = [
         endedAt: new Date(Date.now() - 3540000).toISOString()
     }
 ];
-// Make persistentStorage globally accessible for socket handlers
-global.persistentStorage = persistentStorage;
 // --- Chat Sessions API Endpoint ---
 app.post('/api/chat-sessions', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -638,7 +634,7 @@ app.post('/api/chat-sessions', (req, res) => __awaiter(void 0, void 0, void 0, f
             startedAt: startedAt || new Date().toISOString(),
             status: 'active'
         };
-        persistentStorage.chatSessions.push(session);
+        global.tempStorage.chatSessions.push(session);
         console.log('Chat session created successfully (temp storage):', session);
         res.json(session);
     }
@@ -656,7 +652,7 @@ app.get('/api/chat-sessions', (req, res) => __awaiter(void 0, void 0, void 0, fu
         return res.status(400).json({ error: 'companyId required' });
     try {
         // Use temporary storage instead of MongoDB
-        const sessions = persistentStorage.chatSessions.filter((s) => s.companyId === companyId);
+        const sessions = global.tempStorage.chatSessions.filter((s) => s.companyId === companyId);
         res.json(sessions);
     }
     catch (error) {
@@ -680,7 +676,7 @@ app.post('/api/chat-messages', (req, res) => __awaiter(void 0, void 0, void 0, f
             from,
             timestamp: timestamp || new Date().toISOString()
         };
-        persistentStorage.chatMessages.push(chatMessage);
+        global.tempStorage.chatMessages.push(chatMessage);
         console.log('Chat message created successfully (temp storage):', chatMessage);
         res.json(chatMessage);
     }
@@ -698,7 +694,7 @@ app.get('/api/chat-messages', (req, res) => __awaiter(void 0, void 0, void 0, fu
         return res.status(400).json({ error: 'companyId and sessionId required' });
     try {
         // Use temporary storage instead of MongoDB
-        const messages = persistentStorage.chatMessages
+        const messages = global.tempStorage.chatMessages
             .filter((m) => m.companyId === companyId && m.sessionId === sessionId)
             .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
         res.json(messages);
@@ -719,10 +715,10 @@ app.post('/api/contacts', (req, res) => __awaiter(void 0, void 0, void 0, functi
         // Check if contact already exists by email or phone
         let existingContact = null;
         if (email) {
-            existingContact = persistentStorage.contacts.find(c => c.companyId === companyId && c.email === email);
+            existingContact = global.tempStorage.contacts.find(c => c.companyId === companyId && c.email === email);
         }
         if (!existingContact && phone) {
-            existingContact = persistentStorage.contacts.find(c => c.companyId === companyId && c.phone === phone);
+            existingContact = global.tempStorage.contacts.find(c => c.companyId === companyId && c.phone === phone);
         }
         if (existingContact) {
             // Update existing contact
@@ -751,7 +747,7 @@ app.post('/api/contacts', (req, res) => __awaiter(void 0, void 0, void 0, functi
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
-            persistentStorage.contacts.push(contact);
+            global.tempStorage.contacts.push(contact);
             console.log('Contact created successfully (temp storage):', contact);
             res.json(contact);
         }
@@ -771,7 +767,7 @@ app.get('/api/contacts', (req, res) => __awaiter(void 0, void 0, void 0, functio
         return res.status(400).json({ error: 'companyId is required' });
     }
     try {
-        let contacts = persistentStorage.contacts.filter(c => c.companyId === companyId);
+        let contacts = global.tempStorage.contacts.filter(c => c.companyId === companyId);
         // Apply search filter if provided
         if (search) {
             const searchLower = search.toString().toLowerCase();
@@ -804,7 +800,7 @@ app.get('/api/contacts/:contactId', (req, res) => __awaiter(void 0, void 0, void
         return res.status(400).json({ error: 'companyId is required' });
     }
     try {
-        const contact = persistentStorage.contacts.find(c => c._id === contactId && c.companyId === companyId);
+        const contact = global.tempStorage.contacts.find(c => c._id === contactId && c.companyId === companyId);
         if (!contact) {
             return res.status(404).json({ error: 'Contact not found' });
         }
@@ -823,7 +819,7 @@ app.post('/api/contacts/:contactId/notes', (req, res) => __awaiter(void 0, void 
         if (!companyId || !content || !agentId) {
             return res.status(400).json({ error: 'companyId, content, and agentId are required' });
         }
-        const contact = persistentStorage.contacts.find(c => c._id === contactId && c.companyId === companyId);
+        const contact = global.tempStorage.contacts.find(c => c._id === contactId && c.companyId === companyId);
         if (!contact) {
             return res.status(404).json({ error: 'Contact not found' });
         }
@@ -851,7 +847,7 @@ app.post('/api/contacts/:contactId/interactions', (req, res) => __awaiter(void 0
         if (!companyId || !type || !sessionId) {
             return res.status(400).json({ error: 'companyId, type, and sessionId are required' });
         }
-        const contact = persistentStorage.contacts.find(c => c._id === contactId && c.companyId === companyId);
+        const contact = global.tempStorage.contacts.find(c => c._id === contactId && c.companyId === companyId);
         if (!contact) {
             return res.status(404).json({ error: 'Contact not found' });
         }
@@ -881,7 +877,7 @@ app.put('/api/contacts/:contactId/tags', (req, res) => __awaiter(void 0, void 0,
         if (!companyId || !Array.isArray(tags)) {
             return res.status(400).json({ error: 'companyId and tags array are required' });
         }
-        const contact = persistentStorage.contacts.find(c => c._id === contactId && c.companyId === companyId);
+        const contact = global.tempStorage.contacts.find(c => c._id === contactId && c.companyId === companyId);
         if (!contact) {
             return res.status(404).json({ error: 'Contact not found' });
         }

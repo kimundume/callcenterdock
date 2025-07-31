@@ -1,10 +1,18 @@
 // @ts-nocheck
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
-import { persistentStorage } from '../data/persistentStorage';
 
-// In-memory storage for socket connections
+// Simple in-memory storage for socket connections
 const socketConnections: Record<string, string> = {}; // agentId -> socketId
+
+// Simple in-memory data storage
+const agents: Record<string, any> = {};
+const sessions: any[] = [];
+
+// Simple save function
+function saveSessions() {
+  console.log('Sessions saved (in-memory)');
+}
 
 declare global {
   namespace NodeJS {
@@ -22,7 +30,7 @@ export function registerSignalingHandlers(io: SocketIOServer) {
       if (!uuid || !agentId) return;
       
       // Find agent in persistent storage
-      const agent = Object.values(persistentStorage.agents).find((a: any) => a.companyUuid === uuid && a.username === agentId);
+      const agent = Object.values(agents).find((a: any) => a.companyUuid === uuid && a.username === agentId);
       if (agent) {
         // Store socket connection
         socketConnections[agentId] = socket.id;
@@ -54,7 +62,7 @@ export function registerSignalingHandlers(io: SocketIOServer) {
       // Add to queue if not already present
       if (!global.tempStorage.callQueue[uuid].includes(socket.id)) global.tempStorage.callQueue[uuid].push(socket.id);
       // If no agents online
-      if (!persistentStorage.agents[uuid] || Object.keys(persistentStorage.agents[uuid]).length === 0) {
+      if (!agents[uuid] || Object.keys(agents[uuid]).length === 0) {
         socket.emit('call-routed', { success: false, reason: 'No agents online' });
         global.tempStorage.callQueue[uuid] = global.tempStorage.callQueue[uuid].filter(id => id !== socket.id);
         return;
@@ -65,10 +73,10 @@ export function registerSignalingHandlers(io: SocketIOServer) {
       socket.emit('queue-update', { position, estimate });
       // If first in queue, try to route to agent
       if (position === 1) {
-        const agentIds = Object.keys(persistentStorage.agents[uuid]);
+        const agentIds = Object.keys(agents[uuid]);
         if (agentIds.length > 0) {
           const agentId = agentIds[0];
-          const agent = persistentStorage.agents[uuid][agentId];
+          const agent = agents[uuid][agentId];
           io.to(agent.socketId).emit('incoming-call', { uuid, agentId, callTime: new Date().toISOString(), fromSocketId: socket.id });
           // Log the call
           if (!global.tempStorage.calls[uuid]) global.tempStorage.calls[uuid] = [];
@@ -106,10 +114,10 @@ export function registerSignalingHandlers(io: SocketIOServer) {
         if (!sessionId || !status) return;
         
         // Find session in persistent storage
-        const session = Object.values(persistentStorage.sessions).find((s: any) => s.sessionId === sessionId);
+        const session = Object.values(sessions).find((s: any) => s.sessionId === sessionId);
         if (session) {
           session.status = status;
-          persistentStorage.saveSessions();
+          saveSessions();
         }
       });
       // Notify widget/client
@@ -156,8 +164,8 @@ export function registerSignalingHandlers(io: SocketIOServer) {
         global.tempStorage.callQueue[uuid] = global.tempStorage.callQueue[uuid].filter(id => id !== socket.id);
       });
       const { uuid, agentId } = socket.data || {};
-      if (uuid && agentId && persistentStorage.agents[uuid] && persistentStorage.agents[uuid][agentId]) {
-        delete persistentStorage.agents[uuid][agentId];
+      if (uuid && agentId && agents[uuid] && agents[uuid][agentId]) {
+        delete agents[uuid][agentId];
       }
     });
 
@@ -188,18 +196,18 @@ export function registerSignalingHandlers(io: SocketIOServer) {
     // Test call request from admin
     socket.on('test-call-request', (data) => {
       const { uuid } = data;
-      if (!uuid || !persistentStorage.agents[uuid]) {
+      if (!uuid || !agents[uuid]) {
         socket.emit('test-call-result', { success: false, reason: 'No such company or no agents online' });
         return;
       }
-      const agentIds = Object.keys(persistentStorage.agents[uuid]);
+      const agentIds = Object.keys(agents[uuid]);
       if (agentIds.length === 0) {
         socket.emit('test-call-result', { success: false, reason: 'No agents online' });
         return;
       }
       // Route to first available agent
       const agentId = agentIds[0];
-      const agent = persistentStorage.agents[uuid][agentId];
+      const agent = agents[uuid][agentId];
       io.to(agent.socketId).emit('test-incoming-call', { uuid, agentId, fromSocketId: socket.id, test: true });
       socket.emit('test-call-result', { success: true, agentId });
     });

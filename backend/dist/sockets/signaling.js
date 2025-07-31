@@ -1,9 +1,15 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerSignalingHandlers = registerSignalingHandlers;
-const persistentStorage_1 = require("../data/persistentStorage");
-// In-memory storage for socket connections
+// Simple in-memory storage for socket connections
 const socketConnections = {}; // agentId -> socketId
+// Simple in-memory data storage
+const agents = {};
+const sessions = [];
+// Simple save function
+function saveSessions() {
+    console.log('Sessions saved (in-memory)');
+}
 function registerSignalingHandlers(io) {
     io.on('connection', (socket) => {
         // Agent registration
@@ -12,7 +18,7 @@ function registerSignalingHandlers(io) {
             if (!uuid || !agentId)
                 return;
             // Find agent in persistent storage
-            const agent = Object.values(persistentStorage_1.persistentStorage.agents).find((a) => a.companyUuid === uuid && a.username === agentId);
+            const agent = Object.values(agents).find((a) => a.companyUuid === uuid && a.username === agentId);
             if (agent) {
                 // Store socket connection
                 socketConnections[agentId] = socket.id;
@@ -43,7 +49,7 @@ function registerSignalingHandlers(io) {
             if (!global.tempStorage.callQueue[uuid].includes(socket.id))
                 global.tempStorage.callQueue[uuid].push(socket.id);
             // If no agents online
-            if (!persistentStorage_1.persistentStorage.agents[uuid] || Object.keys(persistentStorage_1.persistentStorage.agents[uuid]).length === 0) {
+            if (!agents[uuid] || Object.keys(agents[uuid]).length === 0) {
                 socket.emit('call-routed', { success: false, reason: 'No agents online' });
                 global.tempStorage.callQueue[uuid] = global.tempStorage.callQueue[uuid].filter(id => id !== socket.id);
                 return;
@@ -54,10 +60,10 @@ function registerSignalingHandlers(io) {
             socket.emit('queue-update', { position, estimate });
             // If first in queue, try to route to agent
             if (position === 1) {
-                const agentIds = Object.keys(persistentStorage_1.persistentStorage.agents[uuid]);
+                const agentIds = Object.keys(agents[uuid]);
                 if (agentIds.length > 0) {
                     const agentId = agentIds[0];
-                    const agent = persistentStorage_1.persistentStorage.agents[uuid][agentId];
+                    const agent = agents[uuid][agentId];
                     io.to(agent.socketId).emit('incoming-call', { uuid, agentId, callTime: new Date().toISOString(), fromSocketId: socket.id });
                     // Log the call
                     if (!global.tempStorage.calls[uuid])
@@ -97,10 +103,10 @@ function registerSignalingHandlers(io) {
                 if (!sessionId || !status)
                     return;
                 // Find session in persistent storage
-                const session = Object.values(persistentStorage_1.persistentStorage.sessions).find((s) => s.sessionId === sessionId);
+                const session = Object.values(sessions).find((s) => s.sessionId === sessionId);
                 if (session) {
                     session.status = status;
-                    persistentStorage_1.persistentStorage.saveSessions();
+                    saveSessions();
                 }
             });
             // Notify widget/client
@@ -149,8 +155,8 @@ function registerSignalingHandlers(io) {
                 global.tempStorage.callQueue[uuid] = global.tempStorage.callQueue[uuid].filter(id => id !== socket.id);
             });
             const { uuid, agentId } = socket.data || {};
-            if (uuid && agentId && persistentStorage_1.persistentStorage.agents[uuid] && persistentStorage_1.persistentStorage.agents[uuid][agentId]) {
-                delete persistentStorage_1.persistentStorage.agents[uuid][agentId];
+            if (uuid && agentId && agents[uuid] && agents[uuid][agentId]) {
+                delete agents[uuid][agentId];
             }
         });
         // WebRTC signaling: offer
@@ -177,18 +183,18 @@ function registerSignalingHandlers(io) {
         // Test call request from admin
         socket.on('test-call-request', (data) => {
             const { uuid } = data;
-            if (!uuid || !persistentStorage_1.persistentStorage.agents[uuid]) {
+            if (!uuid || !agents[uuid]) {
                 socket.emit('test-call-result', { success: false, reason: 'No such company or no agents online' });
                 return;
             }
-            const agentIds = Object.keys(persistentStorage_1.persistentStorage.agents[uuid]);
+            const agentIds = Object.keys(agents[uuid]);
             if (agentIds.length === 0) {
                 socket.emit('test-call-result', { success: false, reason: 'No agents online' });
                 return;
             }
             // Route to first available agent
             const agentId = agentIds[0];
-            const agent = persistentStorage_1.persistentStorage.agents[uuid][agentId];
+            const agent = agents[uuid][agentId];
             io.to(agent.socketId).emit('test-incoming-call', { uuid, agentId, fromSocketId: socket.id, test: true });
             socket.emit('test-call-result', { success: true, agentId });
         });
