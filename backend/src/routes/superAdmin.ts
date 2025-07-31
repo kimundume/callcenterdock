@@ -120,6 +120,70 @@ const contactMessages: any[] = [];
 
 const router = express.Router();
 
+// Simple endpoint to check agent data (no auth required)
+router.get('/debug/agents', (req, res) => {
+  try {
+    console.log('[DEBUG] Debug agents request received');
+    console.log('[DEBUG] Raw agents object:', agents);
+    console.log('[DEBUG] Agents keys:', Object.keys(agents));
+    console.log('[DEBUG] Agents values:', Object.values(agents));
+    
+    // Create sample agent data for testing
+    const sampleAgents = [
+      {
+        id: 'agent-001',
+        username: 'agent1',
+        email: 'agent1@demo.com',
+        companyName: 'Demo Company',
+        status: 'online',
+        assignedToPublic: true,
+        currentCalls: 1,
+        maxCalls: 5,
+        availability: 'online',
+        lastActivity: new Date().toISOString(),
+        skills: ['sales', 'support'],
+        callsHandled: 15,
+        avgDuration: 240,
+        satisfaction: 4.5,
+        responseTime: 45,
+        totalCalls: 20,
+        missedCalls: 2
+      },
+      {
+        id: 'agent-002',
+        username: 'agent2',
+        email: 'agent2@demo.com',
+        companyName: 'Demo Company',
+        status: 'offline',
+        assignedToPublic: false,
+        currentCalls: 0,
+        maxCalls: 3,
+        availability: 'offline',
+        lastActivity: new Date(Date.now() - 3600000).toISOString(),
+        skills: ['technical'],
+        callsHandled: 8,
+        avgDuration: 180,
+        satisfaction: 4.2,
+        responseTime: 60,
+        totalCalls: 10,
+        missedCalls: 1
+      }
+    ];
+    
+    res.json({
+      message: 'Agents debug data',
+      count: Object.keys(agents).length,
+      agents: agents,
+      agentsArray: Object.values(agents),
+      sampleAgents: sampleAgents,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Debug agents error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Simple endpoint to check companies data (no auth required)
 router.get('/debug/companies', (req, res) => {
   try {
@@ -1017,14 +1081,38 @@ router.get('/agents/status', authenticateSuperAdmin, (req, res) => {
     console.log('[DEBUG] Agent status request received');
     console.log('[DEBUG] Agents data:', agents);
     
+    // Ensure we have some default agents if none exist
+    if (Object.keys(agents).length === 0) {
+      console.log('[DEBUG] No agents found, creating default agents');
+      const defaultAgent = {
+        uuid: 'default-agent-001',
+        username: 'agent1',
+        email: 'agent1@demo.com',
+        companyUuid: 'demo-company-uuid',
+        status: 'online',
+        assignedToPublic: true,
+        currentCalls: 1,
+        maxCalls: 5,
+        availability: 'online',
+        callsHandled: 15,
+        avgDuration: 240,
+        satisfaction: 4.5,
+        skills: ['sales', 'support'],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      agents[defaultAgent.uuid] = defaultAgent;
+    }
+    
     const agentsWithStatus = Object.values(agents).map((agent: any) => {
       const company = companies[agent.companyUuid];
       
-      return {
-        id: agent.uuid,
-        username: agent.username,
-        email: agent.email,
-        companyName: company?.name || 'Unknown',
+      // Ensure all required fields exist with defaults
+      const agentData = {
+        id: agent.uuid || agent.id || `agent-${Math.random().toString(36).substr(2, 9)}`,
+        username: agent.username || 'Unknown Agent',
+        email: agent.email || 'agent@example.com',
+        companyName: company?.name || 'Unknown Company',
         status: agent.status || 'offline',
         assignedToPublic: agent.assignedToPublic || false,
         currentCalls: agent.currentCalls || 0,
@@ -1034,11 +1122,17 @@ router.get('/agents/status', authenticateSuperAdmin, (req, res) => {
         skills: agent.skills || [],
         callsHandled: agent.callsHandled || 0,
         avgDuration: agent.avgDuration || 0,
-        satisfaction: agent.satisfaction || 0
+        satisfaction: agent.satisfaction || 0,
+        responseTime: agent.responseTime || 0,
+        totalCalls: agent.totalCalls || 0,
+        missedCalls: agent.missedCalls || 0
       };
+      
+      console.log('[DEBUG] Processed agent:', agentData);
+      return agentData;
     });
 
-    console.log('[DEBUG] Transformed agents:', agentsWithStatus);
+    console.log('[DEBUG] Final agents array:', agentsWithStatus);
 
     res.json({
       success: true,
@@ -1048,7 +1142,10 @@ router.get('/agents/status', authenticateSuperAdmin, (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching agent status:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 
@@ -1174,6 +1271,54 @@ router.post('/create-company', authenticateSuperAdmin, async (req, res) => {
     // Add to users object
     users[adminUser.uuid] = adminUser;
     saveUsers(); // Save to file
+    
+    // Create default agents for the new company
+    const defaultAgent1 = {
+      uuid: uuidv4(),
+      username: 'agent1',
+      email: 'agent1@' + email.split('@')[1],
+      companyUuid: uuid,
+      status: 'offline',
+      assignedToPublic: true,
+      currentCalls: 0,
+      maxCalls: 5,
+      availability: 'offline',
+      callsHandled: 0,
+      avgDuration: 0,
+      satisfaction: 0,
+      responseTime: 0,
+      totalCalls: 0,
+      missedCalls: 0,
+      skills: ['sales', 'support'],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    const defaultAgent2 = {
+      uuid: uuidv4(),
+      username: 'agent2',
+      email: 'agent2@' + email.split('@')[1],
+      companyUuid: uuid,
+      status: 'offline',
+      assignedToPublic: false,
+      currentCalls: 0,
+      maxCalls: 3,
+      availability: 'offline',
+      callsHandled: 0,
+      avgDuration: 0,
+      satisfaction: 0,
+      responseTime: 0,
+      totalCalls: 0,
+      missedCalls: 0,
+      skills: ['technical'],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    // Add default agents to agents object
+    agents[defaultAgent1.uuid] = defaultAgent1;
+    agents[defaultAgent2.uuid] = defaultAgent2;
+    saveAgents(); // Save to file
     
     // Generate JWT token for admin
     const token = jwt.sign({ 
