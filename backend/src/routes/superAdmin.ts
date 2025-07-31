@@ -217,6 +217,19 @@ const contactMessages: any[] = [];
 
 const router = express.Router();
 
+// Simple test endpoint to verify backend is running updated code
+router.get('/test-updated-code', (req, res) => {
+  console.log('[DEBUG] Test updated code endpoint hit - this proves backend is running new code');
+  res.json({ 
+    message: 'Backend is running updated code!',
+    timestamp: new Date().toISOString(),
+    version: 'UPDATED_CODE_2024',
+    authDisabled: true,
+    companies: Object.keys(companies).length,
+    agents: Object.keys(agents).length
+  });
+});
+
 // Simple test endpoint to verify backend is working
 router.get('/test-backend', (req, res) => {
   console.log('[DEBUG] Test backend endpoint hit');
@@ -834,9 +847,14 @@ router.get('/health', (req, res) => {
 
 // Content Management Routes (no auth required for testing)
 router.get('/content/blog-posts', (req, res) => {
+  console.log('[DEBUG] ===== CONTENT BLOG POSTS ROUTE HIT =====');
+  console.log('[DEBUG] Request method:', req.method);
+  console.log('[DEBUG] Request path:', req.path);
+  console.log('[DEBUG] Request headers:', req.headers);
   try {
     console.log('[DEBUG] Content blog posts endpoint hit - NO AUTH');
     const posts: any[] = []; // This would be loaded from persistent storage
+    console.log('[DEBUG] Sending response for blog posts');
     res.json({ posts });
   } catch (error) {
     console.error('Get blog posts error:', error);
