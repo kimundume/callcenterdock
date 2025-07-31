@@ -23,6 +23,7 @@ function ensureDataDirectory() {
     }
   } catch (error) {
     console.error(`❌ Error creating data directory: ${error}`);
+    // Don't fail startup, just log the error
     return false;
   }
   return true;
@@ -37,6 +38,7 @@ function readJsonFile(filePath: string, defaultValue: any = {}): any {
     }
   } catch (error) {
     console.error(`Error reading ${filePath}:`, error);
+    // Return default value on error
   }
   return defaultValue;
 }
@@ -51,11 +53,16 @@ function writeJsonFile(filePath: string, data: any): void {
     console.log(`💾 Saved data to: ${filePath}`);
   } catch (error) {
     console.error(`Error writing ${filePath}:`, error);
+    // Don't fail on write errors
   }
 }
 
-// Initialize data directory
-ensureDataDirectory();
+// Initialize data directory (but don't fail if it doesn't work)
+try {
+  ensureDataDirectory();
+} catch (error) {
+  console.error('Failed to ensure data directory, continuing with in-memory storage:', error);
+}
 
 // Initialize default data
 const defaultCompanies = {
@@ -81,10 +88,18 @@ const defaultAgents = {
   }
 };
 
-// Load data from files or create with defaults
-const companies = readJsonFile(COMPANIES_FILE, defaultCompanies);
-const users = readJsonFile(USERS_FILE, {});
-const agents = readJsonFile(AGENTS_FILE, defaultAgents);
+// Load data from files or create with defaults (with error handling)
+let companies: any, users: any, agents: any;
+try {
+  companies = readJsonFile(COMPANIES_FILE, defaultCompanies);
+  users = readJsonFile(USERS_FILE, {});
+  agents = readJsonFile(AGENTS_FILE, defaultAgents);
+} catch (error) {
+  console.error('Failed to load data files, using defaults:', error);
+  companies = defaultCompanies;
+  users = {};
+  agents = defaultAgents;
+}
 
 // Ensure we have some sample companies for testing
 if (Object.keys(companies).length === 0) {
