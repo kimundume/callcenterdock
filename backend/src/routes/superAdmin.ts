@@ -835,6 +835,7 @@ router.get('/health', (req, res) => {
 // Content Management Routes (no auth required for testing)
 router.get('/content/blog-posts', (req, res) => {
   try {
+    console.log('[DEBUG] Content blog posts endpoint hit - NO AUTH');
     const posts: any[] = []; // This would be loaded from persistent storage
     res.json({ posts });
   } catch (error) {
@@ -861,6 +862,7 @@ router.post('/content/blog-posts', (req, res) => {
 
 router.get('/content/frontpage', (req, res) => {
   try {
+    console.log('[DEBUG] Content frontpage endpoint hit - NO AUTH');
     const content = {
       heroTitle: 'Turn Every Click Into a Call',
       heroSubtitle: 'Calldocker turns your visitors into conversations — instantly.',
@@ -890,6 +892,7 @@ router.put('/content/frontpage', (req, res) => {
 // Package Management Routes (no auth required for testing)
 router.get('/packages', (req, res) => {
   try {
+    console.log('[DEBUG] Packages endpoint hit - NO AUTH');
     const packages = [
       {
         id: 'basic',
@@ -938,6 +941,7 @@ router.post('/packages', (req, res) => {
 // Customer Care Routes (no auth required for testing)
 router.get('/support/tickets', (req, res) => {
   try {
+    console.log('[DEBUG] Support tickets endpoint hit - NO AUTH');
     const tickets = [
       {
         id: 'TICKET-001',
@@ -984,6 +988,7 @@ router.post('/support/tickets', (req, res) => {
 // Advanced Analytics Routes (no auth required for testing)
 router.get('/analytics/advanced', (req, res) => {
   try {
+    console.log('[DEBUG] Analytics advanced endpoint hit - NO AUTH');
     // Mock advanced analytics data
     const analytics = {
       revenue: {
@@ -1021,6 +1026,7 @@ router.get('/analytics/advanced', (req, res) => {
 // System Management Routes (no auth required for testing)
 router.get('/system/config', (req, res) => {
   try {
+    console.log('[DEBUG] System config endpoint hit - NO AUTH');
     const config = {
       maintenanceMode: false,
       emailService: 'smtp',
@@ -1085,6 +1091,7 @@ router.get('/users', (req, res) => {
 // API Management Routes (no auth required for testing)
 router.get('/api-keys', (req, res) => {
   try {
+    console.log('[DEBUG] API keys endpoint hit - NO AUTH');
     const apiKeys = [
       {
         id: 'key-1',
