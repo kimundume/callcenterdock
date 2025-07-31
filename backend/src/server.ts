@@ -28,6 +28,16 @@ import path from 'path'; // Added for serving static files
 
 dotenv.config();
 
+// MongoDB connection (commented out to use temporary storage)
+// const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/calldocker';
+// mongoose.connect(MONGODB_URI)
+// .then(() => console.log('MongoDB connected'))
+// .catch(err => {
+//   console.error('MongoDB connection error:', err);
+//   console.log('Trying to continue without MongoDB...');
+// });
+console.log('Using persistent storage for data');
+
 // Initialize global tempStorage for backward compatibility
 declare global {
   var tempStorage: any;
@@ -189,7 +199,7 @@ app.get('/api/chat-sessions', async (req, res) => {
     const { companyId } = req.query;
     if (!companyId) return res.status(400).json({ error: 'companyId required' });
     
-    const sessions = persistentStorage.chatSessions.filter(s => s.companyId === companyId);
+    const sessions = persistentStorage.chatSessions.filter((s: any) => s.companyId === companyId);
     res.json(sessions);
   } catch (error) {
     console.error('Error fetching chat sessions:', error);
@@ -225,7 +235,7 @@ app.put('/api/chat-sessions/:id', async (req, res) => {
     const { id } = req.params;
     const update = req.body;
     
-    const sessionIndex = persistentStorage.chatSessions.findIndex(s => s._id === id);
+    const sessionIndex = persistentStorage.chatSessions.findIndex((s: any) => s._id === id);
     if (sessionIndex === -1) return res.status(404).json({ error: 'Not found' });
     
     persistentStorage.chatSessions[sessionIndex] = {
@@ -245,7 +255,7 @@ app.get('/api/chat-sessions/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
-    const session = persistentStorage.chatSessions.find(s => s._id === id);
+    const session = persistentStorage.chatSessions.find((s: any) => s._id === id);
     if (!session) return res.status(404).json({ error: 'Not found' });
     
     res.json(session);
@@ -549,42 +559,13 @@ app.get('/api/agents/:companyUuid', async (req, res) => {
   }
 });
 
-// MongoDB connection (commented out to use temporary storage)
-// const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/calldocker';
-// mongoose.connect(MONGODB_URI)
-// .then(() => console.log('MongoDB connected'))
-// .catch(err => {
-//   console.error('MongoDB connection error:', err);
-//   console.log('Trying to continue without MongoDB...');
-// });
-console.log('Using persistent storage for data');
-
 // Persistent storage interface
 export interface PersistentStorage {
-  companies: Array<{
-    uuid: string;
-    name: string;
-    companyName?: string; // For backward compatibility
-    displayName?: string;
-    email: string;
-    verified: boolean;
-    suspended?: boolean;
-    createdAt: string;
-    lastLogin?: string;
-    updatedAt?: string;
-    status?: 'pending' | 'approved' | 'rejected';
-  }>;
-  agents: Array<{
-    uuid: string;
-    companyUuid: string;
-    username: string;
-    email?: string;
-    status: string; // online/offline
-    // Add registration status for approval flow
-    registrationStatus?: 'pending' | 'approved' | 'rejected';
-    createdAt: string;
-    updatedAt?: string;
-  }>;
+  companies: Record<string, any>;
+  users: Record<string, any>;
+  agents: Record<string, any>;
+  sessions: any[];
+  widgetSettings: Record<string, any>;
   formPushes: Array<{
     _id: string;
     companyId: string;
@@ -700,7 +681,7 @@ export interface PersistentStorage {
     features: string[];
   };
   // Phase 3: Advanced Analytics & System Management
-  users: Array<{
+  systemUsers: Array<{
     id: string;
     username: string;
     email: string;
@@ -798,431 +779,13 @@ export interface PersistentStorage {
     responseTime: number;
     date: string;
   }>;
-  // Unified Session Management
-  sessions: Array<{
-    sessionId: string;
-    companyUuid: string;
-    visitorId: string;
-    agentId?: string;
-    type: 'call' | 'chat';
-    status: 'waiting' | 'ringing' | 'active' | 'ended';
-    createdAt: string;
-    startedAt?: string;
-    endedAt?: string;
-    pageUrl?: string;
-    queuePosition?: number;
-  }>;
 }
 
-// Initialize persistent storage with sample data
-const persistentStorage: PersistentStorage = {
-  companies: [
-    {
-      uuid: 'company-001',
-      name: 'Tech Corp',
-      companyName: 'Tech Corp',
-      displayName: 'Tech Corp',
-      email: 'info@techcorp.com',
-      verified: true,
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      status: 'approved'
-    },
-    {
-      uuid: 'company-002',
-      name: 'Acme Inc',
-      companyName: 'Acme Inc',
-      displayName: 'Acme Inc',
-      email: 'info@acme.com',
-      verified: true,
-      createdAt: new Date(Date.now() - 172800000).toISOString(),
-      status: 'approved'
-    },
-    {
-      uuid: 'pending-company-001',
-      name: 'Pending Company Ltd',
-      email: 'pending@company.com',
-      verified: false,
-      suspended: false,
-      createdAt: new Date().toISOString(),
-      status: 'pending'
-    },
-    {
-      uuid: 'rejected-company-001',
-      name: 'Rejected Company Inc',
-      email: 'rejected@company.com',
-      verified: false,
-      suspended: false,
-      createdAt: new Date().toISOString(),
-      status: 'rejected'
-    },
-    {
-      uuid: 'demo-company-uuid',
-      name: 'Demo Company',
-      companyName: 'Demo Company',
-      displayName: 'Demo Company',
-      email: 'demo@company.com',
-      verified: true,
-      createdAt: new Date().toISOString(),
-      status: 'approved'
-    }
-  ],
-  agents: [
-    {
-      uuid: 'agent-001',
-      companyUuid: 'company-001',
-      username: 'agent1',
-      email: 'agent1@techcorp.com',
-      status: 'online',
-      registrationStatus: 'approved',
-      createdAt: new Date(Date.now() - 3600000).toISOString()
-    },
-    {
-      uuid: 'agent-002',
-      companyUuid: 'company-002',
-      username: 'agent2',
-      email: 'agent2@acme.com',
-      status: 'offline',
-      registrationStatus: 'approved',
-      createdAt: new Date(Date.now() - 7200000).toISOString()
-    },
-    {
-      uuid: 'pending-agent-001',
-      companyUuid: 'company-001',
-      username: 'pending_agent',
-      email: 'pending@agent.com',
-      status: 'offline',
-      registrationStatus: 'pending',
-      createdAt: new Date().toISOString()
-    },
-    {
-      uuid: 'rejected-agent-001',
-      companyUuid: 'company-001',
-      username: 'rejected_agent',
-      email: 'rejected@agent.com',
-      status: 'offline',
-      registrationStatus: 'rejected',
-      createdAt: new Date().toISOString()
-    },
-    {
-      uuid: 'demo-agent-001',
-      companyUuid: 'demo-company-uuid',
-      username: 'agent1',
-      email: 'agent1@demo.com',
-      status: 'online',
-      registrationStatus: 'approved',
-      createdAt: new Date().toISOString()
-    }
-  ],
-  formPushes: [],
-  formResponses: [],
-  chatMessages: [],
-  chatSessions: [
-    {
-      _id: generateId(),
-      companyId: 'demo-company-001',
-      sessionId: 'chat-001',
-      visitorId: 'visitor-001',
-      pageUrl: 'https://example.com/products',
-      startedAt: new Date(Date.now() - 3600000).toISOString(),
-      status: 'active'
-    },
-    {
-      _id: generateId(),
-      companyId: 'demo-company-001',
-      sessionId: 'chat-002',
-      visitorId: 'visitor-002',
-      pageUrl: 'https://example.com/support',
-      startedAt: new Date(Date.now() - 7200000).toISOString(),
-      status: 'active'
-    },
-    {
-      _id: generateId(),
-      companyId: 'demo-company-001',
-      sessionId: 'chat-003',
-      visitorId: 'visitor-003',
-      pageUrl: 'https://example.com/pricing',
-      startedAt: new Date(Date.now() - 1800000).toISOString(),
-      status: 'active'
-    }
-  ],
-  cannedResponses: [
-    {
-      _id: generateId(),
-      companyId: 'demo-company-001',
-      category: 'Greetings',
-      title: 'Welcome Message',
-      message: 'Hello! Welcome to our support team. How can I assist you today?',
-      createdAt: new Date().toISOString()
-    },
-    {
-      _id: generateId(),
-      companyId: 'demo-company-001',
-      category: 'Greetings',
-      title: 'Thank You',
-      message: 'Thank you for contacting us! Is there anything else I can help you with?',
-      createdAt: new Date().toISOString()
-    },
-    {
-      _id: generateId(),
-      companyId: 'demo-company-001',
-      category: 'Technical',
-      title: 'Password Reset',
-      message: 'I can help you reset your password. Please check your email for the reset link.',
-      createdAt: new Date().toISOString()
-    },
-    {
-      _id: generateId(),
-      companyId: 'demo-company-001',
-      category: 'Sales',
-      title: 'Pricing Information',
-      message: 'Our pricing starts at $29/month. Would you like me to send you our detailed pricing guide?',
-      createdAt: new Date().toISOString()
-    }
-  ],
-  chatNotes: [
-    {
-      _id: generateId(),
-      companyId: 'demo-company-001',
-      sessionId: 'chat-001',
-      author: 'admin',
-      text: 'Customer seems interested in our premium plan',
-      timestamp: new Date(Date.now() - 3000000).toISOString()
-    },
-    {
-      _id: generateId(),
-      companyId: 'demo-company-001',
-      sessionId: 'chat-002',
-      author: 'admin',
-      text: 'Technical issue with login - escalated to dev team',
-      timestamp: new Date(Date.now() - 6000000).toISOString()
-    }
-  ],
-  contacts: [
-    {
-      _id: generateId(),
-      companyId: 'demo-company-001',
-      email: 'john.doe@example.com',
-      firstName: 'John',
-      lastName: 'Doe',
-      company: 'Tech Corp',
-      tags: ['premium', 'interested'],
-      notes: [
-        {
-          _id: generateId(),
-          content: 'Interested in enterprise plan',
-          agentId: 'admin',
-          timestamp: new Date(Date.now() - 86400000).toISOString()
-        }
-      ],
-      interactions: [
-        {
-          _id: generateId(),
-          type: 'chat',
-          sessionId: 'chat-001',
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          status: 'completed'
-        }
-      ],
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      updatedAt: new Date(Date.now() - 3600000).toISOString()
-    },
-    {
-      _id: generateId(),
-      companyId: 'demo-company-001',
-      email: 'jane.smith@acme.com',
-      firstName: 'Jane',
-      lastName: 'Smith',
-      company: 'Acme Inc',
-      tags: ['support', 'technical'],
-      notes: [
-        {
-          _id: generateId(),
-          content: 'Has recurring login issues',
-          agentId: 'admin',
-          timestamp: new Date(Date.now() - 7200000).toISOString()
-        }
-      ],
-      interactions: [
-        {
-          _id: generateId(),
-          type: 'chat',
-          sessionId: 'chat-002',
-          timestamp: new Date(Date.now() - 7200000).toISOString(),
-          status: 'completed'
-        }
-      ],
-      createdAt: new Date(Date.now() - 172800000).toISOString(),
-      updatedAt: new Date(Date.now() - 7200000).toISOString()
-    }
-  ],
-  blogPosts: [
-    {
-      id: 'post-1',
-      title: 'Welcome to CallDocker',
-      excerpt: 'Learn how CallDocker can transform your customer communication.',
-      content: 'Full blog post content here...',
-      published: true,
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      updatedAt: new Date(Date.now() - 86400000).toISOString()
-    }
-  ],
-  packages: [
-    {
-      id: 'basic',
-      name: 'Basic',
-      price: 29,
-      features: ['1 Agent', 'Basic Widget', 'Email Support'],
-      active: true
-    },
-    {
-      id: 'pro',
-      name: 'Professional',
-      price: 99,
-      features: ['5 Agents', 'Custom Branding', 'Webhooks', 'Analytics'],
-      active: true
-    },
-    {
-      id: 'enterprise',
-      name: 'Enterprise',
-      price: 299,
-      features: ['Unlimited Agents', 'Priority Support', 'Advanced Analytics', 'Integrations'],
-      active: true
-    }
-  ],
-  supportTickets: [
-    {
-      id: 'TICKET-001',
-      subject: 'Widget not loading',
-      customer: 'john@example.com',
-      status: 'open',
-      priority: 'high',
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      description: 'The widget is not loading properly on our website.'
-    }
-  ],
-  frontpageContent: {
-    heroTitle: 'Turn Every Click Into a Call',
-    heroSubtitle: 'Calldocker turns your visitors into conversations — instantly.',
-    features: []
-  },
-  // Phase 3: Advanced Analytics & System Management
-  users: [
-    {
-      id: 'user-1',
-      username: 'superadmin',
-      email: 'admin@calldocker.com',
-      role: 'super-admin',
-      status: 'active',
-      lastLogin: new Date().toISOString(),
-      createdAt: new Date(Date.now() - 86400000).toISOString()
-    },
-    {
-      id: 'user-2',
-      username: 'support1',
-      email: 'support@calldocker.com',
-      role: 'support',
-      status: 'active',
-      lastLogin: new Date(Date.now() - 3600000).toISOString(),
-      createdAt: new Date(Date.now() - 172800000).toISOString()
-    }
-  ],
-  apiKeys: [
-    {
-      id: 'key-1',
-      name: 'Production API Key',
-      key: 'prod_sk_1234567890abcdef',
-      permissions: ['read', 'write'],
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      lastUsed: new Date(Date.now() - 3600000).toISOString(),
-      expiresAt: undefined
-    },
-    {
-      id: 'key-2',
-      name: 'Development API Key',
-      key: 'dev_sk_abcdef1234567890',
-      permissions: ['read'],
-      createdAt: new Date(Date.now() - 172800000).toISOString(),
-      lastUsed: new Date(Date.now() - 7200000).toISOString(),
-      expiresAt: new Date(Date.now() + 86400000 * 30).toISOString()
-    }
-  ],
-  systemConfig: {
-    maintenanceMode: false,
-    emailService: 'smtp',
-    storageProvider: 'local',
-    autoBackup: true,
-    maxFileSize: 10485760,
-    sessionTimeout: 3600,
-    updatedAt: new Date().toISOString()
-  },
-  contactMessages: [
-    {
-      _id: generateId(),
-      name: 'John Doe',
-      email: 'john.doe@example.com',
-      phone: '123-456-7890',
-      message: 'Hello, I have a question about your services.',
-      timestamp: new Date(Date.now() - 3600000).toISOString(),
-      handled: false
-    },
-    {
-      _id: generateId(),
-      name: 'Jane Smith',
-      email: 'jane.smith@acme.com',
-      phone: '098-765-4321',
-      message: 'I need help with my account.',
-      timestamp: new Date(Date.now() - 7200000).toISOString(),
-      handled: false
-    }
-  ],
-  pendingAdmins: [
-    {
-      uuid: 'pending-company-001',
-      adminUsername: 'pending_admin',
-      adminPassword: 'pending_password',
-      email: 'pending@admin.com',
-      createdAt: new Date().toISOString()
-    }
-  ],
-  authUsers: [
-    {
-      uuid: 'company-001',
-      username: 'company-001-admin',
-      password: 'company-001-password', // In a real app, this would be hashed
-      companyUuid: 'company-001',
-      role: 'company-admin',
-      email: 'company-001@example.com',
-      createdAt: new Date(Date.now() - 86400000).toISOString()
-    },
-    {
-      uuid: 'company-002',
-      username: 'company-002-admin',
-      password: 'company-002-password', // In a real app, this would be hashed
-      companyUuid: 'company-002',
-      role: 'company-admin',
-      email: 'company-002@example.com',
-      createdAt: new Date(Date.now() - 172800000).toISOString()
-    }
-  ],
-  pendingAgentCredentials: [
-    {
-      uuid: 'pending-agent-001',
-      username: 'pending_agent',
-      password: 'pending_password',
-      email: 'pending@agent.com',
-      companyUuid: 'company-001',
-      createdAt: new Date().toISOString()
-    }
-  ],
-  // Call Management System
-  calls: [],
-  // Agent Management System
-  agentAssignments: [],
-  // Call Analytics
-  callAnalytics: [],
-  // Unified Session Management
-  sessions: []
-};
+// Import persistent storage from the dedicated module
+import { persistentStorage as fileStorage } from './data/persistentStorage';
+
+// Use the file-based persistent storage
+const persistentStorage = fileStorage;
 
 // Add sample data for testing
 persistentStorage.calls = [
@@ -1299,17 +862,17 @@ persistentStorage.callAnalytics = [
     callsHandled: 15,
     avgDuration: 420, // 7 minutes
     satisfaction: 4.5,
-    responseTime: 30,
-    date: new Date().toISOString()
+    responseTime: 45, // seconds
+    date: new Date(Date.now() - 86400000).toISOString()
   },
   {
     id: 'analytics-002',
     agentId: 'agent-002',
     callsHandled: 12,
-    avgDuration: 360, // 6 minutes
-    satisfaction: 4.2,
-    responseTime: 45,
-    date: new Date().toISOString()
+    avgDuration: 380, // 6.3 minutes
+    satisfaction: 4.8,
+    responseTime: 32, // seconds
+    date: new Date(Date.now() - 86400000).toISOString()
   }
 ];
 
@@ -1389,9 +952,7 @@ app.get('/api/chat-sessions', async (req, res) => {
 
   try {
     // Use temporary storage instead of MongoDB
-    const sessions = persistentStorage.chatSessions
-      .filter(s => s.companyId === companyId)
-      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+    const sessions = persistentStorage.chatSessions.filter((s: any) => s.companyId === companyId);
 
     res.json(sessions);
   } catch (error) {
@@ -1438,8 +999,8 @@ app.get('/api/chat-messages', async (req, res) => {
   try {
     // Use temporary storage instead of MongoDB
     const messages = persistentStorage.chatMessages
-      .filter(m => m.companyId === companyId && m.sessionId === sessionId)
-      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      .filter((m: any) => m.companyId === companyId && m.sessionId === sessionId)
+      .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
     res.json(messages);
   } catch (error) {

@@ -1,8 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 
-// Define the data directory
-const DATA_DIR = path.join(__dirname, '../../data');
+// Define the data directory - use a more reliable path for production
+const DATA_DIR = process.env.NODE_ENV === 'production' 
+  ? path.join(process.cwd(), 'data')  // Use project root in production
+  : path.join(__dirname, '../../data');
 const COMPANIES_FILE = path.join(DATA_DIR, 'companies.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const AGENTS_FILE = path.join(DATA_DIR, 'agents.json');
@@ -10,8 +12,18 @@ const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const WIDGET_SETTINGS_FILE = path.join(DATA_DIR, 'widget-settings.json');
 
 // Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+function ensureDataDirectory() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      console.log(`📁 Created data directory: ${DATA_DIR}`);
+    }
+  } catch (error) {
+    console.error(`❌ Error creating data directory: ${error}`);
+    // Fallback to current directory if needed
+    return false;
+  }
+  return true;
 }
 
 // Helper functions for file operations
@@ -29,11 +41,21 @@ function readJsonFile(filePath: string, defaultValue: any = {}): any {
 
 function writeJsonFile(filePath: string, data: any): void {
   try {
+    // Ensure directory exists before writing
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+    console.log(`💾 Saved data to: ${filePath}`);
   } catch (error) {
     console.error(`Error writing ${filePath}:`, error);
   }
 }
+
+// Initialize data directory
+ensureDataDirectory();
 
 // Initialize default data
 const defaultCompanies = {
@@ -73,24 +95,29 @@ export const callQueue: Record<string, string[]> = {};
 export const chatSessions: Record<string, any> = {};
 export const pendingCompanies: Record<string, any> = {};
 
-// Save functions
+// Save functions with enhanced error handling
 export function saveCompanies(): void {
+  console.log(`💾 Saving ${Object.keys(companies).length} companies...`);
   writeJsonFile(COMPANIES_FILE, companies);
 }
 
 export function saveUsers(): void {
+  console.log(`💾 Saving ${Object.keys(users).length} users...`);
   writeJsonFile(USERS_FILE, users);
 }
 
 export function saveAgents(): void {
+  console.log(`💾 Saving ${Object.keys(agents).length} agents...`);
   writeJsonFile(AGENTS_FILE, agents);
 }
 
 export function saveSessions(): void {
+  console.log(`💾 Saving ${sessions.length} sessions...`);
   writeJsonFile(SESSIONS_FILE, sessions);
 }
 
 export function saveWidgetSettings(): void {
+  console.log(`💾 Saving widget settings...`);
   writeJsonFile(WIDGET_SETTINGS_FILE, widgetSettings);
 }
 
@@ -132,6 +159,97 @@ export interface PersistentStorage {
     pageUrl?: string;
     queuePosition?: number;
   }>;
+  // Additional properties used in server.ts
+  formPushes: Array<{
+    _id: string;
+    companyId: string;
+    sessionId: string;
+    from: string;
+    type: string;
+    fields: any[];
+    active: boolean;
+    timestamp: string;
+  }>;
+  formResponses: Array<{
+    _id: string;
+    companyId: string;
+    sessionId: string;
+    formId: string;
+    from: string;
+    values: any;
+    timestamp: string;
+  }>;
+  chatMessages: Array<{
+    _id: string;
+    companyId: string;
+    sessionId: string;
+    message: string;
+    from: string;
+    timestamp: string;
+    type?: string;
+  }>;
+  cannedResponses: Array<{
+    _id: string;
+    companyId: string;
+    category: string;
+    title: string;
+    message: string;
+    createdAt: string;
+    updatedAt?: string;
+  }>;
+  chatNotes: Array<{
+    _id: string;
+    companyId: string;
+    sessionId: string;
+    author: string;
+    text: string;
+    timestamp: string;
+  }>;
+  contacts: Array<{
+    _id: string;
+    companyId: string;
+    email?: string;
+    phone?: string;
+    firstName?: string;
+    lastName?: string;
+    company?: string;
+    tags: string[];
+    notes: Array<{
+      _id: string;
+      content: string;
+      agentId: string;
+      timestamp: string;
+    }>;
+    interactions: Array<{
+      _id: string;
+      type: 'call' | 'chat' | 'form';
+      sessionId: string;
+      timestamp: string;
+      duration?: number;
+      status: string;
+    }>;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  agentAssignments: Array<{
+    id: string;
+    agentId: string;
+    assignedToPublic: boolean;
+    maxCalls: number;
+    currentCalls: number;
+    skills: string[];
+    availability: 'available' | 'busy' | 'break' | 'offline';
+    lastActivity: string;
+  }>;
+  callAnalytics: Array<{
+    id: string;
+    agentId: string;
+    callsHandled: number;
+    avgDuration: number;
+    satisfaction: number;
+    responseTime: number;
+    date: string;
+  }>;
 }
 
 export const persistentStorage: PersistentStorage = {
@@ -144,6 +262,15 @@ export const persistentStorage: PersistentStorage = {
   callQueue,
   chatSessions,
   sessions,
+  // Initialize additional properties
+  formPushes: [],
+  formResponses: [],
+  chatMessages: [],
+  cannedResponses: [],
+  chatNotes: [],
+  contacts: [],
+  agentAssignments: [],
+  callAnalytics: []
 };
 
 console.log('✅ Persistent storage loaded successfully');
