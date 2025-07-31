@@ -120,6 +120,31 @@ const contactMessages: any[] = [];
 
 const router = express.Router();
 
+// Test endpoint to check if server is working
+router.get('/test', (req, res) => {
+  res.json({ 
+    message: 'Super Admin API is working',
+    timestamp: new Date().toISOString(),
+    companies: Object.keys(companies).length,
+    users: Object.keys(users).length
+  });
+});
+
+// Test endpoint without authentication
+router.post('/test-create', async (req, res) => {
+  try {
+    console.log('[DEBUG] Test create company request received:', req.body);
+    res.json({ 
+      message: 'Test endpoint working',
+      receivedData: req.body,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Test endpoint error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Super Admin authentication middleware
 const authenticateSuperAdmin = (req: any, res: any, next: any) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -1037,24 +1062,45 @@ router.get('/agents/:id/performance', authenticateSuperAdmin, (req, res) => {
 // POST /api/superadmin/create-company - Direct company creation (bypass email verification)
 router.post('/create-company', authenticateSuperAdmin, async (req, res) => {
   try {
+    console.log('[DEBUG] Create company request received:', {
+      body: req.body,
+      headers: req.headers,
+      method: req.method,
+      url: req.url
+    });
+
     const { companyName, displayName, adminUsername, adminPassword, email, adminEmail } = req.body;
+    
+    console.log('[DEBUG] Extracted fields:', {
+      companyName,
+      displayName,
+      adminUsername,
+      adminPassword: adminPassword ? '[HIDDEN]' : 'undefined',
+      email,
+      adminEmail
+    });
     
     // Validate required fields
     if (!companyName || !adminUsername || !adminPassword || !email) {
+      console.log('[DEBUG] Validation failed - missing required fields');
       return res.status(400).json({ error: 'Company name, admin username, password, and email are required' });
     }
     
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
+      console.log('[DEBUG] Validation failed - invalid email format:', email);
       return res.status(400).json({ error: 'Invalid email format' });
     }
     
     // Check if company already exists (by email)
     const existingCompany = Object.values(companies).find((c: any) => c.email === email);
     if (existingCompany) {
+      console.log('[DEBUG] Validation failed - company already exists:', email);
       return res.status(400).json({ error: 'A company with this email already exists' });
     }
+    
+    console.log('[DEBUG] All validations passed, creating company...');
     
     // Generate UUID
     const uuid = uuidv4();
