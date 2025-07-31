@@ -1,17 +1,55 @@
-// Force rebuild - Backend companies fix deployed
-import React, { useState } from 'react';
+// Force rebuild - Backend endpoints fixed and connectivity test added
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router } from 'react-router-dom';
 import './style.css';
 import AppRoutes from './AppRoutes';
+import config from './config.ts';
 
 // Set the backend URL based on environment
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 
-  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-    ? 'http://localhost:5001' 
-    : 'https://callcenterdock.onrender.com');
+const BACKEND_URL = config.backendUrl;
 
 // Make it available globally
 (window as any).BACKEND_URL = BACKEND_URL;
+
+// Test component to verify backend connectivity
+const BackendTest = () => {
+  const [status, setStatus] = useState('Testing...');
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    const testBackend = async () => {
+      try {
+        console.log('🧪 Testing backend connectivity...');
+        const response = await fetch(`${BACKEND_URL}/api/super-admin/debug/accounts`);
+        const result = await response.json();
+        setStatus('✅ Backend connected');
+        setData(result);
+        console.log('✅ Backend test successful:', result);
+      } catch (error) {
+        setStatus('❌ Backend connection failed');
+        console.error('❌ Backend test failed:', error);
+      }
+    };
+
+    testBackend();
+  }, []);
+
+  return (
+    <div style={{ 
+      position: 'fixed', 
+      top: '10px', 
+      right: '10px', 
+      background: status.includes('✅') ? '#4CAF50' : '#f44336',
+      color: 'white',
+      padding: '10px',
+      borderRadius: '5px',
+      fontSize: '12px',
+      zIndex: 9999
+    }}>
+      {status}
+    </div>
+  );
+};
 
 function App() {
   const [companyUuid, setCompanyUuid] = useState<string | null>(null);
@@ -19,6 +57,7 @@ function App() {
   return (
     <Router>
       <div className="App">
+        <BackendTest />
         <AppRoutes setCompanyUuid={setCompanyUuid} />
       </div>
     </Router>
