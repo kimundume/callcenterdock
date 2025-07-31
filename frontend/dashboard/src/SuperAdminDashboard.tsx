@@ -132,7 +132,7 @@ import {
   MedalOutlined,
   TagOutlined
 } from '@ant-design/icons';
-import { API_ENDPOINTS, getBackendUrl } from './config';
+import config from './config';
 import SuperAdminSidebar from './SuperAdminSidebar';
 
 // Register Chart.js components
