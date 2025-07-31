@@ -1,4 +1,4 @@
-// Force rebuild - Backend endpoints fixed and connectivity test added
+// Force Netlify rebuild - Backend authentication temporarily removed for testing
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router } from 'react-router-dom';
 import './style.css';
