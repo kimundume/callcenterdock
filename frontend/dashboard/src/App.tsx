@@ -1,4 +1,4 @@
-// Force Netlify rebuild - Backend 502 error fixed with error handling, server should start successfully
+// Force Netlify rebuild - Added debug logging and test endpoint to track authentication issues
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router } from 'react-router-dom';
 import './style.css';
