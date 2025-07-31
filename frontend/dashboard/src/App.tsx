@@ -1,4 +1,4 @@
-// Force Netlify rebuild - Backend authentication completely disabled, server restart triggered
+// Force Netlify rebuild - Backend 502 error fixed with error handling, server should start successfully
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router } from 'react-router-dom';
 import './style.css';
