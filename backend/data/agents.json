@@ -1,10 +1,44 @@
 {
-  "agent1": {
-    "uuid": "demo-agent-uuid",
-    "companyUuid": "demo-company-uuid",
+  "demo-agent-user": {
+    "uuid": "demo-agent-user-uuid",
     "username": "agent1",
     "password": "password",
+    "companyUuid": "demo-company-uuid",
+    "role": "agent",
     "email": "agent1@demo.com",
+    "status": "online",
+    "registrationStatus": "approved",
+    "createdAt": "2025-07-30T00:00:00.000Z"
+  },
+  "mindfirm-agent": {
+    "uuid": "mindfirm-agent-uuid",
+    "username": "mindfirm-agent",
+    "password": "password",
+    "companyUuid": "qsxp4b5v4",
+    "role": "agent",
+    "email": "agent@mindfirm.com",
+    "status": "online",
+    "registrationStatus": "approved",
+    "createdAt": "2025-07-30T00:00:00.000Z"
+  },
+  "test-agent-1": {
+    "uuid": "test-agent-1-uuid",
+    "username": "test-agent-1",
+    "password": "password",
+    "companyUuid": "test-company-001",
+    "role": "agent",
+    "email": "agent1@testcompany.com",
+    "status": "online",
+    "registrationStatus": "approved",
+    "createdAt": "2025-07-30T00:00:00.000Z"
+  },
+  "test-agent-2": {
+    "uuid": "test-agent-2-uuid",
+    "username": "test-agent-2",
+    "password": "password",
+    "companyUuid": "test-company-002",
+    "role": "agent",
+    "email": "agent2@testcompany.com",
     "status": "online",
     "registrationStatus": "approved",
     "createdAt": "2025-07-30T00:00:00.000Z"

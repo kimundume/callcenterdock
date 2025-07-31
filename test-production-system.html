@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production System Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            background: #f5f5f5;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .log {
+            background: #000;
+            color: #0f0;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            height: 400px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+        .company-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .company-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+        .test-results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .test-result {
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .pass { background: #d4edda; color: #155724; }
+        .fail { background: #f8d7da; color: #721c24; }
+        .pending { background: #fff3cd; color: #856404; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Production System Test</h1>
+    
+    <div class="test-section">
+        <h2>System Configuration</h2>
+        <p><strong>Backend URL:</strong> <span id="backend-url">https://callcenterdock.onrender.com</span></p>
+        <p><strong>Frontend URL:</strong> <span id="frontend-url">https://calldocker.netlify.app</span></p>
+        <p><strong>Test Date:</strong> <span id="test-date"></span></p>
+    </div>
+
+    <div class="test-section">
+        <h2>🔧 Backend Health Check</h2>
+        <button onclick="testBackendHealth()">Test Backend Health</button>
+        <button onclick="testSuperAdminLogin()">Test Super Admin Login</button>
+        <button onclick="testCompaniesData()">Test Companies Data</button>
+        <button onclick="testAgentsData()">Test Agents Data</button>
+        <div id="backend-status" class="status info">Ready to test...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>🏢 Companies & Agents</h2>
+        <div id="companies-display" class="company-list"></div>
+        <div id="agents-display" class="company-list"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>📞 Widget & Call Testing</h2>
+        <button onclick="testWidgetScript()">Test Widget Script</button>
+        <button onclick="testCallRouting()">Test Call Routing</button>
+        <button onclick="testAgentDashboard()">Test Agent Dashboard</button>
+        <div id="widget-status" class="status info">Ready to test...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>🎯 Test Results Summary</h2>
+        <div id="test-results" class="test-results">
+            <div class="test-result pending" id="backend-health">Backend Health</div>
+            <div class="test-result pending" id="super-admin">Super Admin</div>
+            <div class="test-result pending" id="companies">Companies</div>
+            <div class="test-result pending" id="agents">Agents</div>
+            <div class="test-result pending" id="widget">Widget</div>
+            <div class="test-result pending" id="calls">Call Routing</div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>📋 Test Log</h2>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'https://callcenterdock.onrender.com';
+        const FRONTEND_URL = 'https://calldocker.netlify.app';
+        let authToken = null;
+        let testResults = {
+            backendHealth: false,
+            superAdmin: false,
+            companies: false,
+            agents: false,
+            widget: false,
+            calls: false
+        };
+
+        // Initialize test date
+        document.getElementById('test-date').textContent = new Date().toLocaleString();
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#f00' : type === 'success' ? '#0f0' : '#0f0';
+            logDiv.innerHTML += `<div style="color: ${color}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(`[Test] ${message}`);
+        }
+
+        function updateStatus(elementId, message, type = 'info') {
+            const statusDiv = document.getElementById(elementId);
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        function updateTestResult(testName, passed) {
+            testResults[testName] = passed;
+            const resultDiv = document.getElementById(testName);
+            resultDiv.className = `test-result ${passed ? 'pass' : 'fail'}`;
+            resultDiv.textContent = passed ? '✅ PASS' : '❌ FAIL';
+        }
+
+        async function testBackendHealth() {
+            log('Testing backend health...');
+            updateStatus('backend-status', 'Testing backend health...', 'info');
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/health`);
+                const data = await response.json();
+                
+                log(`Backend health response: ${JSON.stringify(data, null, 2)}`);
+                
+                if (response.ok) {
+                    updateStatus('backend-status', 'Backend is healthy!', 'success');
+                    updateTestResult('backendHealth', true);
+                    log('✅ Backend health check passed', 'success');
+                } else {
+                    updateStatus('backend-status', 'Backend health check failed', 'error');
+                    updateTestResult('backendHealth', false);
+                    log('❌ Backend health check failed', 'error');
+                }
+            } catch (error) {
+                updateStatus('backend-status', `Backend error: ${error.message}`, 'error');
+                updateTestResult('backendHealth', false);
+                log(`❌ Backend error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testSuperAdminLogin() {
+            log('Testing Super Admin login...');
+            updateStatus('backend-status', 'Testing Super Admin login...', 'info');
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/super-admin/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: 'superadmin',
+                        password: 'password'
+                    })
+                });
+
+                const data = await response.json();
+                log(`Super Admin login response: ${JSON.stringify(data, null, 2)}`);
+
+                if (response.ok && data.token) {
+                    authToken = data.token;
+                    updateStatus('backend-status', 'Super Admin login successful!', 'success');
+                    updateTestResult('superAdmin', true);
+                    log('✅ Super Admin login successful', 'success');
+                } else {
+                    updateStatus('backend-status', `Super Admin login failed: ${data.error}`, 'error');
+                    updateTestResult('superAdmin', false);
+                    log(`❌ Super Admin login failed: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                updateStatus('backend-status', `Login error: ${error.message}`, 'error');
+                updateTestResult('superAdmin', false);
+                log(`❌ Login error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testCompaniesData() {
+            log('Testing companies data...');
+            updateStatus('backend-status', 'Testing companies data...', 'info');
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/super-admin/companies`);
+                const data = await response.json();
+                
+                log(`Companies data: ${JSON.stringify(data, null, 2)}`);
+                
+                if (response.ok && Object.keys(data).length > 0) {
+                    updateStatus('backend-status', `Found ${Object.keys(data).length} companies`, 'success');
+                    updateTestResult('companies', true);
+                    log(`✅ Found ${Object.keys(data).length} companies`, 'success');
+                    
+                    // Display companies
+                    const companiesDiv = document.getElementById('companies-display');
+                    companiesDiv.innerHTML = '';
+                    Object.entries(data).forEach(([uuid, company]) => {
+                        companiesDiv.innerHTML += `
+                            <div class="company-card">
+                                <h4>${company.name}</h4>
+                                <p><strong>UUID:</strong> ${uuid}</p>
+                                <p><strong>Email:</strong> ${company.email}</p>
+                                <p><strong>Status:</strong> ${company.verified ? 'Verified' : 'Pending'}</p>
+                                <p><strong>Created:</strong> ${new Date(company.createdAt).toLocaleDateString()}</p>
+                            </div>
+                        `;
+                    });
+                } else {
+                    updateStatus('backend-status', 'No companies found', 'error');
+                    updateTestResult('companies', false);
+                    log('❌ No companies found', 'error');
+                }
+            } catch (error) {
+                updateStatus('backend-status', `Companies error: ${error.message}`, 'error');
+                updateTestResult('companies', false);
+                log(`❌ Companies error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testAgentsData() {
+            log('Testing agents data...');
+            updateStatus('backend-status', 'Testing agents data...', 'info');
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/super-admin/agents/status`);
+                const data = await response.json();
+                
+                log(`Agents data: ${JSON.stringify(data, null, 2)}`);
+                
+                if (response.ok && data.length > 0) {
+                    updateStatus('backend-status', `Found ${data.length} agents`, 'success');
+                    updateTestResult('agents', true);
+                    log(`✅ Found ${data.length} agents`, 'success');
+                    
+                    // Display agents
+                    const agentsDiv = document.getElementById('agents-display');
+                    agentsDiv.innerHTML = '';
+                    data.forEach(agent => {
+                        agentsDiv.innerHTML += `
+                            <div class="company-card">
+                                <h4>${agent.username}</h4>
+                                <p><strong>Company:</strong> ${agent.companyName}</p>
+                                <p><strong>Status:</strong> ${agent.status}</p>
+                                <p><strong>Registration:</strong> ${agent.registrationStatus}</p>
+                                <p><strong>Created:</strong> ${new Date(agent.createdAt).toLocaleDateString()}</p>
+                            </div>
+                        `;
+                    });
+                } else {
+                    updateStatus('backend-status', 'No agents found', 'error');
+                    updateTestResult('agents', false);
+                    log('❌ No agents found', 'error');
+                }
+            } catch (error) {
+                updateStatus('backend-status', `Agents error: ${error.message}`, 'error');
+                updateTestResult('agents', false);
+                log(`❌ Agents error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testWidgetScript() {
+            log('Testing widget script availability...');
+            updateStatus('widget-status', 'Testing widget script...', 'info');
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/widget.js`);
+                
+                if (response.ok) {
+                    updateStatus('widget-status', 'Widget script is available!', 'success');
+                    updateTestResult('widget', true);
+                    log('✅ Widget script is available', 'success');
+                } else {
+                    updateStatus('widget-status', 'Widget script not found', 'error');
+                    updateTestResult('widget', false);
+                    log('❌ Widget script not found', 'error');
+                }
+            } catch (error) {
+                updateStatus('widget-status', `Widget error: ${error.message}`, 'error');
+                updateTestResult('widget', false);
+                log(`❌ Widget error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testCallRouting() {
+            log('Testing call routing...');
+            updateStatus('widget-status', 'Testing call routing...', 'info');
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/widget/test-call`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        companyUuid: 'qsxp4b5v4'
+                    })
+                });
+
+                const data = await response.json();
+                log(`Call routing response: ${JSON.stringify(data, null, 2)}`);
+
+                if (response.ok && data.success) {
+                    updateStatus('widget-status', 'Call routing successful!', 'success');
+                    updateTestResult('calls', true);
+                    log('✅ Call routing successful', 'success');
+                } else {
+                    updateStatus('widget-status', `Call routing failed: ${data.error || data.reason}`, 'error');
+                    updateTestResult('calls', false);
+                    log(`❌ Call routing failed: ${data.error || data.reason}`, 'error');
+                }
+            } catch (error) {
+                updateStatus('widget-status', `Call routing error: ${error.message}`, 'error');
+                updateTestResult('calls', false);
+                log(`❌ Call routing error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testAgentDashboard() {
+            log('Testing agent dashboard access...');
+            updateStatus('widget-status', 'Testing agent dashboard...', 'info');
+
+            try {
+                // Test if we can access the agent dashboard
+                const response = await fetch(`${FRONTEND_URL}/agent-dashboard`);
+                
+                if (response.ok) {
+                    updateStatus('widget-status', 'Agent dashboard is accessible!', 'success');
+                    log('✅ Agent dashboard is accessible', 'success');
+                } else {
+                    updateStatus('widget-status', 'Agent dashboard not accessible', 'error');
+                    log('❌ Agent dashboard not accessible', 'error');
+                }
+            } catch (error) {
+                updateStatus('widget-status', `Dashboard error: ${error.message}`, 'error');
+                log(`❌ Dashboard error: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-run tests on page load
+        window.addEventListener('load', () => {
+            log('🚀 Production System Test Started');
+            log('Running comprehensive system tests...');
+            
+            // Run tests in sequence
+            setTimeout(() => testBackendHealth(), 1000);
+            setTimeout(() => testSuperAdminLogin(), 2000);
+            setTimeout(() => testCompaniesData(), 3000);
+            setTimeout(() => testAgentsData(), 4000);
+            setTimeout(() => testWidgetScript(), 5000);
+            setTimeout(() => testCallRouting(), 6000);
+            setTimeout(() => testAgentDashboard(), 7000);
+        });
+    </script>
+</body>
+</html> 

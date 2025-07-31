@@ -5,5 +5,26 @@
     "email": "demo@company.com",
     "verified": true,
     "createdAt": "2025-07-30T00:00:00.000Z"
+  },
+  "qsxp4b5v4": {
+    "uuid": "qsxp4b5v4",
+    "name": "MindFirm Solutions",
+    "email": "admin@mindfirm.com",
+    "verified": true,
+    "createdAt": "2025-07-30T00:00:00.000Z"
+  },
+  "test-company-001": {
+    "uuid": "test-company-001",
+    "name": "Test Company 1",
+    "email": "test1@company.com",
+    "verified": true,
+    "createdAt": "2025-07-30T00:00:00.000Z"
+  },
+  "test-company-002": {
+    "uuid": "test-company-002",
+    "name": "Test Company 2",
+    "email": "test2@company.com",
+    "verified": true,
+    "createdAt": "2025-07-30T00:00:00.000Z"
   }
 } 
