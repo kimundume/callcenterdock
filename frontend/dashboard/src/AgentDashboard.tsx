@@ -1,121 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Layout, Menu, Button, Input, Avatar, Badge, Card, Row, Col, Typography, Space, Divider, List, Tag, Modal, Form, Select, Rate, Tooltip, Dropdown, message, Spin, Empty, Tabs, Table, Statistic, Progress, Alert, notification } from 'antd';
-import { 
-  UserOutlined, 
-  MessageOutlined, 
-  PhoneOutlined, 
-  SettingOutlined, 
-  LogoutOutlined, 
-  BellOutlined, 
-  SearchOutlined, 
-  PlusOutlined, 
-  EditOutlined, 
-  DeleteOutlined, 
-  EyeOutlined, 
-  StarOutlined, 
-  ClockCircleOutlined, 
-  CheckCircleOutlined, 
-  CloseCircleOutlined, 
-  ExclamationCircleOutlined,
-  AudioOutlined,
-  AudioMutedOutlined,
-  VideoCameraOutlined,
-  VideoCameraAddOutlined,
-  SendOutlined,
-  SmileOutlined,
-  PaperClipOutlined,
-  RobotOutlined,
-  CustomerServiceOutlined,
-  TeamOutlined,
-  BarChartOutlined,
-  FileTextOutlined,
-  ContactsOutlined,
-  FormOutlined,
-  SoundOutlined,
-  LoadingOutlined,
-  PlayCircleOutlined,
-  PauseCircleOutlined,
-  StopOutlined,
-  ReloadOutlined,
-  FilterOutlined,
-  SortAscendingOutlined,
-  SortDescendingOutlined,
-  ExportOutlined,
-  ImportOutlined,
-  DownloadOutlined,
-  UploadOutlined,
-  PrinterOutlined,
-  ShareAltOutlined,
-  LinkOutlined,
-  CopyOutlined,
-  ScissorOutlined,
-  UndoOutlined,
-  RedoOutlined,
-  SaveOutlined,
-  BookOutlined,
-  HeartOutlined,
-  LikeOutlined,
-  DislikeOutlined,
-  FrownOutlined,
-  MehOutlined,
-  SmileFilled,
-  HeartFilled,
-  StarFilled,
-  CheckCircleFilled,
-  CloseCircleFilled,
-  ExclamationCircleFilled,
-  InfoCircleFilled,
-  QuestionCircleFilled,
-  WarningFilled,
-  StopFilled,
-  PlayCircleFilled,
-  PauseCircleFilled,
-  AudioFilled,
-  VideoCameraFilled,
-  CustomerServiceFilled,
-  TeamFilled,
-  BarChartFilled,
-  FileTextFilled,
-  ContactsFilled,
-  FormFilled,
-  SoundFilled,
-  BookFilled,
-  HeartFilled as HeartFilledIcon,
-  LikeFilled,
-  DislikeFilled,
-  FrownFilled,
-  MehFilled,
-  SmileFilled as SmileFilledIcon,
-  StarFilled as StarFilledIcon,
-  CheckCircleFilled as CheckCircleFilledIcon,
-  CloseCircleFilled as CloseCircleFilledIcon,
-  ExclamationCircleFilled as ExclamationCircleFilledIcon,
-  InfoCircleFilled as InfoCircleFilledIcon,
-  QuestionCircleFilled as QuestionCircleFilledIcon,
-  WarningFilled as WarningFilledIcon,
-  StopFilled as StopFilledIcon,
-  PlayCircleFilled as PlayCircleFilledIcon,
-  PauseCircleFilled as PauseCircleFilledIcon,
-  AudioFilled as AudioFilledIcon,
-  VideoCameraFilled as VideoCameraFilledIcon,
-  CustomerServiceFilled as CustomerServiceFilledIcon,
-  TeamFilled as TeamFilledIcon,
-  BarChartFilled as BarChartFilledIcon,
-  FileTextFilled as FileTextFilledIcon,
-  ContactsFilled as ContactsFilledIcon,
-  FormFilled as FormFilledIcon,
-  SoundFilled as SoundFilledIcon,
-  BookFilled as BookFilledIcon,
-  LikeFilled as LikeFilledIcon,
-  DislikeFilled as DislikeFilledIcon,
-  FrownFilled as FrownFilledIcon,
-  MehFilled as MehFilledIcon
-} from '@ant-design/icons';
+import React, { useEffect, useState, useRef } from 'react';
+import DashboardLayout from './DashboardLayout';
+import { Card, Row, Col, Table, Button, Input, Tag, Form, Select, message, Modal, Empty, Tabs } from 'antd';
 import { io, Socket } from 'socket.io-client';
-import config from './config';
+import { SoundOutlined, PauseCircleOutlined, SwapOutlined, UserSwitchOutlined, BellOutlined, PhoneOutlined, ClockCircleOutlined, CloseCircleOutlined, SendOutlined, CheckCircleOutlined, TagOutlined, AudioOutlined, AudioMutedOutlined, FormOutlined } from '@ant-design/icons'; // For agent controls and notifications
+import logoLight from '/logo-light.png';
+import logoDark from '/logo-dark.png';
+import { useLocation, useNavigate } from 'react-router-dom';
+import notificationSound from '/notification.mp3';
+import ChatSessionsLayout from './ChatSessionsLayout';
+import { getBackendUrl, getSocketUrl } from './config';
 
-const API_URL = `${config.backendUrl}/api/widget`;
-const SOCKET_URL = config.socketUrl;
+const API_URL = `${getBackendUrl()}/api/widget`;
+const SOCKET_URL = getSocketUrl();
 const DISPOSITIONS = [
   'Resolved', 'Escalated', 'Follow-up required', 'Wrong number', 'Spam / Abuse', 'Other',
 ];
@@ -209,7 +105,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
     if (!companyUuid) return;
     let isMounted = true;
     const fetchStatus = () => {
-      fetch(`${config.socketUrl}/api/agents/${companyUuid}`)
+      fetch(`${getSocketUrl()}/api/agents/${companyUuid}`)
         .then(res => {
           if (!res.ok) throw new Error('Not found');
           return res.json();
@@ -301,7 +197,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
           pageUrl: data.pageUrl,
           startedAt: data.startedAt || new Date().toISOString()
         };
-        fetch(`${config.backendUrl}/api/chat-sessions`, {
+        fetch(`${getBackendUrl()}/api/chat-sessions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newSession)
@@ -332,7 +228,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
           pageUrl: window.location.href,
           startedAt: new Date().toISOString()
         };
-        fetch(`${config.backendUrl}/api/chat-sessions`, {
+        fetch(`${getBackendUrl()}/api/chat-sessions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newSession)
@@ -515,7 +411,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
           };
           
           // Create chat session in backend
-          fetch(`${config.backendUrl}/api/chat-sessions`, {
+          fetch(`${getBackendUrl()}/api/chat-sessions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newSession)
@@ -704,7 +600,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
     };
     // Persist to backend
     const companyId = companyUuid; // Use companyUuid
-    await fetch(`${config.backendUrl}/api/chat-messages`, {
+    await fetch(`${getBackendUrl()}/api/chat-messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -734,14 +630,14 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
   // Fetch chat messages when activeChat changes
   useEffect(() => {
     if (!activeChat) return;
-    fetch(`${config.backendUrl}/api/chat-messages?companyId=${companyUuid}&sessionId=${activeChat}`)
+    fetch(`${getBackendUrl()}/api/chat-messages?companyId=${companyUuid}&sessionId=${activeChat}`)
       .then(res => res.json())
       .then(messages => {
         setChatMessages(prev => ({ ...prev, [activeChat]: messages }));
       });
       
     // Also fetch form responses
-    fetch(`${config.backendUrl}/api/form-response?companyId=${companyUuid}&sessionId=${activeChat}`)
+    fetch(`${getBackendUrl()}/api/form-response?companyId=${companyUuid}&sessionId=${activeChat}`)
       .then(res => res.json())
       .then(responses => {
         // Convert form responses to chat messages
@@ -769,7 +665,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
   const [escalatedChats, setEscalatedChats] = useState<Record<string, boolean>>({});
   // Chat escalation handler
   const handleEscalateChat = async (sessionId: string) => {
-    await fetch(`${config.backendUrl}/api/chat-sessions/${sessionId}`, {
+    await fetch(`${getBackendUrl()}/api/chat-sessions/${sessionId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ escalated: true })
@@ -790,14 +686,14 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
 
   // Fetch canned responses on mount
   useEffect(() => {
-    fetch(`${config.backendUrl}/api/canned-responses?companyId=${companyId}`)
+    fetch(`${getBackendUrl()}/api/canned-responses?companyId=${companyId}`)
       .then(res => res.json())
       .then(setCannedResponses);
   }, []);
 
   // Fetch chat sessions on mount
   useEffect(() => {
-    fetch(`${config.backendUrl}/api/chat-sessions?companyId=${companyId}`)
+    fetch(`${getBackendUrl()}/api/chat-sessions?companyId=${companyId}`)
       .then(res => res.json())
       .then(sessions => {
         setChatSessions(sessions);
@@ -818,7 +714,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
 
   const handleSubmitRating = async () => {
     if (!pendingRatingSession || ratingValue === 0) return;
-    await fetch(`${config.backendUrl}/api/chat-sessions/${pendingRatingSession}`, {
+    await fetch(`${getBackendUrl()}/api/chat-sessions/${pendingRatingSession}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ rating: ratingValue })
@@ -1073,7 +969,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                       ]
                     };
                     console.log('Pushing email form:', formData);
-                    fetch(`${config.backendUrl}/api/form-push`, {
+                    fetch(`${getBackendUrl()}/api/form-push`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(formData)
@@ -1118,7 +1014,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                       ]
                     };
                     console.log('Pushing phone form:', formData);
-                    fetch(`${config.backendUrl}/api/form-push`, {
+                    fetch(`${getBackendUrl()}/api/form-push`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(formData)
@@ -1165,7 +1061,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                       ]
                     };
                     console.log('Pushing custom form:', formData);
-                    fetch(`${config.backendUrl}/api/form-push`, {
+                    fetch(`${getBackendUrl()}/api/form-push`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(formData)

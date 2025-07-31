@@ -1,43 +1,45 @@
-// Updated config - Backend endpoints fixed
-export const config = {
-  // Backend configuration
-  backendUrl: import.meta.env.VITE_BACKEND_URL || 
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-      ? 'http://localhost:5001' 
-      : 'https://callcenterdock.onrender.com'),
-  
-  // Socket configuration
-  socketUrl: import.meta.env.VITE_SOCKET_URL || 
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-      ? 'http://localhost:5001' 
-      : 'https://callcenterdock.onrender.com'),
-  
-  // Environment
-  environment: import.meta.env.MODE || 'production',
-  
-  // API endpoints
-  apiEndpoints: {
-    superAdmin: '/api/super-admin',
-    widget: '/api/widget',
-    chat: '/api/chat',
-    agents: '/api/agents',
-    calls: '/api/calls',
-    contacts: '/api/contacts',
-    forms: '/api/form-push',
-    responses: '/api/form-response'
-  },
-  
-  // Debug endpoints (no auth required)
-  debugEndpoints: {
-    accounts: '/api/super-admin/debug/accounts',
-    agents: '/api/super-admin/debug/agents',
-    companies: '/api/super-admin/debug/companies',
-    testLogin: '/api/super-admin/test-login',
-    createTestCompany: '/api/super-admin/debug/create-test-company'
+// Centralized configuration for backend URLs
+export const getBackendUrl = () => {
+  // Check if we're in development (localhost)
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://localhost:5001';
   }
+  
+  // Production: Use Render backend URL
+  return 'https://callcenterdock.onrender.com';
 };
 
-// Make config available globally
-(window as any).APP_CONFIG = config;
+export const getSocketUrl = () => {
+  // Check if we're in development (localhost)
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://localhost:5001';
+  }
+  
+  // Production: Use Render backend URL
+  return 'https://callcenterdock.onrender.com';
+};
 
-export default config; 
+// API endpoints
+export const API_ENDPOINTS = {
+  SUPER_ADMIN: `${getBackendUrl()}/api/super-admin`,
+  WIDGET: `${getBackendUrl()}/api/widget`,
+  AGENTS: `${getBackendUrl()}/api/agents`,
+  CHAT: `${getBackendUrl()}/api/chat`,
+  FORM: `${getBackendUrl()}/api/form`,
+  CONTACTS: `${getBackendUrl()}/api/contacts`,
+  CANNED_RESPONSES: `${getBackendUrl()}/api/canned-responses`,
+  CHAT_SESSIONS: `${getBackendUrl()}/api/chat-sessions`,
+  CHAT_MESSAGES: `${getBackendUrl()}/api/chat-messages`,
+  CHAT_NOTES: `${getBackendUrl()}/api/chat-notes`,
+  FORM_PUSH: `${getBackendUrl()}/api/form-push`,
+  FORM_RESPONSE: `${getBackendUrl()}/api/form-response`,
+};
+
+// Socket.IO URL
+export const SOCKET_URL = getSocketUrl();
+
+console.log('🔧 Backend Configuration:', {
+  environment: window.location.hostname === 'localhost' ? 'development' : 'production',
+  backendUrl: getBackendUrl(),
+  socketUrl: getSocketUrl()
+}); 

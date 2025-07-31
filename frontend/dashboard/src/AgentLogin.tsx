@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import config from './config';
-import { Card, Form, Input, Button, Typography, Alert, Space } from 'antd';
-import { UserOutlined, LockOutlined } from '@ant-design/icons';
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+import { getBackendUrl } from './config';
+import logoLight from '/logo-light.png';
 
-const API_URL = `${config.backendUrl}/api/widget`;
+const API_URL = `${getBackendUrl()}/api/widget`;
 
 export default function AgentLogin({ onAuth }: { onAuth: (token: string, uuid: string, username: string) => void }) {
   const [companyUuid, setCompanyUuid] = useState('');

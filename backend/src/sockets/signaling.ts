@@ -1,18 +1,10 @@
 // @ts-nocheck
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
+import { agents, sessions, saveSessions } from '../data/persistentStorage';
 
-// Simple in-memory storage for socket connections
+// In-memory storage for socket connections
 const socketConnections: Record<string, string> = {}; // agentId -> socketId
-
-// Simple in-memory data storage
-const agents: Record<string, any> = {};
-const sessions: any[] = [];
-
-// Simple save function
-function saveSessions() {
-  console.log('Sessions saved (in-memory)');
-}
 
 declare global {
   namespace NodeJS {

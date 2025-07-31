@@ -1,69 +1,34 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Layout, Menu, Button, Input, Avatar, Badge, Card, Row, Col, Typography, Space, Divider, List, Tag, Modal, Form, Select, Rate, Tooltip, Dropdown, message, Spin, Empty, Tabs, Table, Statistic, Progress, Alert, notification } from 'antd';
-import { 
-  UserOutlined, 
-  MessageOutlined, 
-  PhoneOutlined, 
-  SettingOutlined, 
-  LogoutOutlined, 
-  BellOutlined, 
-  SearchOutlined, 
-  PlusOutlined, 
-  EditOutlined, 
-  DeleteOutlined, 
-  EyeOutlined, 
-  StarOutlined, 
-  ClockCircleOutlined, 
-  CheckCircleOutlined, 
-  CloseCircleOutlined, 
-  ExclamationCircleOutlined,
-  AudioOutlined,
-  AudioMutedOutlined,
-  VideoCameraOutlined,
-  VideoCameraAddOutlined,
-  SendOutlined,
-  SmileOutlined,
-  PaperClipOutlined,
-  RobotOutlined,
-  CustomerServiceOutlined,
-  TeamOutlined,
-  BarChartOutlined,
-  FileTextOutlined,
-  ContactsOutlined,
-  FormOutlined,
-  SoundOutlined,
-  LoadingOutlined,
-  PlayCircleOutlined,
-  PauseCircleOutlined,
-  StopOutlined,
-  ReloadOutlined,
-  FilterOutlined,
-  SortAscendingOutlined,
-  SortDescendingOutlined,
-  ExportOutlined,
-  ImportOutlined,
-  DownloadOutlined,
-  UploadOutlined,
-  PrinterOutlined,
-  ShareAltOutlined,
-  LinkOutlined,
-  CopyOutlined,
-  ScissorOutlined,
-  UndoOutlined,
-  RedoOutlined,
-  SaveOutlined,
-  BookOutlined,
-  HeartOutlined,
-  LikeOutlined,
-  DislikeOutlined,
-  FrownOutlined,
-  MehOutlined
-} from '@ant-design/icons';
-import { io, Socket } from 'socket.io-client';
+import React, { useEffect, useState, useRef } from 'react';
+import DashboardLayout from './DashboardLayout';
+import { Card, Row, Col, Empty, Table, Button, Modal, Form, Input, Select, Switch, message, Popconfirm, Tabs, Spin, Upload, Tooltip, Switch as AntSwitch, Select as AntSelect, Slider, List, Avatar, Badge, Divider, Statistic, Tag, Modal as AntModal, Form as AntForm, Input as AntInput, Space, Tag as AntTag, Dropdown, DatePicker } from 'antd';
+import { Line } from 'react-chartjs-2'; // For analytics chart stub
+import { BellOutlined, ReloadOutlined, StopOutlined, BarChartOutlined, TeamOutlined, UserOutlined, PhoneOutlined, PlusOutlined, EditOutlined, DeleteOutlined, SaveOutlined, InboxOutlined, PlayCircleOutlined, PauseCircleOutlined, AudioOutlined, UserSwitchOutlined, BranchesOutlined, FileTextOutlined, PoweroffOutlined, PlusCircleOutlined, DownloadOutlined, CopyOutlined, CheckCircleOutlined, InfoCircleOutlined, SettingOutlined, QuestionCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, TagOutlined, RadarChartOutlined, MessageOutlined, SearchOutlined, DownloadOutlined as DownloadIcon, MoreOutlined, MailOutlined, PhoneFilled, UploadOutlined, FilterOutlined, ExclamationCircleOutlined } from '@ant-design/icons'; // For notifications and controls
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Legend,
+  Tooltip as ChartTooltip,
+} from 'chart.js';
+import { io } from 'socket.io-client';
+import logoLight from '/logo-light.png';
 import { useLocation, useNavigate } from 'react-router-dom';
-import config from './config';
+import { getBackendUrl, getSocketUrl } from './config';
 
-const API_URL = `${config.backendUrl}/api/widget`;
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Legend,
+  ChartTooltip,
+);
+
+const API_URL = `${getBackendUrl()}/api/widget`;
 
 const roleOptions = [
   { label: 'Agent', value: 'agent' },
@@ -164,7 +129,7 @@ export default function AdminDashboard({ adminToken, companyUuid, tabSwitcher, a
 
   const socketRef = useRef(null);
   useEffect(() => {
-    socketRef.current = io(config.socketUrl);
+    socketRef.current = io(getSocketUrl());
     return () => {
       if (socketRef.current) socketRef.current.disconnect();
     };

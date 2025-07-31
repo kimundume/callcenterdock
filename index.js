@@ -1,9 +1,12 @@
 // Entry point for Render deployment
 // This file redirects to the backend server
 
-console.log('Starting CallDocker backend server...');
+const path = require('path');
+const backendServer = require('./backend/dist/server.js');
 
-// Simply require the backend server - it will start automatically
-require('./backend/dist/server.js');
-
-console.log('Backend server started successfully'); 
+// If the backend server exports a function, call it
+if (typeof backendServer === 'function') {
+  backendServer();
+} else {
+  console.log('Backend server started successfully');
+} 

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Typography, Button, Alert, Spin } from 'antd';
-import config from './config';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import logoLight from '/logo-light.png';
+import { getBackendUrl } from './config';
 
-const API_URL = `${config.backendUrl}/api/widget`;
+const API_URL = `${getBackendUrl()}/api/widget`;
 
 export default function EmailVerification() {
   const [searchParams] = useSearchParams();
