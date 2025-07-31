@@ -2,16 +2,7 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { 
-  companies, 
-  agents, 
-  users,
-  saveCompanies, 
-  saveAgents, 
-  saveUsers,
-  findUserByCompanyAndRole,
-  findCompanyByEmail
-} from '../data/persistentStorage';
+import { persistentStorage, saveCompanies, saveAgents, saveUsers, findUserByCompanyAndRole, findCompanyByEmail } from '../data/persistentStorage';
 
 // In-memory storage for temporary data
 const pendingAdmins: any[] = [];
@@ -109,7 +100,7 @@ router.post('/login', async (req, res) => {
 router.get('/accounts', authenticateSuperAdmin, (req, res) => {
   try {
     // Transform existing companies data to match the expected format
-    const accounts = Object.values(companies).map((company: any) => ({
+    const accounts = Object.values(persistentStorage.companies).map((company: any) => ({
       id: company.uuid,
       companyName: company.name,
       email: company.email,
@@ -117,7 +108,7 @@ router.get('/accounts', authenticateSuperAdmin, (req, res) => {
       createdAt: company.createdAt || new Date().toISOString(),
       lastLogin: company.lastLogin || new Date().toISOString(),
       subscription: 'pro', // Default subscription
-      agents: Object.values(agents).filter((agent: any) => agent.companyUuid === company.uuid).length,
+      agents: Object.values(persistentStorage.agents).filter((agent: any) => agent.companyUuid === company.uuid).length,
       calls: 0, // This would be calculated from call logs
       revenue: Math.floor(Math.random() * 5000) + 1000 // Mock revenue data
     }));
@@ -132,8 +123,8 @@ router.get('/accounts', authenticateSuperAdmin, (req, res) => {
 // Get raw companies data (for debugging)
 router.get('/companies', (req, res) => {
   try {
-    console.log('Companies data requested:', companies);
-    res.json(companies);
+    console.log('Companies data requested:', persistentStorage.companies);
+    res.json(persistentStorage.companies);
   } catch (error) {
     console.error('Error fetching companies:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -143,8 +134,8 @@ router.get('/companies', (req, res) => {
 // Get raw users data (for debugging)
 router.get('/users', (req, res) => {
   try {
-    console.log('Users data requested:', users);
-    res.json(users);
+    console.log('Users data requested:', persistentStorage.users);
+    res.json(persistentStorage.users);
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -157,7 +148,7 @@ router.put('/accounts/:id/suspend', authenticateSuperAdmin, (req, res) => {
     const { id } = req.params;
     
     // Find and update the company status
-    const company = companies[id];
+    const company = persistentStorage.companies[id];
     if (!company) {
       return res.status(404).json({ error: 'Account not found' });
     }
@@ -179,7 +170,7 @@ router.put('/accounts/:id/activate', authenticateSuperAdmin, (req, res) => {
     const { id } = req.params;
     
     // Find and update the company status
-    const company = companies[id];
+    const company = persistentStorage.companies[id];
     if (!company) {
       return res.status(404).json({ error: 'Account not found' });
     }
@@ -201,18 +192,18 @@ router.put('/accounts/:id/delete', authenticateSuperAdmin, (req, res) => {
     const { id } = req.params;
     
     // Find and remove the company
-    if (!companies[id]) {
+    if (!persistentStorage.companies[id]) {
       return res.status(404).json({ error: 'Account not found' });
     }
 
     // Remove company and related data
-    delete companies[id];
+    delete persistentStorage.companies[id];
     saveCompanies(); // Save to file
     
     // Remove related agents
-    Object.keys(agents).forEach(agentId => {
-      if (agents[agentId].companyUuid === id) {
-        delete agents[agentId];
+    Object.keys(persistentStorage.agents).forEach(agentId => {
+      if (persistentStorage.agents[agentId].companyUuid === id) {
+        delete persistentStorage.agents[agentId];
       }
     });
     saveAgents(); // Save to file
@@ -228,12 +219,12 @@ router.put('/accounts/:id/delete', authenticateSuperAdmin, (req, res) => {
 router.get('/analytics', authenticateSuperAdmin, (req, res) => {
   try {
     const analytics = {
-      totalAccounts: Object.keys(companies).length,
-      activeAccounts: Object.values(companies).filter((c: any) => c.verified && !c.suspended).length,
-      suspendedAccounts: Object.values(companies).filter((c: any) => c.suspended).length,
-      pendingAccounts: Object.values(companies).filter((c: any) => !c.verified).length,
-      totalAgents: Object.keys(agents).length,
-      totalRevenue: Object.keys(companies).length * 2500, // Mock calculation
+      totalAccounts: Object.keys(persistentStorage.companies).length,
+      activeAccounts: Object.values(persistentStorage.companies).filter((c: any) => c.verified && !c.suspended).length,
+      suspendedAccounts: Object.values(persistentStorage.companies).filter((c: any) => c.suspended).length,
+      pendingAccounts: Object.values(persistentStorage.companies).filter((c: any) => !c.verified).length,
+      totalAgents: Object.keys(persistentStorage.agents).length,
+      totalRevenue: Object.keys(persistentStorage.companies).length * 2500, // Mock calculation
       systemHealth: {
         backend: 'online',
         database: 'connected',
@@ -431,7 +422,7 @@ router.get('/analytics/advanced', authenticateSuperAdmin, (req, res) => {
       },
       users: {
         growth: [45, 78, 56, 89, 67, 95],
-        total: Object.keys(companies).length
+        total: Object.keys(persistentStorage.companies).length
       },
       performance: {
         responseTime: 245,
@@ -592,8 +583,8 @@ router.post('/api-keys', authenticateSuperAdmin, (req, res) => {
 
 // GET /api/superadmin/pending-registrations
 router.get('/pending-registrations', (req, res) => {
-  const pendingCompanies = Object.values(companies).filter((c: any) => c.status === 'pending');
-  const pendingAgents = Object.values(agents).filter((a: any) => a.status === 'pending');
+  const pendingCompanies = Object.values(persistentStorage.companies).filter((c: any) => c.status === 'pending');
+  const pendingAgents = Object.values(persistentStorage.agents).filter((a: any) => a.status === 'pending');
   res.json({ companies: pendingCompanies, agents: pendingAgents });
 });
 
@@ -602,7 +593,7 @@ router.post('/approve', (req, res) => {
   const { type, id } = req.body;
   
   if (type === 'company') {
-    const company = companies[id];
+    const company = persistentStorage.companies[id];
     if (company) {
       company.status = 'approved';
       company.verified = true;
@@ -624,7 +615,7 @@ router.post('/approve', (req, res) => {
           email: pendingAdmin.email,
           createdAt: new Date().toISOString()
         };
-        users[adminUser.uuid] = adminUser;
+        persistentStorage.users[adminUser.uuid] = adminUser;
         saveUsers();
         
         // Remove from pending admins
@@ -637,7 +628,7 @@ router.post('/approve', (req, res) => {
       return res.json({ success: true, message: 'Company approved successfully' });
     }
   } else if (type === 'agent') {
-    const agent = agents[id];
+    const agent = persistentStorage.agents[id];
     if (agent) {
       agent.registrationStatus = 'approved';
       agent.status = 'offline'; // Set initial status to offline
@@ -659,7 +650,7 @@ router.post('/approve', (req, res) => {
           email: pendingAgentCred.email,
           createdAt: new Date().toISOString()
         };
-        users[agentUser.uuid] = agentUser;
+        persistentStorage.users[agentUser.uuid] = agentUser;
         saveUsers();
         
         // Remove from pending agent credentials
@@ -680,14 +671,14 @@ router.post('/approve', (req, res) => {
 router.post('/reject', (req, res) => {
   const { type, id } = req.body;
   if (type === 'company') {
-    const company = companies[id];
+    const company = persistentStorage.companies[id];
     if (company) {
       company.status = 'rejected';
       saveCompanies();
       return res.json({ success: true });
     }
   } else if (type === 'agent') {
-    const agent = agents[id];
+    const agent = persistentStorage.agents[id];
     if (agent) {
       agent.status = 'rejected';
       saveAgents();
@@ -861,8 +852,8 @@ router.get('/calls/analytics', authenticateSuperAdmin, (req, res) => {
 // Get all agents with status
 router.get('/agents/status', authenticateSuperAdmin, (req, res) => {
   try {
-    const agentsWithStatus = Object.values(agents).map((agent: any) => {
-      const company = companies[agent.companyUuid];
+    const agentsWithStatus = Object.values(persistentStorage.agents).map((agent: any) => {
+      const company = persistentStorage.companies[agent.companyUuid];
       
       return {
         id: agent.uuid,
@@ -951,7 +942,7 @@ router.post('/create-company', authenticateSuperAdmin, async (req, res) => {
     }
     
     // Check if company already exists (by email)
-    const existingCompany = Object.values(companies).find((c: any) => c.email === email);
+    const existingCompany = Object.values(persistentStorage.companies).find((c: any) => c.email === email);
     if (existingCompany) {
       return res.status(400).json({ error: 'A company with this email already exists' });
     }
@@ -975,7 +966,7 @@ router.post('/create-company', authenticateSuperAdmin, async (req, res) => {
     };
     
     // Add to companies object
-    companies[uuid] = newCompany;
+    persistentStorage.companies[uuid] = newCompany;
     saveCompanies(); // Save to file
     
     // Create admin user
@@ -990,7 +981,7 @@ router.post('/create-company', authenticateSuperAdmin, async (req, res) => {
     };
     
     // Add to users object
-    users[adminUser.uuid] = adminUser;
+    persistentStorage.users[adminUser.uuid] = adminUser;
     saveUsers(); // Save to file
     
     // Generate JWT token for admin
