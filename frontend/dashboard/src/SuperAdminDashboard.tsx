@@ -1676,7 +1676,7 @@ const AgentManagementTab = () => {
       render: (_, record: any) => (
         <div>
           {record?.skills && Array.isArray(record.skills) ? 
-            record.skills.map((skill: string) => (
+            record?.skills?.map((skill: string) => (
               <Tag key={skill} color="green" style={{ marginBottom: 4 }}>
                 {skill ? skill.replace('_', ' ') : 'N/A'}
               </Tag>
@@ -1809,7 +1809,7 @@ const AgentManagementTab = () => {
       key: 'skills',
       render: (_, record: any) => (
         <div>
-          {record.skills.map((skill: string) => (
+          {record?.skills?.map((skill: string) => (
             <Tag key={skill} color="green" style={{ marginBottom: 4 }}>
               {skill.replace('_', ' ')}
             </Tag>
@@ -1822,9 +1822,9 @@ const AgentManagementTab = () => {
       key: 'performance',
       render: (_, record: any) => (
         <div>
-          <div>Calls: {record.performance.callsHandled}</div>
-          <div>Rating: {record.performance.avgRating}/5</div>
-          <div>Success: {record.performance.successRate}%</div>
+          <div>Calls: {record?.performance?.callsHandled || 0}</div>
+          <div>Rating: {record?.performance?.avgRating || 0}/5</div>
+          <div>Success: {record?.performance?.successRate || 0}%</div>
         </div>
       )
     },
@@ -2034,7 +2034,7 @@ const AgentManagementTab = () => {
             <Statistic title="Active CallDocker Agents" value={callDockerAgents.filter(a => a.status === 'active').length} />
           </Col>
           <Col xs={24} sm={8}>
-            <Statistic title="Total Enquiries Handled" value={callDockerAgents.reduce((sum, a) => sum + a.performance.callsHandled, 0)} />
+            <Statistic title="Total Enquiries Handled" value={callDockerAgents.reduce((sum, a) => sum + (a.performance?.callsHandled || 0), 0)} />
           </Col>
         </Row>
       </Card>
