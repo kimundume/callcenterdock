@@ -51,7 +51,6 @@ import {
   Skeleton,
   Empty,
   Result,
-  PageHeader,
   Breadcrumb,
   Dropdown,
   notification,
@@ -127,7 +126,6 @@ import {
   BuildOutlined,
   CompassOutlined,
   AimOutlined,
-  TargetOutlined,
   FlagOutlined,
   TagOutlined
 } from '@ant-design/icons';
@@ -1617,24 +1615,12 @@ const AgentManagementTab = () => {
       key: 'fullName',
       render: (name: string, record: any) => (
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <Avatar style={{ marginRight: 8 }}>
-            {name && name.charAt ? name.charAt(0) : '?'}
-          </Avatar>
+          <Avatar style={{ marginRight: 8 }}>{name && name.charAt ? name.charAt(0) : '?'}</Avatar>
           <div>
             <div style={{ fontWeight: 500 }}>{name || 'Unknown'}</div>
-            <div style={{ fontSize: 12, color: '#666' }}>
-              @{record?.username || 'unknown'}
-            </div>
+            <div style={{ fontSize: 12, color: '#666' }}>@{record?.username || 'unknown'}</div>
           </div>
         </div>
-      )
-    },
-    {
-      title: 'Company',
-      dataIndex: 'companyName',
-      key: 'companyName',
-      render: (companyName: string) => (
-        <Tag color="blue">{companyName || 'N/A'}</Tag>
       )
     },
     {
@@ -1643,9 +1629,7 @@ const AgentManagementTab = () => {
       render: (_, record: any) => (
         <div>
           <div>{record?.email || 'N/A'}</div>
-          <div style={{ fontSize: 12, color: '#666' }}>
-            {record?.phone || 'N/A'}
-          </div>
+          <div style={{ fontSize: 12, color: '#666' }}>{record?.phone || 'N/A'}</div>
         </div>
       )
     },
@@ -1664,10 +1648,7 @@ const AgentManagementTab = () => {
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => (
-        <Badge 
-          status={getStatusColor(status) as any} 
-          text={status ? status.replace('_', ' ').toUpperCase() : 'N/A'} 
-        />
+        <Badge status={getStatusColor(status) as any} text={status ? status.replace('_', ' ').toUpperCase() : 'N/A'} />
       )
     },
     {
@@ -1842,13 +1823,13 @@ const AgentManagementTab = () => {
           <Button type="link" size="small" onClick={() => handleViewCallDockerAgentCredentials(record)}>
             View Credentials
           </Button>
-          {record.status === 'active' && (
-            <Button type="link" size="small" danger onClick={() => handleSuspendCallDockerAgent(record.id)}>
+          {record?.status === 'active' && (
+            <Button type="link" size="small" danger onClick={() => handleSuspendCallDockerAgent(record?.id)}>
               Suspend
             </Button>
           )}
-          {record.status === 'suspended' && (
-            <Button type="link" size="small" onClick={() => handleActivateCallDockerAgent(record.id)}>
+          {record?.status === 'suspended' && (
+            <Button type="link" size="small" onClick={() => handleActivateCallDockerAgent(record?.id)}>
               Activate
             </Button>
           )}
@@ -2145,7 +2126,7 @@ const AgentManagementTab = () => {
               <Col span={12}>
                 <div>
                   <Text strong>Role:</Text>
-                  <div>{(selectedAgent?.role || selectedCallDockerAgent?.role).replace('_', ' ').toUpperCase()}</div>
+                  <div>{(selectedAgent?.role || selectedCallDockerAgent?.role) ? (selectedAgent?.role || selectedCallDockerAgent?.role).replace('_', ' ').toUpperCase() : 'N/A'}</div>
                 </div>
               </Col>
             </Row>
@@ -2155,7 +2136,7 @@ const AgentManagementTab = () => {
                 <div>
                   <Text strong>Status:</Text>
                   <div>
-                    <Badge status={getStatusColor(selectedAgent?.status || selectedCallDockerAgent?.status) as any} text={(selectedAgent?.status || selectedCallDockerAgent?.status).replace('_', ' ').toUpperCase()} />
+                    <Badge status={getStatusColor(selectedAgent?.status || selectedCallDockerAgent?.status) as any} text={(selectedAgent?.status || selectedCallDockerAgent?.status) ? (selectedAgent?.status || selectedCallDockerAgent?.status).replace('_', ' ').toUpperCase() : 'N/A'} />
                   </div>
                 </div>
               </Col>
@@ -2172,7 +2153,7 @@ const AgentManagementTab = () => {
               <div style={{ marginTop: 8 }}>
                 {(selectedAgent?.skills || selectedCallDockerAgent?.skills).map((skill: string) => (
                   <Tag key={skill} color="green" style={{ marginBottom: 4 }}>
-                    {skill.replace('_', ' ')}
+                    {skill ? skill.replace('_', ' ') : 'N/A'}
                   </Tag>
                 ))}
               </div>
