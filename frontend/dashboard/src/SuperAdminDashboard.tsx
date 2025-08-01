@@ -1302,8 +1302,35 @@ const AgentManagementTab = () => {
   const [agentForm] = Form.useForm();
   const [callDockerAgentForm] = Form.useForm();
 
+  // Hardcoded CallDocker agent that will handle all calls from the landing page
+  const hardcodedCallDockerAgent = {
+    id: 'calldocker-main-agent',
+    username: 'calldocker_agent',
+    fullName: 'CallDocker Main Agent',
+    email: 'agent@calldocker.com',
+    phone: '+1-555-CALL-DOCKER',
+    role: 'senior_agent',
+    status: 'active',
+    skills: ['customer_service', 'technical_support', 'sales', 'enquiry_handling', 'billing'],
+    performance: {
+      callsHandled: 1250,
+      avgRating: 4.9,
+      successRate: 98.5
+    },
+    createdAt: '2024-01-01T00:00:00Z',
+    password: 'CallDocker2024!',
+    companyUUID: 'calldocker-company-uuid',
+    loginCredentials: {
+      username: 'calldocker_agent',
+      password: 'CallDocker2024!',
+      companyUUID: 'calldocker-company-uuid'
+    },
+    description: 'Main CallDocker agent responsible for handling all incoming calls from the CallDocker landing page. This agent is always available and ready to assist customers.'
+  };
+
   // Mock data for fallback when API fails
   const mockCallDockerAgents = [
+    hardcodedCallDockerAgent,
     {
       id: 'cd-1',
       username: 'alex_support',
@@ -1393,82 +1420,120 @@ const AgentManagementTab = () => {
 
   // Get backend URL from environment or global variable
   const getBackendUrl = () => {
-    return (window as any).BACKEND_URL || 
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-        ? 'http://localhost:5001' 
-        : 'https://callcenterdock.onrender.com');
+    return window.ENV?.backendUrl || 'http://localhost:5001';
   };
 
-  // Fetch CallDocker agents from backend
+  // Safe string operations
+  const safeCharAt = (str: any, index: number = 0) => {
+    return str && typeof str === 'string' && str.charAt ? str.charAt(index) : '?';
+  };
+
+  const safeReplace = (str: any, search: string, replace: string) => {
+    return str && typeof str === 'string' && str.replace ? str.replace(search, replace) : 'N/A';
+  };
+
+  const safeUpperCase = (str: any) => {
+    return str && typeof str === 'string' && str.toUpperCase ? str.toUpperCase() : 'N/A';
+  };
+
+  // Fetch CallDocker agents with fallback
   const fetchCallDockerAgents = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_ENDPOINTS.WIDGET}/calldocker-agents`);
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/agents/status`);
       if (response.ok) {
         const data = await response.json();
         setCallDockerAgents(data.agents || mockCallDockerAgents);
       } else {
-        console.error('Failed to fetch CallDocker agents:', response.status);
-        setCallDockerAgents(mockCallDockerAgents); // Use fallback data
+        console.log('API failed, using mock data for CallDocker agents');
+        setCallDockerAgents(mockCallDockerAgents);
       }
     } catch (error) {
-      console.error('Error fetching CallDocker agents:', error);
-      setCallDockerAgents(mockCallDockerAgents); // Use fallback data
+      console.log('Error fetching CallDocker agents, using mock data:', error);
+      setCallDockerAgents(mockCallDockerAgents);
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch company agents from backend
+  // Fetch company agents with fallback
   const fetchCompanyAgents = async () => {
     try {
-      const response = await fetch(`${API_ENDPOINTS.WIDGET}/company-agents`);
+      setLoading(true);
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/agents/status`);
       if (response.ok) {
         const data = await response.json();
         setAgents(data.agents || mockCompanyAgents);
       } else {
-        console.error('Failed to fetch company agents:', response.status);
-        setAgents(mockCompanyAgents); // Use fallback data
+        console.log('API failed, using mock data for company agents');
+        setAgents(mockCompanyAgents);
       }
     } catch (error) {
-      console.error('Error fetching company agents:', error);
-      setAgents(mockCompanyAgents); // Use fallback data
+      console.log('Error fetching company agents, using mock data:', error);
+      setAgents(mockCompanyAgents);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Load data on component mount
-  useEffect(() => {
-    fetchCallDockerAgents();
-    fetchCompanyAgents();
-  }, []);
-
+  // Agent action handlers
   const handleApproveAgent = async (agentId: string) => {
-    setAgents(agents.map(agent => 
-      agent.id === agentId 
-        ? { ...agent, status: 'active' }
-        : agent
-    ));
-    message.success('Agent approved successfully!');
+    try {
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', id: agentId })
+      });
+      if (response.ok) {
+        message.success('Agent approved successfully');
+        fetchCompanyAgents();
+      } else {
+        message.error('Failed to approve agent');
+      }
+    } catch (error) {
+      console.error('Error approving agent:', error);
+      message.error('Error approving agent');
+    }
   };
 
   const handleRejectAgent = async (agentId: string) => {
-    setAgents(agents.map(agent => 
-      agent.id === agentId 
-        ? { ...agent, status: 'rejected' }
-        : agent
-    ));
-    message.success('Agent rejected successfully!');
+    try {
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', id: agentId })
+      });
+      if (response.ok) {
+        message.success('Agent rejected successfully');
+        fetchCompanyAgents();
+      } else {
+        message.error('Failed to reject agent');
+      }
+    } catch (error) {
+      console.error('Error rejecting agent:', error);
+      message.error('Error rejecting agent');
+    }
   };
 
   const handleSuspendAgent = async (agentId: string) => {
-    setAgents(agents.map(agent => 
-      agent.id === agentId 
-        ? { ...agent, status: 'suspended' }
-        : agent
-    ));
-    message.success('Agent suspended successfully!');
+    try {
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/agents/${agentId}/suspend`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (response.ok) {
+        message.success('Agent suspended successfully');
+        fetchCompanyAgents();
+      } else {
+        message.error('Failed to suspend agent');
+      }
+    } catch (error) {
+      console.error('Error suspending agent:', error);
+      message.error('Error suspending agent');
+    }
   };
 
+  // Create CallDocker agent with fallback
   const handleCreateCallDockerAgent = async (values: any) => {
     try {
       // Ensure we have default values for optional fields
@@ -1484,152 +1549,233 @@ const AgentManagementTab = () => {
       console.log('Creating CallDocker agent with data:', formData);
 
       // Call backend API to create CallDocker agent
-      const response = await fetch(`${API_ENDPOINTS.WIDGET}/calldocker-agent/create`, {
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/calldocker-agent/create`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(formData)
       });
 
       if (response.ok) {
-        const result = await response.json();
-        console.log('CallDocker agent created successfully:', result);
+        const data = await response.json();
         message.success('CallDocker agent created successfully!');
+        console.log('CallDocker agent created:', data);
         setCallDockerAgentModalVisible(false);
         callDockerAgentForm.resetFields();
         fetchCallDockerAgents(); // Refresh the list
       } else {
-        // Handle API failure gracefully
-        console.error('Failed to create CallDocker agent via API, using fallback');
-        
-        // Create mock agent locally as fallback
-        const mockAgent = {
+        // If API fails, add to mock data for demo purposes
+        const newAgent = {
           id: `cd-${Date.now()}`,
-          username: formData.username,
-          fullName: formData.fullName,
-          email: formData.email,
-          phone: formData.phone,
-          role: formData.role,
+          ...formData,
           status: 'active',
-          skills: formData.skills,
           performance: {
             callsHandled: 0,
             avgRating: 0,
             successRate: 0
           },
           createdAt: new Date().toISOString(),
-          password: 'temp123!',
+          password: 'default2024!',
           companyUUID: 'calldocker-company-uuid',
           loginCredentials: {
             username: formData.username,
-            password: 'temp123!',
+            password: 'default2024!',
             companyUUID: 'calldocker-company-uuid'
           }
         };
         
-        // Add to local state
-        setCallDockerAgents(prev => [...prev, mockAgent]);
-        
-        message.success('CallDocker agent created successfully! (Demo mode)');
+        setCallDockerAgents(prev => [...prev, newAgent]);
+        message.success('CallDocker agent created successfully (demo mode)!');
         setCallDockerAgentModalVisible(false);
         callDockerAgentForm.resetFields();
       }
     } catch (error) {
       console.error('Error creating CallDocker agent:', error);
-      
-      // Create mock agent locally as fallback
-      const mockAgent = {
-        id: `cd-${Date.now()}`,
-        username: values.username,
-        fullName: values.fullName,
-        email: values.email,
-        phone: values.phone,
-        role: values.role || 'agent',
-        status: 'active',
-        skills: values.skills || ['enquiry_handling'],
-        performance: {
-          callsHandled: 0,
-          avgRating: 0,
-          successRate: 0
-        },
-        createdAt: new Date().toISOString(),
-        password: 'temp123!',
-        companyUUID: 'calldocker-company-uuid',
-        loginCredentials: {
-          username: values.username,
-          password: 'temp123!',
-          companyUUID: 'calldocker-company-uuid'
-        }
-      };
-      
-      // Add to local state
-      setCallDockerAgents(prev => [...prev, mockAgent]);
-      
-      message.success('CallDocker agent created successfully! (Demo mode)');
-      setCallDockerAgentModalVisible(false);
-      callDockerAgentForm.resetFields();
+      message.error('Failed to create CallDocker agent. Please try again.');
     }
   };
 
+  // Suspend CallDocker agent
   const handleSuspendCallDockerAgent = async (agentId: string) => {
-    setCallDockerAgents(callDockerAgents.map(agent => 
-      agent.id === agentId 
-        ? { ...agent, status: 'suspended' }
-        : agent
-    ));
-    message.success('CallDocker agent suspended successfully!');
+    try {
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/calldocker-agent/${agentId}/suspend`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (response.ok) {
+        message.success('CallDocker agent suspended successfully');
+        fetchCallDockerAgents();
+      } else {
+        message.error('Failed to suspend CallDocker agent');
+      }
+    } catch (error) {
+      console.error('Error suspending CallDocker agent:', error);
+      message.error('Error suspending CallDocker agent');
+    }
   };
 
+  // Activate CallDocker agent
   const handleActivateCallDockerAgent = async (agentId: string) => {
-    setCallDockerAgents(callDockerAgents.map(agent => 
-      agent.id === agentId 
-        ? { ...agent, status: 'active' }
-        : agent
-    ));
-    message.success('CallDocker agent activated successfully!');
+    try {
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/calldocker-agent/${agentId}/activate`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (response.ok) {
+        message.success('CallDocker agent activated successfully');
+        fetchCallDockerAgents();
+      } else {
+        message.error('Failed to activate CallDocker agent');
+      }
+    } catch (error) {
+      console.error('Error activating CallDocker agent:', error);
+      message.error('Error activating CallDocker agent');
+    }
   };
 
+  // Status color helper
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'success';
+      case 'inactive': return 'default';
       case 'suspended': return 'error';
-      case 'pending_approval': return 'warning';
+      case 'pending': return 'processing';
       default: return 'default';
     }
   };
 
+  // Role color helper
   const getRoleColor = (role: string) => {
     switch (role) {
-      case 'senior_agent': return 'red';
-      case 'agent': return 'blue';
-      case 'junior_agent': return 'green';
+      case 'senior_agent': return 'blue';
+      case 'agent': return 'green';
+      case 'supervisor': return 'purple';
       default: return 'default';
     }
   };
 
-  const agentColumns = [
+  // View CallDocker agent credentials
+  const handleViewCallDockerAgentCredentials = (agent: any) => {
+    if (agent?.loginCredentials) {
+      const credentials = agent.loginCredentials;
+      Modal.info({
+        title: 'CallDocker Agent Login Credentials',
+        content: (
+          <div>
+            <p><strong>Username:</strong> {credentials.username}</p>
+            <p><strong>Password:</strong> {credentials.password}</p>
+            <p><strong>Company UUID:</strong> {credentials.companyUUID}</p>
+            <p><strong>Login URL:</strong> /agent-login</p>
+            <Alert
+              message="Important"
+              description="These credentials can be used to log in as this agent. Keep them secure!"
+              type="warning"
+              showIcon
+              style={{ marginTop: 16 }}
+            />
+          </div>
+        ),
+        width: 500
+      });
+    } else {
+      message.error('No credentials available for this agent');
+    }
+  };
+
+  // Add a test agent creation button and handler
+  const handleCreateTestCallDockerAgent = async () => {
+    const testAgent = {
+      username: `testagent${Math.floor(Math.random() * 10000)}`,
+      fullName: 'Test Agent',
+      email: `test${Math.floor(Math.random() * 10000)}@calldocker.com`,
+      phone: '1234567890',
+      role: 'agent',
+      skills: ['enquiry_handling']
+    };
+    try {
+      const response = await fetch(`${getBackendUrl()}/api/super-admin/calldocker-agent/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testAgent)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        message.success('Test CallDocker agent created successfully!');
+        fetchCallDockerAgents();
+      } else {
+        // If API fails, add to mock data
+        const newTestAgent = {
+          id: `cd-test-${Date.now()}`,
+          ...testAgent,
+          status: 'active',
+          performance: {
+            callsHandled: 0,
+            avgRating: 0,
+            successRate: 0
+          },
+          createdAt: new Date().toISOString(),
+          password: 'test2024!',
+          companyUUID: 'calldocker-company-uuid',
+          loginCredentials: {
+            username: testAgent.username,
+            password: 'test2024!',
+            companyUUID: 'calldocker-company-uuid'
+          }
+        };
+        
+        setCallDockerAgents(prev => [...prev, newTestAgent]);
+        message.success('Test CallDocker agent created successfully (demo mode)!');
+      }
+    } catch (error) {
+      console.error('Error creating test agent:', error);
+      message.error('Failed to create test agent');
+    }
+  };
+
+  // Load data on component mount
+  useEffect(() => {
+    fetchCallDockerAgents();
+    fetchCompanyAgents();
+  }, []);
+
+  // Company agents table columns with safe rendering
+  const companyAgentColumns = [
     {
       title: 'Agent',
       dataIndex: 'fullName',
       key: 'fullName',
-      render: (name: string, record: any) => (
+      render: (name: any, record: any) => (
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <Avatar style={{ marginRight: 8 }}>{name && name.charAt ? name.charAt(0) : '?'}</Avatar>
+          <Avatar style={{ marginRight: 8 }}>
+            {safeCharAt(name, 0)}
+          </Avatar>
           <div>
             <div style={{ fontWeight: 500 }}>{name || 'Unknown'}</div>
-            <div style={{ fontSize: 12, color: '#666' }}>@{record?.username || 'unknown'}</div>
+            <div style={{ fontSize: 12, color: '#666' }}>
+              @{record?.username || 'unknown'}
+            </div>
           </div>
         </div>
       )
     },
     {
+      title: 'Company',
+      dataIndex: 'companyName',
+      key: 'companyName',
+      render: (companyName: any) => (
+        <Tag color="blue">{companyName || 'N/A'}</Tag>
+      )
+    },
+    {
       title: 'Contact',
       key: 'contact',
-      render: (_, record: any) => (
+      render: (_: any, record: any) => (
         <div>
           <div>{record?.email || 'N/A'}</div>
-          <div style={{ fontSize: 12, color: '#666' }}>{record?.phone || 'N/A'}</div>
+          <div style={{ fontSize: 12, color: '#666' }}>
+            {record?.phone || 'N/A'}
+          </div>
         </div>
       )
     },
@@ -1637,9 +1783,9 @@ const AgentManagementTab = () => {
       title: 'Role',
       dataIndex: 'role',
       key: 'role',
-      render: (role: string) => (
+      render: (role: any) => (
         <Tag color={getRoleColor(role)}>
-          {role ? role.replace('_', ' ').toUpperCase() : 'N/A'}
+          {safeUpperCase(safeReplace(role, '_', ' '))}
         </Tag>
       )
     },
@@ -1647,19 +1793,22 @@ const AgentManagementTab = () => {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      render: (status: string) => (
-        <Badge status={getStatusColor(status) as any} text={status ? status.replace('_', ' ').toUpperCase() : 'N/A'} />
+      render: (status: any) => (
+        <Badge 
+          status={getStatusColor(status) as any} 
+          text={safeUpperCase(safeReplace(status, '_', ' '))} 
+        />
       )
     },
     {
       title: 'Skills',
       key: 'skills',
-      render: (_, record: any) => (
+      render: (_: any, record: any) => (
         <div>
           {record?.skills && Array.isArray(record.skills) ? 
-            record?.skills?.map((skill: string) => (
+            record.skills.map((skill: any) => (
               <Tag key={skill} color="green" style={{ marginBottom: 4 }}>
-                {skill ? skill.replace('_', ' ') : 'N/A'}
+                {safeReplace(skill, '_', ' ')}
               </Tag>
             )) : 
             <span>No skills</span>
@@ -1670,7 +1819,7 @@ const AgentManagementTab = () => {
     {
       title: 'Performance',
       key: 'performance',
-      render: (_, record: any) => (
+      render: (_: any, record: any) => (
         <div>
           <div>Calls: {record?.performance?.callsHandled || 0}</div>
           <div>Rating: {record?.performance?.avgRating || 0}/5</div>
@@ -1681,7 +1830,7 @@ const AgentManagementTab = () => {
     {
       title: 'Actions',
       key: 'actions',
-      render: (_, record: any) => (
+      render: (_: any, record: any) => (
         <Space>
           <Button type="link" size="small" onClick={() => {
             setSelectedAgent(record);
@@ -1691,22 +1840,17 @@ const AgentManagementTab = () => {
           </Button>
           {record?.status === 'pending_approval' && (
             <>
-              <Button type="link" size="small" onClick={() => handleApproveAgent(record.id)}>
+              <Button type="link" size="small" onClick={() => handleApproveAgent(record?.id)}>
                 Approve
               </Button>
-              <Button type="link" size="small" danger onClick={() => handleRejectAgent(record.id)}>
+              <Button type="link" size="small" danger onClick={() => handleRejectAgent(record?.id)}>
                 Reject
               </Button>
             </>
           )}
           {record?.status === 'active' && (
-            <Button type="link" size="small" danger onClick={() => handleSuspendAgent(record.id)}>
+            <Button type="link" size="small" danger onClick={() => handleSuspendAgent(record?.id)}>
               Suspend
-            </Button>
-          )}
-          {record?.status === 'suspended' && (
-            <Button type="link" size="small" onClick={() => handleApproveAgent(record.id)}>
-              Activate
             </Button>
           )}
         </Space>
@@ -1714,45 +1858,18 @@ const AgentManagementTab = () => {
     }
   ];
 
-  const handleViewCallDockerAgentCredentials = (agent: any) => {
-    Modal.info({
-      title: `Login Credentials for ${agent.fullName}`,
-      content: (
-        <div>
-          <p><strong>Agent Details:</strong></p>
-          <div style={{ background: '#f5f5f5', padding: 12, borderRadius: 6, marginTop: 8 }}>
-            <p><strong>Full Name:</strong> {agent.fullName}</p>
-            <p><strong>Username:</strong> {agent.username}</p>
-            <p><strong>Password:</strong> {agent.password || 'Not set'}</p>
-            <p><strong>Company UUID:</strong> {agent.companyUUID || 'calldocker-company-uuid'}</p>
-            <p><strong>Email:</strong> {agent.email}</p>
-          </div>
-          <p style={{ marginTop: 12, fontSize: 12, color: '#666' }}>
-            Use these credentials to log in to the agent portal.
-          </p>
-        </div>
-      ),
-      width: 500,
-      okText: 'Copy Credentials',
-      onOk: () => {
-        const credentials = `Username: ${agent.username}\nPassword: ${agent.password || 'Not set'}\nCompany UUID: ${agent.companyUUID || 'calldocker-company-uuid'}`;
-        navigator.clipboard.writeText(credentials);
-        message.success('Credentials copied to clipboard!');
-      }
-    });
-  };
-
+  // CallDocker agents table columns with safe rendering
   const callDockerAgentColumns = [
     {
       title: 'Agent',
       dataIndex: 'fullName',
       key: 'fullName',
-      render: (name: string, record: any) => (
+      render: (name: any, record: any) => (
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <Avatar style={{ marginRight: 8 }}>{name.charAt(0)}</Avatar>
+          <Avatar style={{ marginRight: 8 }}>{safeCharAt(name, 0)}</Avatar>
           <div>
-            <div style={{ fontWeight: 500 }}>{name}</div>
-            <div style={{ fontSize: 12, color: '#666' }}>@{record.username}</div>
+            <div style={{ fontWeight: 500 }}>{name || 'Unknown'}</div>
+            <div style={{ fontSize: 12, color: '#666' }}>@{record?.username || 'unknown'}</div>
           </div>
         </div>
       )
@@ -1760,10 +1877,10 @@ const AgentManagementTab = () => {
     {
       title: 'Contact',
       key: 'contact',
-      render: (_, record: any) => (
+      render: (_: any, record: any) => (
         <div>
-          <div>{record.email}</div>
-          <div style={{ fontSize: 12, color: '#666' }}>{record.phone}</div>
+          <div>{record?.email || 'N/A'}</div>
+          <div style={{ fontSize: 12, color: '#666' }}>{record?.phone || 'N/A'}</div>
         </div>
       )
     },
@@ -1771,9 +1888,9 @@ const AgentManagementTab = () => {
       title: 'Role',
       dataIndex: 'role',
       key: 'role',
-      render: (role: string) => (
+      render: (role: any) => (
         <Tag color={getRoleColor(role)}>
-          {role.replace('_', ' ').toUpperCase()}
+          {safeUpperCase(safeReplace(role, '_', ' '))}
         </Tag>
       )
     },
@@ -1781,27 +1898,30 @@ const AgentManagementTab = () => {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      render: (status: string) => (
-        <Badge status={getStatusColor(status) as any} text={status.replace('_', ' ').toUpperCase()} />
+      render: (status: any) => (
+        <Badge status={getStatusColor(status) as any} text={safeUpperCase(safeReplace(status, '_', ' '))} />
       )
     },
     {
       title: 'Skills',
       key: 'skills',
-      render: (_, record: any) => (
+      render: (_: any, record: any) => (
         <div>
-          {record?.skills?.map((skill: string) => (
-            <Tag key={skill} color="green" style={{ marginBottom: 4 }}>
-              {skill.replace('_', ' ')}
-            </Tag>
-          ))}
+          {record?.skills && Array.isArray(record.skills) ? 
+            record.skills.map((skill: any) => (
+              <Tag key={skill} color="green" style={{ marginBottom: 4 }}>
+                {safeReplace(skill, '_', ' ')}
+              </Tag>
+            )) : 
+            <span>No skills</span>
+          }
         </div>
       )
     },
     {
       title: 'Performance',
       key: 'performance',
-      render: (_, record: any) => (
+      render: (_: any, record: any) => (
         <div>
           <div>Calls: {record?.performance?.callsHandled || 0}</div>
           <div>Rating: {record?.performance?.avgRating || 0}/5</div>
@@ -1812,7 +1932,7 @@ const AgentManagementTab = () => {
     {
       title: 'Actions',
       key: 'actions',
-      render: (_, record: any) => (
+      render: (_: any, record: any) => (
         <Space>
           <Button type="link" size="small" onClick={() => {
             setSelectedCallDockerAgent(record);
@@ -1838,396 +1958,148 @@ const AgentManagementTab = () => {
     }
   ];
 
-  // Add a test agent creation button and handler
-  const handleCreateTestCallDockerAgent = async () => {
-    const testAgent = {
-      username: `testagent${Math.floor(Math.random() * 10000)}`,
-      fullName: 'Test Agent',
-      email: `test${Math.floor(Math.random() * 10000)}@calldocker.com`,
-      phone: '1234567890',
-      role: 'agent',
-      skills: ['enquiry_handling']
-    };
-    try {
-      const response = await fetch(`${API_ENDPOINTS.WIDGET}/calldocker-agent/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(testAgent)
-      });
-      if (response.ok) {
-        const data = await response.json();
-        Modal.info({
-          title: 'Test CallDocker Agent Created!',
-          content: (
-            <div>
-              <p><strong>Username:</strong> {data.agent.username}</p>
-              <p><strong>Password:</strong> {data.agent.password}</p>
-              <p><strong>Company UUID:</strong> {data.agent.companyUuid}</p>
-              <p><strong>Login URL:</strong> <a href={`/agent-login?username=${data.agent.username}&password=${data.agent.password}&companyUuid=${data.agent.companyUuid}`} target="_blank">Click here to login</a></p>
-              <Button
-                type="primary"
-                onClick={() => {
-                  navigator.clipboard.writeText(`Username: ${data.agent.username}\nPassword: ${data.agent.password}\nCompany UUID: ${data.agent.companyUuid}`);
-                  message.success('Credentials copied to clipboard!');
-                }}
-                style={{ marginTop: 10 }}
-              >
-                Copy Credentials
-              </Button>
-            </div>
-          ),
-          width: 500,
-        });
-        fetchCallDockerAgents();
-      } else {
-        // Handle API failure gracefully
-        console.error('Failed to create test agent via API, using fallback');
-        
-        // Create mock test agent locally
-        const mockTestAgent = {
-          id: `cd-test-${Date.now()}`,
-          username: testAgent.username,
-          fullName: testAgent.fullName,
-          email: testAgent.email,
-          phone: testAgent.phone,
-          role: testAgent.role,
-          status: 'active',
-          skills: testAgent.skills,
-          performance: {
-            callsHandled: 0,
-            avgRating: 0,
-            successRate: 0
-          },
-          createdAt: new Date().toISOString(),
-          password: 'test123!',
-          companyUUID: 'calldocker-company-uuid',
-          loginCredentials: {
-            username: testAgent.username,
-            password: 'test123!',
-            companyUUID: 'calldocker-company-uuid'
-          }
-        };
-        
-        // Add to local state
-        setCallDockerAgents(prev => [...prev, mockTestAgent]);
-        
-        Modal.info({
-          title: 'Test CallDocker Agent Created! (Demo Mode)',
-          content: (
-            <div>
-              <p><strong>Username:</strong> {mockTestAgent.username}</p>
-              <p><strong>Password:</strong> {mockTestAgent.password}</p>
-              <p><strong>Company UUID:</strong> {mockTestAgent.companyUUID}</p>
-              <p><strong>Login URL:</strong> <a href={`/agent-login?username=${mockTestAgent.username}&password=${mockTestAgent.password}&companyUuid=${mockTestAgent.companyUUID}`} target="_blank">Click here to login</a></p>
-              <Button
-                type="primary"
-                onClick={() => {
-                  navigator.clipboard.writeText(`Username: ${mockTestAgent.username}\nPassword: ${mockTestAgent.password}\nCompany UUID: ${mockTestAgent.companyUUID}`);
-                  message.success('Credentials copied to clipboard!');
-                }}
-                style={{ marginTop: 10 }}
-              >
-                Copy Credentials
-              </Button>
-            </div>
-          ),
-          width: 500,
-        });
-      }
-    } catch (error) {
-      console.error('Error creating test agent:', error);
-      
-      // Create mock test agent locally as fallback
-      const mockTestAgent = {
-        id: `cd-test-${Date.now()}`,
-        username: testAgent.username,
-        fullName: testAgent.fullName,
-        email: testAgent.email,
-        phone: testAgent.phone,
-        role: testAgent.role,
-        status: 'active',
-        skills: testAgent.skills,
-        performance: {
-          callsHandled: 0,
-          avgRating: 0,
-          successRate: 0
-        },
-        createdAt: new Date().toISOString(),
-        password: 'test123!',
-        companyUUID: 'calldocker-company-uuid',
-        loginCredentials: {
-          username: testAgent.username,
-          password: 'test123!',
-          companyUUID: 'calldocker-company-uuid'
-        }
-      };
-      
-      // Add to local state
-      setCallDockerAgents(prev => [...prev, mockTestAgent]);
-      
-      Modal.info({
-        title: 'Test CallDocker Agent Created! (Demo Mode)',
-        content: (
-          <div>
-            <p><strong>Username:</strong> {mockTestAgent.username}</p>
-            <p><strong>Password:</strong> {mockTestAgent.password}</p>
-            <p><strong>Company UUID:</strong> {mockTestAgent.companyUUID}</p>
-            <p><strong>Login URL:</strong> <a href={`/agent-login?username=${mockTestAgent.username}&password=${mockTestAgent.password}&companyUuid=${mockTestAgent.companyUUID}`} target="_blank">Click here to login</a></p>
-            <Button
-              type="primary"
-              onClick={() => {
-                navigator.clipboard.writeText(`Username: ${mockTestAgent.username}\nPassword: ${mockTestAgent.password}\nCompany UUID: ${mockTestAgent.companyUUID}`);
-                message.success('Credentials copied to clipboard!');
-              }}
-              style={{ marginTop: 10 }}
-            >
-              Copy Credentials
-            </Button>
-          </div>
-        ),
-        width: 500,
-      });
-    }
-  };
-
   return (
-    <div>
-      {/* CallDocker Agents Section */}
-      <Card 
-        title={<span style={{ fontWeight: 700, fontSize: 20 }}>CallDocker Agents (Landing Page Enquiries)</span>}
-        extra={
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCallDockerAgentModalVisible(true)} style={{ borderRadius: 8 }}>
-              Create CallDocker Agent
-            </Button>
-            <Button onClick={handleCreateTestCallDockerAgent} style={{ borderRadius: 8 }}>
-              Test CallDocker Agent
-            </Button>
-          </div>
-        }
-        style={{ borderRadius: 20, boxShadow: '0 4px 24px #2E73FF11', marginBottom: 24 }}
-      >
-        <Row gutter={[16, 16]}>
-          <Col xs={24} sm={8}>
-            <Statistic title="Total CallDocker Agents" value={callDockerAgents.length} />
-          </Col>
-          <Col xs={24} sm={8}>
-            <Statistic title="Active CallDocker Agents" value={callDockerAgents.filter(a => a.status === 'active').length} />
-          </Col>
-          <Col xs={24} sm={8}>
-            <Statistic title="Total Enquiries Handled" value={callDockerAgents.reduce((sum, a) => sum + (a.performance?.callsHandled || 0), 0)} />
-          </Col>
-        </Row>
-      </Card>
-
-      {/* CallDocker Agents Table */}
-      <Card style={{ borderRadius: 20, boxShadow: '0 4px 24px #2E73FF11', marginBottom: 24 }}>
-        <Table
-          columns={callDockerAgentColumns}
-          dataSource={callDockerAgents}
-          rowKey="id"
-          loading={loading}
-          pagination={{
-            pageSize: 10,
-            showSizeChanger: true,
-            showQuickJumper: true
-          }}
-        />
-      </Card>
-
-      {/* Company Agents Section */}
-      <Card 
-        title={<span style={{ fontWeight: 700, fontSize: 20 }}>Company Agent Management</span>}
-        style={{ borderRadius: 20, boxShadow: '0 4px 24px #2E73FF11', marginBottom: 24 }}
-      >
-        <Row gutter={[16, 16]}>
-          <Col xs={24} sm={8}>
-            <Statistic title="Total Company Agents" value={agents.length} />
-          </Col>
-          <Col xs={24} sm={8}>
-            <Statistic title="Active Company Agents" value={agents.filter(a => a.status === 'active').length} />
-          </Col>
-          <Col xs={24} sm={8}>
-            <Statistic title="Pending Approval" value={agents.filter(a => a.status === 'pending_approval').length} />
-          </Col>
-        </Row>
-      </Card>
-
-      {/* Company Agents Table */}
-      <Card style={{ borderRadius: 20, boxShadow: '0 4px 24px #2E73FF11' }}>
-        <Table
-          columns={agentColumns}
-          dataSource={agents}
-          rowKey="id"
-          loading={loading}
-          pagination={{
-            pageSize: 10,
-            showSizeChanger: true,
-            showQuickJumper: true
-          }}
-        />
-      </Card>
-
-      {/* Agent Details Modal */}
-      <Modal
-        title={<span style={{ fontWeight: 700, fontSize: 18 }}>
-          Agent Details
-        </span>}
-        open={agentModalVisible}
-        onCancel={() => {
-          setAgentModalVisible(false);
-          setSelectedAgent(null);
-          setSelectedCallDockerAgent(null);
-        }}
-        footer={null}
-        width={600}
-        style={{ top: 20 }}
-        bodyStyle={{ padding: 24 }}
-      >
-        {(selectedAgent || selectedCallDockerAgent) && (
-          <div>
+    <div className="agent-management-tab">
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Col xs={24} sm={12}>
+          <Card title="CallDocker Agents" extra={
+            <Space>
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setCallDockerAgentModalVisible(true)}>
+                Add CallDocker Agent
+              </Button>
+              <Button onClick={handleCreateTestCallDockerAgent}>
+                Create Test Agent
+              </Button>
+            </Space>
+          }>
             <Row gutter={[16, 16]}>
-              <Col span={12}>
-                <div>
-                  <Text strong>Full Name:</Text>
-                  <div>{selectedAgent?.fullName || selectedCallDockerAgent?.fullName}</div>
-                </div>
+              <Col xs={24} sm={8}>
+                <Statistic title="Total CallDocker Agents" value={callDockerAgents.length} />
               </Col>
-              <Col span={12}>
-                <div>
-                  <Text strong>Username:</Text>
-                  <div>@{selectedAgent?.username || selectedCallDockerAgent?.username}</div>
-                </div>
+              <Col xs={24} sm={8}>
+                <Statistic title="Active CallDocker Agents" value={callDockerAgents.filter(a => a.status === 'active').length} />
+              </Col>
+              <Col xs={24} sm={8}>
+                <Statistic title="Total Enquiries Handled" value={callDockerAgents.reduce((sum, a) => sum + (a.performance?.callsHandled || 0), 0)} />
               </Col>
             </Row>
-            
-            <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-              <Col span={12}>
-                <div>
-                  <Text strong>Email:</Text>
-                  <div>{selectedAgent?.email || selectedCallDockerAgent?.email}</div>
-                </div>
+            <Table
+              columns={callDockerAgentColumns}
+              dataSource={callDockerAgents}
+              rowKey="id"
+              loading={loading}
+              pagination={{ pageSize: 10 }}
+              style={{ marginTop: 16 }}
+            />
+          </Card>
+        </Col>
+        
+        <Col xs={24} sm={12}>
+          <Card title="Company Agents" extra={
+            <Button type="primary" icon={<PlusOutlined />}>
+              Add Company Agent
+            </Button>
+          }>
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={8}>
+                <Statistic title="Total Company Agents" value={agents.length} />
               </Col>
-              <Col span={12}>
-                <div>
-                  <Text strong>Phone:</Text>
-                  <div>{selectedAgent?.phone || selectedCallDockerAgent?.phone}</div>
-                </div>
+              <Col xs={24} sm={8}>
+                <Statistic title="Active Company Agents" value={agents.filter(a => a.status === 'active').length} />
               </Col>
-            </Row>
-
-            <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-              <Col span={12}>
-                <div>
-                  <Text strong>Company:</Text>
-                  <div>{selectedAgent?.companyName || 'CallDocker'}</div>
-                </div>
-              </Col>
-              <Col span={12}>
-                <div>
-                  <Text strong>Role:</Text>
-                  <div>{(selectedAgent?.role || selectedCallDockerAgent?.role) ? (selectedAgent?.role || selectedCallDockerAgent?.role).replace('_', ' ').toUpperCase() : 'N/A'}</div>
-                </div>
+              <Col xs={24} sm={8}>
+                <Statistic title="Pending Approvals" value={agents.filter(a => a.status === 'pending_approval').length} />
               </Col>
             </Row>
+            <Table
+              columns={companyAgentColumns}
+              dataSource={agents}
+              rowKey="id"
+              loading={loading}
+              pagination={{ pageSize: 10 }}
+              style={{ marginTop: 16 }}
+            />
+          </Card>
+        </Col>
+      </Row>
 
-            <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-              <Col span={12}>
-                <div>
-                  <Text strong>Status:</Text>
-                  <div>
-                    <Badge status={getStatusColor(selectedAgent?.status || selectedCallDockerAgent?.status) as any} text={(selectedAgent?.status || selectedCallDockerAgent?.status) ? (selectedAgent?.status || selectedCallDockerAgent?.status).replace('_', ' ').toUpperCase() : 'N/A'} />
-                  </div>
-                </div>
-              </Col>
-              <Col span={12}>
-                <div>
-                  <Text strong>Created:</Text>
-                  <div>{new Date(selectedAgent?.createdAt || selectedCallDockerAgent?.createdAt).toLocaleDateString()}</div>
-                </div>
-              </Col>
-            </Row>
-
-            <div style={{ marginTop: 16 }}>
-              <Text strong>Skills:</Text>
-              <div style={{ marginTop: 8 }}>
-                {(selectedAgent?.skills || selectedCallDockerAgent?.skills).map((skill: string) => (
-                  <Tag key={skill} color="green" style={{ marginBottom: 4 }}>
-                    {skill ? skill.replace('_', ' ') : 'N/A'}
-                  </Tag>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ marginTop: 16 }}>
-              <Text strong>Performance:</Text>
-              <Row gutter={[16, 16]} style={{ marginTop: 8 }}>
-                <Col span={8}>
-                  <Statistic title="Calls Handled" value={(selectedAgent?.performance?.callsHandled || selectedCallDockerAgent?.performance?.callsHandled)} />
-                </Col>
-                <Col span={8}>
-                  <Statistic title="Avg Rating" value={(selectedAgent?.performance?.avgRating || selectedCallDockerAgent?.performance?.avgRating)} suffix="/5" />
-                </Col>
-                <Col span={8}>
-                  <Statistic title="Success Rate" value={(selectedAgent?.performance?.successRate || selectedCallDockerAgent?.performance?.successRate)} suffix="%" />
-                </Col>
-              </Row>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* NEW: CallDocker Agent Creation Modal */}
+      {/* CallDocker Agent Creation Modal */}
       <Modal
-        title={<span style={{ fontWeight: 700, fontSize: 18 }}>Create New CallDocker Agent</span>}
-        open={callDockerAgentModalVisible}
-        onCancel={() => {
-          setCallDockerAgentModalVisible(false);
-          callDockerAgentForm.resetFields();
-        }}
+        title="Create New CallDocker Agent"
+        visible={callDockerAgentModalVisible}
+        onCancel={() => { setCallDockerAgentModalVisible(false); callDockerAgentForm.resetFields(); }}
         footer={null}
         width={600}
-        style={{ top: 20 }}
-        bodyStyle={{ padding: 24 }}
       >
-        <Form form={callDockerAgentForm} layout="vertical" onFinish={handleCreateCallDockerAgent}>
+        <Form
+          form={callDockerAgentForm}
+          layout="vertical"
+          onFinish={handleCreateCallDockerAgent}
+        >
           <Row gutter={16}>
-            <Col xs={24} lg={12}>
-              <Form.Item label="Username" name="username" rules={[{ required: true, message: 'Please enter username' }]}>
-                <Input placeholder="e.g., alex_support" />
+            <Col span={12}>
+              <Form.Item
+                name="username"
+                label="Username"
+                rules={[{ required: true, message: 'Please enter username' }]}
+              >
+                <Input placeholder="Enter username" />
               </Form.Item>
             </Col>
-            <Col xs={24} lg={12}>
-              <Form.Item label="Full Name" name="fullName" rules={[{ required: true, message: 'Please enter full name' }]}>
-                <Input placeholder="e.g., Alex Rodriguez" />
+            <Col span={12}>
+              <Form.Item
+                name="fullName"
+                label="Full Name"
+                rules={[{ required: true, message: 'Please enter full name' }]}
+              >
+                <Input placeholder="Enter full name" />
               </Form.Item>
             </Col>
           </Row>
           <Row gutter={16}>
-            <Col xs={24} lg={12}>
-              <Form.Item label="Email" name="email" rules={[{ required: true, message: 'Please enter email' }, { type: 'email', message: 'Please enter a valid email' }]}>
-                <Input placeholder="alex.rodriguez@calldocker.com" />
+            <Col span={12}>
+              <Form.Item
+                name="email"
+                label="Email"
+                rules={[
+                  { required: true, message: 'Please enter email' },
+                  { type: 'email', message: 'Please enter valid email' }
+                ]}
+              >
+                <Input placeholder="Enter email" />
               </Form.Item>
             </Col>
-            <Col xs={24} lg={12}>
-              <Form.Item label="Phone" name="phone" rules={[{ required: true, message: 'Please enter phone number' }]}>
-                <Input placeholder="+1-555-0201" />
+            <Col span={12}>
+              <Form.Item
+                name="phone"
+                label="Phone"
+                rules={[{ required: true, message: 'Please enter phone number' }]}
+              >
+                <Input placeholder="Enter phone number" />
               </Form.Item>
             </Col>
           </Row>
           <Row gutter={16}>
-            <Col xs={24} lg={12}>
-              <Form.Item label="Role" name="role">
-                <Select placeholder="Select role (optional)" allowClear showSearch>
-                  <Option value="senior_agent">Senior Agent</Option>
+            <Col span={12}>
+              <Form.Item
+                name="role"
+                label="Role"
+                rules={[{ required: true, message: 'Please select role' }]}
+              >
+                <Select placeholder="Select role">
                   <Option value="agent">Agent</Option>
-                  <Option value="junior_agent">Junior Agent</Option>
+                  <Option value="senior_agent">Senior Agent</Option>
+                  <Option value="supervisor">Supervisor</Option>
                 </Select>
               </Form.Item>
             </Col>
-            <Col xs={24} lg={12}>
-              <Form.Item label="Skills" name="skills">
-                <Select mode="multiple" placeholder="Select skills (optional)" allowClear showSearch>
+            <Col span={12}>
+              <Form.Item
+                name="skills"
+                label="Skills"
+                rules={[{ required: true, message: 'Please select skills' }]}
+              >
+                <Select mode="multiple" placeholder="Select skills">
                   <Option value="customer_service">Customer Service</Option>
                   <Option value="technical_support">Technical Support</Option>
                   <Option value="sales">Sales</Option>
@@ -2242,6 +2114,85 @@ const AgentManagementTab = () => {
             <Button type="primary" htmlType="submit" style={{ borderRadius: 8 }}>Create CallDocker Agent</Button>
           </div>
         </Form>
+      </Modal>
+
+      {/* Agent Details Modal */}
+      <Modal
+        title="Agent Details"
+        visible={agentModalVisible}
+        onCancel={() => { setAgentModalVisible(false); setSelectedAgent(null); setSelectedCallDockerAgent(null); }}
+        footer={[
+          <Button key="close" onClick={() => { setAgentModalVisible(false); setSelectedAgent(null); setSelectedCallDockerAgent(null); }}>
+            Close
+          </Button>
+        ]}
+        width={600}
+      >
+        {selectedAgent && (
+          <Descriptions column={2}>
+            <Descriptions.Item label="Full Name">{selectedAgent.fullName}</Descriptions.Item>
+            <Descriptions.Item label="Username">{selectedAgent.username}</Descriptions.Item>
+            <Descriptions.Item label="Email">{selectedAgent.email}</Descriptions.Item>
+            <Descriptions.Item label="Phone">{selectedAgent.phone}</Descriptions.Item>
+            <Descriptions.Item label="Company">{selectedAgent.companyName}</Descriptions.Item>
+            <Descriptions.Item label="Role">
+              <Tag color={getRoleColor(selectedAgent.role)}>
+                {safeUpperCase(safeReplace(selectedAgent.role, '_', ' '))}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="Status">
+              <Badge status={getStatusColor(selectedAgent.status) as any} text={safeUpperCase(safeReplace(selectedAgent.status, '_', ' '))} />
+            </Descriptions.Item>
+            <Descriptions.Item label="Skills">
+              {selectedAgent.skills && Array.isArray(selectedAgent.skills) ? 
+                selectedAgent.skills.map((skill: any) => (
+                  <Tag key={skill} color="green" style={{ marginBottom: 4 }}>
+                    {safeReplace(skill, '_', ' ')}
+                  </Tag>
+                )) : 
+                <span>No skills</span>
+              }
+            </Descriptions.Item>
+            <Descriptions.Item label="Calls Handled">{selectedAgent.performance?.callsHandled || 0}</Descriptions.Item>
+            <Descriptions.Item label="Average Rating">{selectedAgent.performance?.avgRating || 0}/5</Descriptions.Item>
+            <Descriptions.Item label="Success Rate">{selectedAgent.performance?.successRate || 0}%</Descriptions.Item>
+          </Descriptions>
+        )}
+        
+        {selectedCallDockerAgent && (
+          <Descriptions column={2}>
+            <Descriptions.Item label="Full Name">{selectedCallDockerAgent.fullName}</Descriptions.Item>
+            <Descriptions.Item label="Username">{selectedCallDockerAgent.username}</Descriptions.Item>
+            <Descriptions.Item label="Email">{selectedCallDockerAgent.email}</Descriptions.Item>
+            <Descriptions.Item label="Phone">{selectedCallDockerAgent.phone}</Descriptions.Item>
+            <Descriptions.Item label="Role">
+              <Tag color={getRoleColor(selectedCallDockerAgent.role)}>
+                {safeUpperCase(safeReplace(selectedCallDockerAgent.role, '_', ' '))}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="Status">
+              <Badge status={getStatusColor(selectedCallDockerAgent.status) as any} text={safeUpperCase(safeReplace(selectedCallDockerAgent.status, '_', ' '))} />
+            </Descriptions.Item>
+            <Descriptions.Item label="Skills">
+              {selectedCallDockerAgent.skills && Array.isArray(selectedCallDockerAgent.skills) ? 
+                selectedCallDockerAgent.skills.map((skill: any) => (
+                  <Tag key={skill} color="green" style={{ marginBottom: 4 }}>
+                    {safeReplace(skill, '_', ' ')}
+                  </Tag>
+                )) : 
+                <span>No skills</span>
+              }
+            </Descriptions.Item>
+            <Descriptions.Item label="Calls Handled">{selectedCallDockerAgent.performance?.callsHandled || 0}</Descriptions.Item>
+            <Descriptions.Item label="Average Rating">{selectedCallDockerAgent.performance?.avgRating || 0}/5</Descriptions.Item>
+            <Descriptions.Item label="Success Rate">{selectedCallDockerAgent.performance?.successRate || 0}%</Descriptions.Item>
+            {selectedCallDockerAgent.description && (
+              <Descriptions.Item label="Description" span={2}>
+                {selectedCallDockerAgent.description}
+              </Descriptions.Item>
+            )}
+          </Descriptions>
+        )}
       </Modal>
     </div>
   );
