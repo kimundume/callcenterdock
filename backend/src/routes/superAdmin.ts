@@ -72,6 +72,13 @@ const defaultCompanies = {
     email: 'demo@company.com',
     verified: true,
     createdAt: new Date().toISOString(),
+  },
+  'calldocker-company-uuid': {
+    uuid: 'calldocker-company-uuid',
+    name: 'CallDocker',
+    email: 'admin@calldocker.com',
+    verified: true,
+    createdAt: new Date().toISOString(),
   }
 };
 
@@ -85,6 +92,31 @@ const defaultAgents = {
     status: 'online',
     registrationStatus: 'approved',
     createdAt: new Date().toISOString(),
+  },
+  'calldocker-main-agent': {
+    uuid: 'calldocker-main-agent',
+    companyUuid: 'calldocker-company-uuid',
+    username: 'calldocker_agent',
+    password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // "CallDocker2024!"
+    email: 'agent@calldocker.com',
+    phone: '+1-555-CALL-DOCKER',
+    fullName: 'CallDocker Main Agent',
+    role: 'senior_agent',
+    status: 'online',
+    registrationStatus: 'approved',
+    skills: ['customer_service', 'technical_support', 'sales', 'enquiry_handling', 'billing'],
+    performance: {
+      callsHandled: 1250,
+      avgRating: 4.9,
+      successRate: 98.5
+    },
+    currentCalls: 0,
+    maxCalls: 10,
+    availability: 'online',
+    lastActivity: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    description: 'Main CallDocker agent responsible for handling all incoming calls from the CallDocker landing page. This agent is always available and ready to assist customers.'
   }
 };
 
@@ -138,15 +170,14 @@ if (Object.keys(companies).length === 0) {
     currentCalls: 1,
     maxCalls: 5,
     availability: 'online',
+    lastActivity: new Date().toISOString(),
+    skills: ['sales', 'support'],
     callsHandled: 15,
     avgDuration: 240,
     satisfaction: 4.5,
     responseTime: 45,
     totalCalls: 20,
-    missedCalls: 2,
-    skills: ['sales', 'support'],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    missedCalls: 2
   };
   
   const sampleAgent2 = {
@@ -159,15 +190,14 @@ if (Object.keys(companies).length === 0) {
     currentCalls: 0,
     maxCalls: 3,
     availability: 'offline',
+    lastActivity: new Date(Date.now() - 3600000).toISOString(),
+    skills: ['technical'],
     callsHandled: 8,
     avgDuration: 180,
     satisfaction: 4.2,
     responseTime: 60,
     totalCalls: 10,
-    missedCalls: 1,
-    skills: ['technical'],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    missedCalls: 1
   };
   
   agents[sampleAgent1.uuid] = sampleAgent1;
@@ -1285,146 +1315,6 @@ router.post('/contact-messages/:id/handle', (req, res) => {
   }
 });
 
-// ===== CALL MANAGEMENT ENDPOINTS =====
-
-// Get active calls
-router.get('/calls/active', authenticateSuperAdmin, (req, res) => {
-  try {
-    const activeCalls: any[] = []; // This would be loaded from persistent storage
-    res.json({
-      success: true,
-      calls: activeCalls,
-      count: activeCalls.length
-    });
-  } catch (error) {
-    console.error('Error fetching active calls:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Get call history
-router.get('/calls/history', authenticateSuperAdmin, (req, res) => {
-  try {
-    const { page = 1, limit = 20, status, agentId } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
-
-    const allCalls: any[] = []; // This would be loaded from persistent storage
-    let filteredCalls = allCalls;
-
-    if (status) {
-      filteredCalls = filteredCalls.filter((call: any) => call.status === status);
-    }
-
-    if (agentId) {
-      filteredCalls = filteredCalls.filter((call: any) => call.assignedAgent === agentId);
-    }
-
-    const paginatedCalls = filteredCalls.slice(skip, skip + Number(limit));
-
-    res.json({
-      success: true,
-      calls: paginatedCalls,
-      total: filteredCalls.length,
-      page: Number(page),
-      limit: Number(limit),
-      totalPages: Math.ceil(filteredCalls.length / Number(limit))
-    });
-  } catch (error) {
-    console.error('Error fetching call history:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Assign call to agent
-router.post('/calls/:id/assign', authenticateSuperAdmin, (req, res) => {
-  try {
-    const { id } = req.params;
-    const { agentId } = req.body;
-
-    if (!agentId) {
-      return res.status(400).json({ error: 'Agent ID required' });
-    }
-
-    // This would update the call in persistent storage
-    res.json({
-      success: true,
-      message: 'Call assigned successfully'
-    });
-  } catch (error) {
-    console.error('Error assigning call:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Update call status
-router.put('/calls/:id/status', authenticateSuperAdmin, (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status, notes } = req.body;
-
-    if (!status) {
-      return res.status(400).json({ error: 'Status required' });
-    }
-
-    // This would update the call in persistent storage
-    res.json({
-      success: true,
-      message: 'Call status updated successfully'
-    });
-  } catch (error) {
-    console.error('Error updating call status:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Get call analytics
-router.get('/calls/analytics', authenticateSuperAdmin, (req, res) => {
-  try {
-    const { period = '7d' } = req.query;
-    const now = new Date();
-    let startDate = new Date();
-
-    switch (period) {
-      case '24h':
-        startDate.setHours(now.getHours() - 24);
-        break;
-      case '7d':
-        startDate.setDate(now.getDate() - 7);
-        break;
-      case '30d':
-        startDate.setDate(now.getDate() - 30);
-        break;
-      default:
-        startDate.setDate(now.getDate() - 7);
-    }
-
-    const analytics = {
-      totalCalls: 0,
-      activeCalls: 0,
-      avgDuration: 0,
-      callsByStatus: {
-        waiting: 0,
-        active: 0,
-        ended: 0,
-        missed: 0
-      },
-      callsByType: {
-        chat: 0,
-        voice: 0
-      }
-    };
-
-    res.json({
-      success: true,
-      analytics,
-      period
-    });
-  } catch (error) {
-    console.error('Error fetching call analytics:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
 // ===== AGENT MANAGEMENT ENDPOINTS =====
 
 // Get all agents with status (no auth required for testing)
@@ -1433,30 +1323,36 @@ router.get('/agents/status', (req, res) => {
     console.log('[DEBUG] Agent status request received');
     console.log('[DEBUG] Agents data:', agents);
     
-    // Always ensure we have some agents
-    if (Object.keys(agents).length === 0) {
-      console.log('[DEBUG] No agents found, creating default agents');
-      const defaultAgent = {
-        uuid: 'default-agent-001',
-        username: 'agent1',
-        email: 'agent1@demo.com',
-        companyUuid: 'demo-company-uuid',
+    // Always ensure we have the CallDocker agent
+    if (!agents['calldocker-main-agent']) {
+      console.log('[DEBUG] CallDocker agent not found, creating it');
+      const callDockerAgent = {
+        uuid: 'calldocker-main-agent',
+        companyUuid: 'calldocker-company-uuid',
+        username: 'calldocker_agent',
+        password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // "CallDocker2024!"
+        email: 'agent@calldocker.com',
+        phone: '+1-555-CALL-DOCKER',
+        fullName: 'CallDocker Main Agent',
+        role: 'senior_agent',
         status: 'online',
-        assignedToPublic: true,
-        currentCalls: 1,
-        maxCalls: 5,
+        registrationStatus: 'approved',
+        skills: ['customer_service', 'technical_support', 'sales', 'enquiry_handling', 'billing'],
+        performance: {
+          callsHandled: 1250,
+          avgRating: 4.9,
+          successRate: 98.5
+        },
+        currentCalls: 0,
+        maxCalls: 10,
         availability: 'online',
-        callsHandled: 15,
-        avgDuration: 240,
-        satisfaction: 4.5,
-        responseTime: 45,
-        totalCalls: 20,
-        missedCalls: 2,
-        skills: ['sales', 'support'],
+        lastActivity: new Date().toISOString(),
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        description: 'Main CallDocker agent responsible for handling all incoming calls from the CallDocker landing page. This agent is always available and ready to assist customers.'
       };
-      agents[defaultAgent.uuid] = defaultAgent;
+      agents[callDockerAgent.uuid] = callDockerAgent;
+      saveAgents();
     }
     
     const agentsWithStatus = Object.values(agents).map((agent: any) => {
@@ -1466,21 +1362,29 @@ router.get('/agents/status', (req, res) => {
       const agentData = {
         id: agent.uuid || agent.id || `agent-${Math.random().toString(36).substr(2, 9)}`,
         username: agent.username || 'Unknown Agent',
+        fullName: agent.fullName || agent.username || 'Unknown Agent',
         email: agent.email || 'agent@example.com',
+        phone: agent.phone || 'N/A',
         companyName: company?.name || 'Unknown Company',
         status: agent.status || 'offline',
         assignedToPublic: agent.assignedToPublic || false,
         currentCalls: agent.currentCalls || 0,
         maxCalls: agent.maxCalls || 5,
         availability: agent.availability || 'offline',
-        lastActivity: agent.updatedAt || agent.createdAt || new Date().toISOString(),
+        lastActivity: agent.lastActivity || agent.updatedAt || agent.createdAt || new Date().toISOString(),
         skills: agent.skills || [],
-        callsHandled: agent.callsHandled || 0,
-        avgDuration: agent.avgDuration || 0,
-        satisfaction: agent.satisfaction || 0,
-        responseTime: agent.responseTime || 0,
-        totalCalls: agent.totalCalls || 0,
-        missedCalls: agent.missedCalls || 0
+        role: agent.role || 'agent',
+        performance: agent.performance || {
+          callsHandled: 0,
+          avgRating: 0,
+          successRate: 0
+        },
+        description: agent.description || '',
+        loginCredentials: {
+          username: agent.username,
+          password: agent.password === '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' ? 'CallDocker2024!' : 'default2024!',
+          companyUUID: agent.companyUuid
+        }
       };
       
       console.log('[DEBUG] Processed agent:', agentData);
@@ -1504,207 +1408,318 @@ router.get('/agents/status', (req, res) => {
   }
 });
 
-// Update agent assignment
-router.put('/agents/:id/assignment', authenticateSuperAdmin, (req, res) => {
+// ===== AGENT AUTHENTICATION ENDPOINTS =====
+
+// Agent login endpoint
+router.post('/widget/auth/login', async (req, res) => {
   try {
-    const { id } = req.params;
-    const { assignedToPublic, maxCalls, skills } = req.body;
-
-    // This would update the agent assignment in persistent storage
-    res.json({
-      success: true,
-      message: 'Agent assignment updated successfully'
-    });
-  } catch (error) {
-    console.error('Error updating agent assignment:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Get agent performance
-router.get('/agents/:id/performance', authenticateSuperAdmin, (req, res) => {
-  try {
-    const { id } = req.params;
-    const { period = '7d' } = req.query;
-
-    const performance = {
-      callsHandled: 0,
-      avgDuration: 0,
-      responseTime: 0,
-      satisfaction: 4.5,
-      totalCalls: 0,
-      missedCalls: 0
-    };
-
-    res.json({
-      success: true,
-      performance,
-      period
-    });
-  } catch (error) {
-    console.error('Error fetching agent performance:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// POST /api/superadmin/create-company - Direct company creation (bypass email verification)
-router.post('/create-company', async (req, res) => {
-  try {
-    console.log('[DEBUG] Create company request received:', {
+    console.log('[DEBUG] Agent login request received:', {
       body: req.body,
       headers: req.headers,
       method: req.method,
       url: req.url
     });
 
-    const { companyName, displayName, adminUsername, adminPassword, email, adminEmail } = req.body;
+    const { companyUuid, username, password } = req.body;
     
     console.log('[DEBUG] Extracted fields:', {
-      companyName,
-      displayName,
-      adminUsername,
-      adminPassword: adminPassword ? '[HIDDEN]' : 'undefined',
-      email,
-      adminEmail
+      companyUuid,
+      username,
+      password: password ? '[HIDDEN]' : 'undefined'
     });
     
     // Validate required fields
-    if (!companyName || !adminUsername || !adminPassword || !email) {
+    if (!companyUuid || !username || !password) {
       console.log('[DEBUG] Validation failed - missing required fields');
-      return res.status(400).json({ error: 'Company name, admin username, password, and email are required' });
+      return res.status(400).json({ error: 'Company UUID, username, and password are required' });
     }
     
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      console.log('[DEBUG] Validation failed - invalid email format:', email);
-      return res.status(400).json({ error: 'Invalid email format' });
+    // Find agent by company UUID and username
+    const agent = Object.values(agents).find((a: any) => 
+      a.companyUuid === companyUuid && a.username === username
+    ) as any;
+    
+    if (!agent) {
+      console.log('[DEBUG] Agent not found:', { companyUuid, username });
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
     
-    // Check if company already exists (by email)
-    const existingCompany = Object.values(companies).find((c: any) => c.email === email);
-    if (existingCompany) {
-      console.log('[DEBUG] Validation failed - company already exists:', email);
-      return res.status(400).json({ error: 'A company with this email already exists' });
+    console.log('[DEBUG] Agent found:', { agentId: agent.uuid, status: agent.status });
+    
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, agent.password);
+    console.log('[DEBUG] Password validation result:', isValidPassword);
+    
+    if (!isValidPassword) {
+      console.log('[DEBUG] Invalid password for agent:', username);
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
     
-    console.log('[DEBUG] All validations passed, creating company...');
+    // Check if agent is approved
+    if (agent.registrationStatus !== 'approved') {
+      console.log('[DEBUG] Agent not approved:', agent.registrationStatus);
+      return res.status(403).json({ error: 'Agent account not approved' });
+    }
     
-    // Generate UUID
-    const uuid = uuidv4();
+    // Update agent status to online
+    agent.status = 'online';
+    agent.availability = 'online';
+    agent.lastActivity = new Date().toISOString();
+    agent.updatedAt = new Date().toISOString();
+    saveAgents();
     
-    // Hash admin password
-    const hashedPassword = await bcrypt.hash(adminPassword, 10);
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        agentId: agent.uuid,
+        username: agent.username, 
+        companyUuid: agent.companyUuid, 
+        role: 'agent',
+        fullName: agent.fullName
+      },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '24h' }
+    );
     
-    // Create company with approved status
-    const newCompany = {
-      uuid,
-      name: companyName,
-      displayName: displayName || companyName,
-      email,
-      verified: true,
-      suspended: false,
-      createdAt: new Date().toISOString(),
-      status: 'approved' as const // Directly approved
-    };
-    
-    // Add to companies object
-    companies[uuid] = newCompany;
-    saveCompanies(); // Save to file
-    
-    // Create admin user
-    const adminUser = {
-      uuid: uuidv4(),
-      username: adminUsername,
-      password: hashedPassword,
-      companyUuid: uuid,
-      role: 'admin',
-      email: adminEmail || email,
-      createdAt: new Date().toISOString()
-    };
-    
-    // Add to users object
-    users[adminUser.uuid] = adminUser;
-    saveUsers(); // Save to file
-    
-    // Create default agents for the new company
-    const defaultAgent1 = {
-      uuid: uuidv4(),
-      username: 'agent1',
-      email: 'agent1@' + email.split('@')[1],
-      companyUuid: uuid,
-      status: 'offline',
-      assignedToPublic: true,
-      currentCalls: 0,
-      maxCalls: 5,
-      availability: 'offline',
-      callsHandled: 0,
-      avgDuration: 0,
-      satisfaction: 0,
-      responseTime: 0,
-      totalCalls: 0,
-      missedCalls: 0,
-      skills: ['sales', 'support'],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    const defaultAgent2 = {
-      uuid: uuidv4(),
-      username: 'agent2',
-      email: 'agent2@' + email.split('@')[1],
-      companyUuid: uuid,
-      status: 'offline',
-      assignedToPublic: false,
-      currentCalls: 0,
-      maxCalls: 3,
-      availability: 'offline',
-      callsHandled: 0,
-      avgDuration: 0,
-      satisfaction: 0,
-      responseTime: 0,
-      totalCalls: 0,
-      missedCalls: 0,
-      skills: ['technical'],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    // Add default agents to agents object
-    agents[defaultAgent1.uuid] = defaultAgent1;
-    agents[defaultAgent2.uuid] = defaultAgent2;
-    saveAgents(); // Save to file
-    
-    // Generate JWT token for admin
-    const token = jwt.sign({ 
-      username: adminUsername, 
-      companyUuid: uuid, 
-      role: 'admin' 
-    }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '24h' });
-    
-    console.log(`[SuperAdmin] Company created: ${companyName} (${uuid})`);
-    console.log(`[SuperAdmin] Company saved to persistent storage`);
+    console.log('[DEBUG] Agent login successful:', username);
     
     res.json({
       success: true,
-      message: 'Company created successfully',
-      company: {
-        uuid,
-        name: companyName,
-        displayName: displayName || companyName,
-        email,
-        status: 'approved'
-      },
-      admin: {
-        username: adminUsername,
-        email: adminEmail || email,
-        token
-      },
-      loginUrl: `/admin-login?companyUuid=${uuid}&username=${adminUsername}&password=${adminPassword}`
+      message: 'Login successful',
+      token,
+      agent: {
+        id: agent.uuid,
+        username: agent.username,
+        fullName: agent.fullName,
+        email: agent.email,
+        phone: agent.phone,
+        role: agent.role,
+        status: agent.status,
+        companyUuid: agent.companyUuid,
+        skills: agent.skills || [],
+        performance: agent.performance || {
+          callsHandled: 0,
+          avgRating: 0,
+          successRate: 0
+        }
+      }
     });
     
   } catch (error) {
-    console.error('Create company error:', error);
+    console.error('Agent login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Agent logout endpoint
+router.post('/widget/auth/logout', async (req, res) => {
+  try {
+    const { agentId } = req.body;
+    
+    if (agentId) {
+      const agent = agents[agentId];
+      if (agent) {
+        agent.status = 'offline';
+        agent.availability = 'offline';
+        agent.lastActivity = new Date().toISOString();
+        agent.updatedAt = new Date().toISOString();
+        saveAgents();
+      }
+    }
+    
+    res.json({ success: true, message: 'Logout successful' });
+  } catch (error) {
+    console.error('Agent logout error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get agent status
+router.get('/widget/agent/status/:agentId', (req, res) => {
+  try {
+    const { agentId } = req.params;
+    const agent = agents[agentId];
+    
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+    
+    res.json({
+      success: true,
+      agent: {
+        id: agent.uuid,
+        username: agent.username,
+        fullName: agent.fullName,
+        status: agent.status,
+        availability: agent.availability,
+        currentCalls: agent.currentCalls || 0,
+        maxCalls: agent.maxCalls || 5,
+        lastActivity: agent.lastActivity,
+        performance: agent.performance || {
+          callsHandled: 0,
+          avgRating: 0,
+          successRate: 0
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get agent status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update agent status
+router.put('/widget/agent/status/:agentId', (req, res) => {
+  try {
+    const { agentId } = req.params;
+    const { status, availability, currentCalls } = req.body;
+    
+    const agent = agents[agentId];
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+    
+    if (status) agent.status = status;
+    if (availability) agent.availability = availability;
+    if (currentCalls !== undefined) agent.currentCalls = currentCalls;
+    
+    agent.lastActivity = new Date().toISOString();
+    agent.updatedAt = new Date().toISOString();
+    saveAgents();
+    
+    res.json({ success: true, message: 'Agent status updated' });
+  } catch (error) {
+    console.error('Update agent status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ===== CALL MANAGEMENT ENDPOINTS =====
+
+// Get active calls for agent
+router.get('/widget/agent/calls/:agentId', (req, res) => {
+  try {
+    const { agentId } = req.params;
+    const agent = agents[agentId];
+    
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+    
+    // Mock active calls data
+    const activeCalls = [
+      {
+        id: 'call-001',
+        customerName: 'John Doe',
+        customerPhone: '+1-555-0123',
+        status: 'active',
+        duration: 180,
+        startTime: new Date(Date.now() - 180000).toISOString(),
+        type: 'incoming',
+        priority: 'normal'
+      }
+    ];
+    
+    res.json({
+      success: true,
+      calls: activeCalls,
+      count: activeCalls.length
+    });
+  } catch (error) {
+    console.error('Get agent calls error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Assign call to agent
+router.post('/widget/calls/assign', (req, res) => {
+  try {
+    const { callId, agentId } = req.body;
+    
+    const agent = agents[agentId];
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+    
+    // Check if agent can handle more calls
+    if (agent.currentCalls >= agent.maxCalls) {
+      return res.status(400).json({ error: 'Agent at maximum call capacity' });
+    }
+    
+    // Update agent call count
+    agent.currentCalls += 1;
+    agent.updatedAt = new Date().toISOString();
+    saveAgents();
+    
+    res.json({
+      success: true,
+      message: 'Call assigned successfully',
+      agent: {
+        id: agent.uuid,
+        currentCalls: agent.currentCalls,
+        maxCalls: agent.maxCalls
+      }
+    });
+  } catch (error) {
+    console.error('Assign call error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// End call
+router.post('/widget/calls/end/:callId', (req, res) => {
+  try {
+    const { callId } = req.params;
+    const { agentId, duration, satisfaction } = req.body;
+    
+    const agent = agents[agentId];
+    if (agent) {
+      // Update agent call count and performance
+      agent.currentCalls = Math.max(0, agent.currentCalls - 1);
+      agent.performance = agent.performance || {
+        callsHandled: 0,
+        avgRating: 0,
+        successRate: 0
+      };
+      
+      agent.performance.callsHandled += 1;
+      if (satisfaction) {
+        agent.performance.avgRating = (
+          (agent.performance.avgRating * (agent.performance.callsHandled - 1) + satisfaction) / 
+          agent.performance.callsHandled
+        );
+      }
+      
+      agent.updatedAt = new Date().toISOString();
+      saveAgents();
+    }
+    
+    res.json({
+      success: true,
+      message: 'Call ended successfully',
+      callId
+    });
+  } catch (error) {
+    console.error('End call error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Escalate call
+router.post('/widget/calls/escalate/:callId', (req, res) => {
+  try {
+    const { callId } = req.params;
+    const { reason, escalatedTo } = req.body;
+    
+    res.json({
+      success: true,
+      message: 'Call escalated successfully',
+      callId,
+      escalatedTo,
+      reason
+    });
+  } catch (error) {
+    console.error('Escalate call error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
