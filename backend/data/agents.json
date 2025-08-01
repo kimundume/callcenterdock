@@ -42,5 +42,36 @@
     "status": "online",
     "registrationStatus": "approved",
     "createdAt": "2025-07-30T00:00:00.000Z"
+  },
+  "calldocker-main-agent": {
+    "uuid": "calldocker-main-agent",
+    "companyUuid": "calldocker-company-uuid",
+    "username": "calldocker_agent",
+    "password": "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi",
+    "email": "agent@calldocker.com",
+    "phone": "+1-555-CALL-DOCKER",
+    "fullName": "CallDocker Main Agent",
+    "role": "senior_agent",
+    "status": "online",
+    "registrationStatus": "approved",
+    "skills": [
+      "customer_service",
+      "technical_support",
+      "sales",
+      "enquiry_handling",
+      "billing"
+    ],
+    "performance": {
+      "callsHandled": 1250,
+      "avgRating": 4.9,
+      "successRate": 98.5
+    },
+    "currentCalls": 0,
+    "maxCalls": 10,
+    "availability": "online",
+    "lastActivity": "2025-08-01T12:15:53.895Z",
+    "createdAt": "2025-08-01T12:15:53.895Z",
+    "updatedAt": "2025-08-01T12:15:53.895Z",
+    "description": "Main CallDocker agent responsible for handling all incoming calls from the CallDocker landing page. This agent is always available and ready to assist customers."
   }
-} 
+}
