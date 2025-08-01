@@ -1,263 +1,339 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 // @ts-nocheck
+// Updated: Agent authentication endpoints moved to widget routes for proper URL mapping
 const express_1 = __importDefault(require("express"));
-// Simple in-memory storage
-const companies = {};
-const agents = {};
-const sessions = [];
-// Simple save function
-function saveSessions() {
-    console.log('Sessions saved (in-memory)');
-}
+const bcrypt_1 = __importDefault(require("bcrypt"));
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
 const router = express_1.default.Router();
-// Helper function to generate IDs
-const generateId = () => Math.random().toString(36).substr(2, 9);
-// Call history endpoint
-router.get('/calls/history', (req, res) => {
+// Simple in-memory storage with file persistence
+const DATA_DIR = process.env.NODE_ENV === 'production'
+    ? path_1.default.join(process.cwd(), 'data')
+    : path_1.default.join(__dirname, '../../data');
+const COMPANIES_FILE = path_1.default.join(DATA_DIR, 'companies.json');
+const USERS_FILE = path_1.default.join(DATA_DIR, 'users.json');
+const AGENTS_FILE = path_1.default.join(DATA_DIR, 'agents.json');
+// Helper functions for file operations
+function readJsonFile(filePath, defaultValue = {}) {
     try {
-        const { page = 1, limit = 10, status, agentId } = req.query;
-        const skip = (Number(page) - 1) * Number(limit);
-        // Mock call history data
-        const allCalls = [
-            {
-                id: 'call-001',
-                visitorId: 'visitor-123',
-                pageUrl: 'http://localhost:5173/',
-                status: 'ended',
-                assignedAgent: 'agent-001',
-                startTime: new Date(Date.now() - 300000).toISOString(),
-                endTime: new Date(Date.now() - 240000).toISOString(),
-                duration: 60,
-                callType: 'chat',
-                priority: 'normal',
-                routingType: 'public',
-                companyId: 'company-001',
-                sessionId: 'session-001'
-            },
-            {
-                id: 'call-002',
-                visitorId: 'visitor-456',
-                pageUrl: 'http://localhost:5173/demo',
-                status: 'ended',
-                assignedAgent: 'agent-002',
-                startTime: new Date(Date.now() - 600000).toISOString(),
-                endTime: new Date(Date.now() - 540000).toISOString(),
-                duration: 60,
-                callType: 'chat',
-                priority: 'normal',
-                routingType: 'company',
-                companyId: 'company-002',
-                sessionId: 'session-002'
-            }
-        ];
-        let filteredCalls = allCalls;
-        if (status) {
-            filteredCalls = filteredCalls.filter(call => call.status === status);
+        if (fs_1.default.existsSync(filePath)) {
+            const data = fs_1.default.readFileSync(filePath, 'utf8');
+            return JSON.parse(data);
         }
-        if (agentId) {
-            filteredCalls = filteredCalls.filter(call => call.assignedAgent === agentId);
+    }
+    catch (error) {
+        console.error(`Error reading ${filePath}:`, error);
+        // Return default value on error
+    }
+    return defaultValue;
+}
+function writeJsonFile(filePath, data) {
+    try {
+        const dir = path_1.default.dirname(filePath);
+        if (!fs_1.default.existsSync(dir)) {
+            fs_1.default.mkdirSync(dir, { recursive: true });
         }
-        const paginatedCalls = filteredCalls.slice(skip, skip + Number(limit));
-        res.json({
-            success: true,
-            calls: paginatedCalls,
-            total: filteredCalls.length,
-            page: Number(page),
-            limit: Number(limit),
-            totalPages: Math.ceil(filteredCalls.length / Number(limit))
-        });
+        fs_1.default.writeFileSync(filePath, JSON.stringify(data, null, 2));
+        console.log(`💾 Saved data to: ${filePath}`);
     }
     catch (error) {
-        console.error('Error fetching call history:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error(`Error writing ${filePath}:`, error);
+        // Don't fail on write errors
     }
-});
-// CallDocker agents endpoint
-router.get('/calldocker-agents', (req, res) => {
-    try {
-        // Mock CallDocker agents data
-        const agents = [
-            {
-                id: 'agent-001',
-                name: 'Agent 1',
-                online: true,
-                companyUuid: 'demo-company-uuid',
-                lastSeen: new Date().toISOString(),
-                status: 'online',
-                assignedToPublic: true,
-                currentCalls: 1,
-                maxCalls: 5
-            },
-            {
-                id: 'agent-002',
-                name: 'Agent 2',
-                online: false,
-                companyUuid: 'demo-company-uuid',
-                lastSeen: new Date(Date.now() - 3600000).toISOString(),
-                status: 'offline',
-                assignedToPublic: false,
-                currentCalls: 0,
-                maxCalls: 3
-            }
-        ];
-        res.json({
-            success: true,
-            agents: agents,
-            onlineCount: agents.filter(a => a.online).length,
-            totalCount: agents.length
-        });
-    }
-    catch (error) {
-        console.error('Error fetching CallDocker agents:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-// Company agents endpoint
-router.get('/company-agents', (req, res) => {
-    try {
-        const { companyUuid } = req.query;
-        // Provide default value if companyUuid is missing
-        const companyId = companyUuid || 'demo-company-uuid';
-        console.log('[DEBUG] Company agents request:', { companyUuid, companyId });
-        // Mock company agents data
-        const agents = [
-            {
-                id: 'agent-001',
-                name: 'Agent 1',
-                online: true,
-                companyUuid: companyId,
-                lastSeen: new Date().toISOString(),
-                status: 'online',
-                assignedToPublic: true,
-                currentCalls: 1,
-                maxCalls: 5,
-                callsHandled: 15,
-                avgDuration: 240,
-                satisfaction: 4.5
-            },
-            {
-                id: 'agent-002',
-                name: 'Agent 2',
-                online: false,
-                companyUuid: companyId,
-                lastSeen: new Date(Date.now() - 3600000).toISOString(),
-                status: 'offline',
-                assignedToPublic: false,
-                currentCalls: 0,
-                maxCalls: 3,
-                callsHandled: 8,
-                avgDuration: 180,
-                satisfaction: 4.2
-            }
-        ];
-        res.json({
-            success: true,
-            agents: agents,
-            onlineCount: agents.filter(a => a.online).length,
-            totalCount: agents.length
-        });
-    }
-    catch (error) {
-        console.error('Error fetching company agents:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-// Agent status endpoint
-router.get('/agents/status', (req, res) => {
-    try {
-        // Mock agent status data
-        const agentsWithStatus = [
-            {
-                id: 'agent-001',
-                username: 'agent1',
-                email: 'agent1@demo.com',
-                companyName: 'Demo Company',
-                status: 'online',
-                assignedToPublic: true,
-                currentCalls: 1,
-                maxCalls: 5,
-                availability: 'online',
-                lastActivity: new Date().toISOString(),
-                skills: ['sales', 'support']
-            }
-        ];
-        res.json({
-            success: true,
-            agents: agentsWithStatus,
-            onlineCount: agentsWithStatus.filter(a => a.status === 'online').length,
-            totalCount: agentsWithStatus.length
-        });
-    }
-    catch (error) {
-        console.error('Error fetching agent status:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-// Call analytics endpoint
-router.get('/calls/analytics', (req, res) => {
-    try {
-        const { period = '7d' } = req.query;
-        const now = new Date();
-        let startDate = new Date();
-        switch (period) {
-            case '24h':
-                startDate.setHours(now.getHours() - 24);
-                break;
-            case '7d':
-                startDate.setDate(now.getDate() - 7);
-                break;
-            case '30d':
-                startDate.setDate(now.getDate() - 30);
-                break;
-            default:
-                startDate.setDate(now.getDate() - 7);
+}
+// Load data from files
+let companiesData, usersData, agentsData;
+try {
+    companiesData = readJsonFile(COMPANIES_FILE, {});
+    usersData = readJsonFile(USERS_FILE, {});
+    agentsData = readJsonFile(AGENTS_FILE, {});
+}
+catch (error) {
+    console.error('Failed to load data files:', error);
+    companiesData = {};
+    usersData = {};
+    agentsData = {};
+}
+// Save functions
+function saveCompanies() {
+    writeJsonFile(COMPANIES_FILE, companiesData);
+}
+function saveUsers() {
+    writeJsonFile(USERS_FILE, usersData);
+}
+function saveAgents() {
+    writeJsonFile(AGENTS_FILE, agentsData);
+}
+// Initialize CallDocker agent if it doesn't exist
+function ensureCallDockerAgent() {
+    if (!agentsData['calldocker-main-agent']) {
+        console.log('[DEBUG] CallDocker agent not found, creating it');
+        // Ensure CallDocker company exists
+        if (!companiesData['calldocker-company-uuid']) {
+            companiesData['calldocker-company-uuid'] = {
+                uuid: 'calldocker-company-uuid',
+                name: 'CallDocker',
+                email: 'admin@calldocker.com',
+                verified: true,
+                createdAt: new Date().toISOString(),
+            };
+            saveCompanies();
         }
-        const analytics = {
-            totalCalls: 15,
-            activeCalls: 2,
-            avgDuration: 240,
-            callsByStatus: {
-                waiting: 1,
-                active: 2,
-                ended: 12,
-                missed: 0
+        // Create CallDocker agent
+        agentsData['calldocker-main-agent'] = {
+            uuid: 'calldocker-main-agent',
+            companyUuid: 'calldocker-company-uuid',
+            username: 'calldocker_agent',
+            password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // "CallDocker2024!"
+            email: 'agent@calldocker.com',
+            phone: '+1-555-CALL-DOCKER',
+            fullName: 'CallDocker Main Agent',
+            role: 'senior_agent',
+            status: 'online',
+            registrationStatus: 'approved',
+            skills: ['customer_service', 'technical_support', 'sales', 'enquiry_handling', 'billing'],
+            performance: {
+                callsHandled: 1250,
+                avgRating: 4.9,
+                successRate: 98.5
             },
-            callsByType: {
-                chat: 15,
-                voice: 0
-            }
+            currentCalls: 0,
+            maxCalls: 10,
+            availability: 'online',
+            lastActivity: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            description: 'Main CallDocker agent responsible for handling all incoming calls from the CallDocker landing page. This agent is always available and ready to assist customers.'
         };
-        res.json({
-            success: true,
-            analytics,
-            period
-        });
+        saveAgents();
+        console.log('[DEBUG] CallDocker agent created successfully');
+    }
+}
+// Initialize on startup
+ensureCallDockerAgent();
+// Test endpoint to verify CallDocker agent exists
+router.get('/test-callDocker-agent', (req, res) => {
+    try {
+        const agent = agentsData['calldocker-main-agent'];
+        if (agent) {
+            res.json({
+                success: true,
+                message: 'CallDocker agent found',
+                agent: {
+                    id: agent.uuid,
+                    username: agent.username,
+                    fullName: agent.fullName,
+                    status: agent.status,
+                    companyUuid: agent.companyUuid
+                }
+            });
+        }
+        else {
+            res.status(404).json({
+                success: false,
+                message: 'CallDocker agent not found'
+            });
+        }
     }
     catch (error) {
-        console.error('Error fetching call analytics:', error);
+        console.error('Test CallDocker agent error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Active calls endpoint
-router.get('/calls/active', (req, res) => {
+// ===== AGENT AUTHENTICATION ENDPOINTS =====
+// Agent login endpoint
+router.post('/auth/login', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
+        console.log('[DEBUG] Agent login request received:', {
+            body: req.body,
+            headers: req.headers,
+            method: req.method,
+            url: req.url
+        });
+        const { companyUuid, username, password } = req.body;
+        console.log('[DEBUG] Extracted fields:', {
+            companyUuid,
+            username,
+            password: password ? '[HIDDEN]' : 'undefined'
+        });
+        // Validate required fields
+        if (!companyUuid || !username || !password) {
+            console.log('[DEBUG] Validation failed - missing required fields');
+            return res.status(400).json({ error: 'Company UUID, username, and password are required' });
+        }
+        // Find agent by company UUID and username
+        const agent = Object.values(agentsData).find((a) => a.companyUuid === companyUuid && a.username === username);
+        if (!agent) {
+            console.log('[DEBUG] Agent not found:', { companyUuid, username });
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+        console.log('[DEBUG] Agent found:', { agentId: agent.uuid, status: agent.status });
+        // Verify password
+        const isValidPassword = yield bcrypt_1.default.compare(password, agent.password);
+        console.log('[DEBUG] Password validation result:', isValidPassword);
+        if (!isValidPassword) {
+            console.log('[DEBUG] Invalid password for agent:', username);
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+        // Check if agent is approved
+        if (agent.registrationStatus !== 'approved') {
+            console.log('[DEBUG] Agent not approved:', agent.registrationStatus);
+            return res.status(403).json({ error: 'Agent account not approved' });
+        }
+        // Update agent status to online
+        agent.status = 'online';
+        agent.availability = 'online';
+        agent.lastActivity = new Date().toISOString();
+        agent.updatedAt = new Date().toISOString();
+        saveAgents();
+        // Generate JWT token
+        const token = jsonwebtoken_1.default.sign({
+            agentId: agent.uuid,
+            username: agent.username,
+            companyUuid: agent.companyUuid,
+            role: 'agent',
+            fullName: agent.fullName
+        }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '24h' });
+        console.log('[DEBUG] Agent login successful:', username);
+        res.json({
+            success: true,
+            message: 'Login successful',
+            token,
+            agent: {
+                id: agent.uuid,
+                username: agent.username,
+                fullName: agent.fullName,
+                email: agent.email,
+                phone: agent.phone,
+                role: agent.role,
+                status: agent.status,
+                companyUuid: agent.companyUuid,
+                skills: agent.skills || [],
+                performance: agent.performance || {
+                    callsHandled: 0,
+                    avgRating: 0,
+                    successRate: 0
+                }
+            }
+        });
+    }
+    catch (error) {
+        console.error('Agent login error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}));
+// Agent logout endpoint
+router.post('/auth/logout', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { agentId } = req.body;
+        if (agentId) {
+            const agent = agentsData[agentId];
+            if (agent) {
+                agent.status = 'offline';
+                agent.availability = 'offline';
+                agent.lastActivity = new Date().toISOString();
+                agent.updatedAt = new Date().toISOString();
+                saveAgents();
+            }
+        }
+        res.json({ success: true, message: 'Logout successful' });
+    }
+    catch (error) {
+        console.error('Agent logout error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}));
+// Get agent status
+router.get('/agent/status/:agentId', (req, res) => {
+    try {
+        const { agentId } = req.params;
+        const agent = agentsData[agentId];
+        if (!agent) {
+            return res.status(404).json({ error: 'Agent not found' });
+        }
+        res.json({
+            success: true,
+            agent: {
+                id: agent.uuid,
+                username: agent.username,
+                fullName: agent.fullName,
+                status: agent.status,
+                availability: agent.availability,
+                currentCalls: agent.currentCalls || 0,
+                maxCalls: agent.maxCalls || 5,
+                lastActivity: agent.lastActivity,
+                performance: agent.performance || {
+                    callsHandled: 0,
+                    avgRating: 0,
+                    successRate: 0
+                }
+            }
+        });
+    }
+    catch (error) {
+        console.error('Get agent status error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Update agent status
+router.put('/agent/status/:agentId', (req, res) => {
+    try {
+        const { agentId } = req.params;
+        const { status, availability, currentCalls } = req.body;
+        const agent = agentsData[agentId];
+        if (!agent) {
+            return res.status(404).json({ error: 'Agent not found' });
+        }
+        if (status)
+            agent.status = status;
+        if (availability)
+            agent.availability = availability;
+        if (currentCalls !== undefined)
+            agent.currentCalls = currentCalls;
+        agent.lastActivity = new Date().toISOString();
+        agent.updatedAt = new Date().toISOString();
+        saveAgents();
+        res.json({ success: true, message: 'Agent status updated' });
+    }
+    catch (error) {
+        console.error('Update agent status error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// ===== CALL MANAGEMENT ENDPOINTS =====
+// Get active calls for agent
+router.get('/agent/calls/:agentId', (req, res) => {
+    try {
+        const { agentId } = req.params;
+        const agent = agentsData[agentId];
+        if (!agent) {
+            return res.status(404).json({ error: 'Agent not found' });
+        }
+        // Mock active calls data
         const activeCalls = [
             {
                 id: 'call-001',
-                visitorId: 'visitor-123',
-                pageUrl: 'http://localhost:5173/',
+                customerName: 'John Doe',
+                customerPhone: '+1-555-0123',
                 status: 'active',
-                assignedAgent: 'agent-001',
-                startTime: new Date(Date.now() - 300000).toISOString(),
-                callType: 'chat',
-                priority: 'normal',
-                routingType: 'public',
-                companyId: 'company-001',
-                sessionId: 'session-001'
+                duration: 180,
+                startTime: new Date(Date.now() - 180000).toISOString(),
+                type: 'incoming',
+                priority: 'normal'
             }
         ];
         res.json({
@@ -267,7 +343,89 @@ router.get('/calls/active', (req, res) => {
         });
     }
     catch (error) {
-        console.error('Error fetching active calls:', error);
+        console.error('Get agent calls error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Assign call to agent
+router.post('/calls/assign', (req, res) => {
+    try {
+        const { callId, agentId } = req.body;
+        const agent = agentsData[agentId];
+        if (!agent) {
+            return res.status(404).json({ error: 'Agent not found' });
+        }
+        // Check if agent can handle more calls
+        if (agent.currentCalls >= agent.maxCalls) {
+            return res.status(400).json({ error: 'Agent at maximum call capacity' });
+        }
+        // Update agent call count
+        agent.currentCalls += 1;
+        agent.updatedAt = new Date().toISOString();
+        saveAgents();
+        res.json({
+            success: true,
+            message: 'Call assigned successfully',
+            agent: {
+                id: agent.uuid,
+                currentCalls: agent.currentCalls,
+                maxCalls: agent.maxCalls
+            }
+        });
+    }
+    catch (error) {
+        console.error('Assign call error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// End call
+router.post('/calls/end/:callId', (req, res) => {
+    try {
+        const { callId } = req.params;
+        const { agentId, duration, satisfaction } = req.body;
+        const agent = agentsData[agentId];
+        if (agent) {
+            // Update agent call count and performance
+            agent.currentCalls = Math.max(0, agent.currentCalls - 1);
+            agent.performance = agent.performance || {
+                callsHandled: 0,
+                avgRating: 0,
+                successRate: 0
+            };
+            agent.performance.callsHandled += 1;
+            if (satisfaction) {
+                agent.performance.avgRating = ((agent.performance.avgRating * (agent.performance.callsHandled - 1) + satisfaction) /
+                    agent.performance.callsHandled);
+            }
+            agent.updatedAt = new Date().toISOString();
+            saveAgents();
+        }
+        res.json({
+            success: true,
+            message: 'Call ended successfully',
+            callId
+        });
+    }
+    catch (error) {
+        console.error('End call error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Escalate call
+router.post('/calls/escalate/:callId', (req, res) => {
+    try {
+        const { callId } = req.params;
+        const { reason, escalatedTo } = req.body;
+        res.json({
+            success: true,
+            message: 'Call escalated successfully',
+            callId,
+            escalatedTo,
+            reason
+        });
+    }
+    catch (error) {
+        console.error('Escalate call error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

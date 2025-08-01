@@ -1,7 +1,7 @@
 {
   "name": "calldocker",
   "version": "1.0.0",
-  "description": "Multi-tenant browser-based voice calling platform",
+  "description": "Multi-tenant browser-based voice calling platform - Updated with agent authentication endpoints",
   "main": "backend/dist/server.js",
   "scripts": {
     "clean": "rimraf dist",
