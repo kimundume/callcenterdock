@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
-import { agents, sessions, saveSessions } from '../data/persistentStorage';
+import { agents, sessions, saveSessions } from '../data/persistentStorage.js';
 
 // In-memory storage for socket connections
 const socketConnections: Record<string, string> = {}; // agentId -> socketId
