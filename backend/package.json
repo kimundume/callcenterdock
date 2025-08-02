@@ -5,6 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "clean": "rimraf dist",
+    "prebuild": "node create-persistentStorage.js",
     "build": "node build.js",
     "start": "node dist/server.js",
     "dev": "nodemon src/server.ts",
