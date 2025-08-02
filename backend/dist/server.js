@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var _a, _b, _c, _d, _e;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateId = void 0;
 const express_1 = __importDefault(require("express"));
@@ -21,8 +22,52 @@ const widget_1 = __importDefault(require("./routes/widget"));
 const superAdmin_1 = __importDefault(require("./routes/superAdmin"));
 const signaling_1 = require("./sockets/signaling");
 const dotenv_1 = __importDefault(require("dotenv"));
-const persistentStorage_1 = require("./data/persistentStorage");
-const path_1 = __importDefault(require("path")); // Added for serving static files
+const path_1 = __importDefault(require("path"));
+// Robust import strategy for persistentStorage
+let companies, agents, users, sessions, chatSessions;
+let saveCompanies, saveAgents, saveUsers, saveSessions;
+try {
+    // Try to import persistentStorage
+    const persistentStorage = require('./data/persistentStorage');
+    companies = persistentStorage.companies;
+    agents = persistentStorage.agents;
+    users = persistentStorage.users;
+    sessions = persistentStorage.sessions;
+    chatSessions = persistentStorage.chatSessions || {};
+    saveCompanies = persistentStorage.saveCompanies;
+    saveAgents = persistentStorage.saveAgents;
+    saveUsers = persistentStorage.saveUsers;
+    saveSessions = persistentStorage.saveSessions;
+    console.log('✅ persistentStorage imported successfully in server.ts');
+}
+catch (error) {
+    console.log('⚠️  Failed to import persistentStorage in server.ts, falling back to tempDB');
+    try {
+        const tempDB = require('./data/tempDB');
+        companies = tempDB.companies || ((_a = tempDB.tempStorage) === null || _a === void 0 ? void 0 : _a.companies) || {};
+        agents = tempDB.agents || ((_b = tempDB.tempStorage) === null || _b === void 0 ? void 0 : _b.agents) || {};
+        users = tempDB.users || ((_c = tempDB.tempStorage) === null || _c === void 0 ? void 0 : _c.users) || {};
+        sessions = tempDB.sessions || ((_d = tempDB.tempStorage) === null || _d === void 0 ? void 0 : _d.sessions) || [];
+        chatSessions = tempDB.chatSessions || ((_e = tempDB.tempStorage) === null || _e === void 0 ? void 0 : _e.chatSessions) || {};
+        saveCompanies = () => console.log('tempDB saveCompanies called (no-op)');
+        saveAgents = () => console.log('tempDB saveAgents called (no-op)');
+        saveUsers = () => console.log('tempDB saveUsers called (no-op)');
+        saveSessions = () => console.log('tempDB saveSessions called (no-op)');
+        console.log('✅ tempDB imported successfully in server.ts');
+    }
+    catch (tempDBError) {
+        console.log('❌ Failed to import tempDB in server.ts, using empty defaults');
+        companies = {};
+        agents = {};
+        users = {};
+        sessions = [];
+        chatSessions = {};
+        saveCompanies = () => console.log('Default saveCompanies called (no-op)');
+        saveAgents = () => console.log('Default saveAgents called (no-op)');
+        saveUsers = () => console.log('Default saveUsers called (no-op)');
+        saveSessions = () => console.log('Default saveSessions called (no-op)');
+    }
+}
 dotenv_1.default.config();
 global.tempStorage = {
     callQueue: {},
@@ -75,20 +120,20 @@ app.post('/api/chat/send', (req, res) => {
         from,
         timestamp: new Date().toISOString(),
     };
-    if (!persistentStorage_1.chatSessions[sessionId]) {
+    if (!chatSessions[sessionId]) {
         return res.status(404).json({ success: false, error: 'Session not found' });
     }
-    persistentStorage_1.chatSessions[sessionId].messages.push(msg);
+    chatSessions[sessionId].messages.push(msg);
     // Broadcast to all in session via Socket.IO
     io.to(sessionId).emit('chat:message', Object.assign(Object.assign({}, msg), { sessionId }));
     res.json({ success: true });
 });
 app.get('/api/chat/session/:id', (req, res) => {
     const sessionId = req.params.id;
-    if (!persistentStorage_1.chatSessions[sessionId]) {
+    if (!chatSessions[sessionId]) {
         return res.status(404).json({ success: false, error: 'Session not found' });
     }
-    res.json({ success: true, session: persistentStorage_1.chatSessions[sessionId] });
+    res.json({ success: true, session: chatSessions[sessionId] });
 });
 // Canned Responses API (multi-tenant) - Using persistent storage
 app.get('/api/canned-responses', (req, res) => __awaiter(void 0, void 0, void 0, function* () {

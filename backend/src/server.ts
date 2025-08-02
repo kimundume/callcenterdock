@@ -6,17 +6,53 @@ import widgetRoutes from './routes/widget';
 import superAdminRoutes from './routes/superAdmin';
 import { registerSignalingHandlers } from './sockets/signaling';
 import dotenv from 'dotenv';
-import { 
-  companies, 
-  agents, 
-  users, 
-  sessions, 
-  chatSessions,
-  saveCompanies,
-  saveAgents,
-  saveUsers,
-  saveSessions
-} from './data/persistentStorage';
+import path from 'path';
+
+// Robust import strategy for persistentStorage
+let companies: any, agents: any, users: any, sessions: any, chatSessions: any;
+let saveCompanies: any, saveAgents: any, saveUsers: any, saveSessions: any;
+
+try {
+  // Try to import persistentStorage
+  const persistentStorage = require('./data/persistentStorage');
+  companies = persistentStorage.companies;
+  agents = persistentStorage.agents;
+  users = persistentStorage.users;
+  sessions = persistentStorage.sessions;
+  chatSessions = persistentStorage.chatSessions || {};
+  saveCompanies = persistentStorage.saveCompanies;
+  saveAgents = persistentStorage.saveAgents;
+  saveUsers = persistentStorage.saveUsers;
+  saveSessions = persistentStorage.saveSessions;
+  console.log('✅ persistentStorage imported successfully in server.ts');
+} catch (error) {
+  console.log('⚠️  Failed to import persistentStorage in server.ts, falling back to tempDB');
+  try {
+    const tempDB = require('./data/tempDB');
+    companies = tempDB.companies || tempDB.tempStorage?.companies || {};
+    agents = tempDB.agents || tempDB.tempStorage?.agents || {};
+    users = tempDB.users || tempDB.tempStorage?.users || {};
+    sessions = tempDB.sessions || tempDB.tempStorage?.sessions || [];
+    chatSessions = tempDB.chatSessions || tempDB.tempStorage?.chatSessions || {};
+    saveCompanies = () => console.log('tempDB saveCompanies called (no-op)');
+    saveAgents = () => console.log('tempDB saveAgents called (no-op)');
+    saveUsers = () => console.log('tempDB saveUsers called (no-op)');
+    saveSessions = () => console.log('tempDB saveSessions called (no-op)');
+    console.log('✅ tempDB imported successfully in server.ts');
+  } catch (tempDBError) {
+    console.log('❌ Failed to import tempDB in server.ts, using empty defaults');
+    companies = {};
+    agents = {};
+    users = {};
+    sessions = [];
+    chatSessions = {};
+    saveCompanies = () => console.log('Default saveCompanies called (no-op)');
+    saveAgents = () => console.log('Default saveAgents called (no-op)');
+    saveUsers = () => console.log('Default saveUsers called (no-op)');
+    saveSessions = () => console.log('Default saveSessions called (no-op)');
+  }
+}
+
 import mongoose from 'mongoose';
 import CannedResponse from './models/CannedResponse';
 import ChatSession from './models/ChatSession';
@@ -24,7 +60,6 @@ import ChatNote from './models/ChatNote';
 import ChatMessage from './models/ChatMessage';
 import FormPush from './models/FormPush';
 import FormResponse from './models/FormResponse';
-import path from 'path'; // Added for serving static files
 
 dotenv.config();
 
