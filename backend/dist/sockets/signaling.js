@@ -1,7 +1,41 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerSignalingHandlers = registerSignalingHandlers;
-const persistentStorage_1 = require("../data/persistentStorage");
+const persistentStorage = __importStar(require("../data/persistentStorage"));
+const { agents, sessions, saveSessions } = persistentStorage;
 // In-memory storage for socket connections
 const socketConnections = {}; // agentId -> socketId
 function registerSignalingHandlers(io) {
@@ -12,7 +46,7 @@ function registerSignalingHandlers(io) {
             if (!uuid || !agentId)
                 return;
             // Find agent in persistent storage
-            const agent = Object.values(persistentStorage_1.agents).find((a) => a.companyUuid === uuid && a.username === agentId);
+            const agent = Object.values(agents).find((a) => a.companyUuid === uuid && a.username === agentId);
             if (agent) {
                 // Store socket connection
                 socketConnections[agentId] = socket.id;
@@ -43,7 +77,7 @@ function registerSignalingHandlers(io) {
             if (!global.tempStorage.callQueue[uuid].includes(socket.id))
                 global.tempStorage.callQueue[uuid].push(socket.id);
             // If no agents online
-            if (!persistentStorage_1.agents[uuid] || Object.keys(persistentStorage_1.agents[uuid]).length === 0) {
+            if (!agents[uuid] || Object.keys(agents[uuid]).length === 0) {
                 socket.emit('call-routed', { success: false, reason: 'No agents online' });
                 global.tempStorage.callQueue[uuid] = global.tempStorage.callQueue[uuid].filter(id => id !== socket.id);
                 return;
@@ -54,10 +88,10 @@ function registerSignalingHandlers(io) {
             socket.emit('queue-update', { position, estimate });
             // If first in queue, try to route to agent
             if (position === 1) {
-                const agentIds = Object.keys(persistentStorage_1.agents[uuid]);
+                const agentIds = Object.keys(agents[uuid]);
                 if (agentIds.length > 0) {
                     const agentId = agentIds[0];
-                    const agent = persistentStorage_1.agents[uuid][agentId];
+                    const agent = agents[uuid][agentId];
                     io.to(agent.socketId).emit('incoming-call', { uuid, agentId, callTime: new Date().toISOString(), fromSocketId: socket.id });
                     // Log the call
                     if (!global.tempStorage.calls[uuid])
@@ -97,10 +131,10 @@ function registerSignalingHandlers(io) {
                 if (!sessionId || !status)
                     return;
                 // Find session in persistent storage
-                const session = Object.values(persistentStorage_1.sessions).find((s) => s.sessionId === sessionId);
+                const session = Object.values(sessions).find((s) => s.sessionId === sessionId);
                 if (session) {
                     session.status = status;
-                    (0, persistentStorage_1.saveSessions)();
+                    saveSessions();
                 }
             });
             // Notify widget/client
@@ -149,8 +183,8 @@ function registerSignalingHandlers(io) {
                 global.tempStorage.callQueue[uuid] = global.tempStorage.callQueue[uuid].filter(id => id !== socket.id);
             });
             const { uuid, agentId } = socket.data || {};
-            if (uuid && agentId && persistentStorage_1.agents[uuid] && persistentStorage_1.agents[uuid][agentId]) {
-                delete persistentStorage_1.agents[uuid][agentId];
+            if (uuid && agentId && agents[uuid] && agents[uuid][agentId]) {
+                delete agents[uuid][agentId];
             }
         });
         // WebRTC signaling: offer
@@ -177,18 +211,18 @@ function registerSignalingHandlers(io) {
         // Test call request from admin
         socket.on('test-call-request', (data) => {
             const { uuid } = data;
-            if (!uuid || !persistentStorage_1.agents[uuid]) {
+            if (!uuid || !agents[uuid]) {
                 socket.emit('test-call-result', { success: false, reason: 'No such company or no agents online' });
                 return;
             }
-            const agentIds = Object.keys(persistentStorage_1.agents[uuid]);
+            const agentIds = Object.keys(agents[uuid]);
             if (agentIds.length === 0) {
                 socket.emit('test-call-result', { success: false, reason: 'No agents online' });
                 return;
             }
             // Route to first available agent
             const agentId = agentIds[0];
-            const agent = persistentStorage_1.agents[uuid][agentId];
+            const agent = agents[uuid][agentId];
             io.to(agent.socketId).emit('test-incoming-call', { uuid, agentId, fromSocketId: socket.id, test: true });
             socket.emit('test-call-result', { success: true, agentId });
         });
