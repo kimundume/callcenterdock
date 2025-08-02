@@ -21,22 +21,66 @@ const widget_1 = __importDefault(require("./routes/widget"));
 const superAdmin_1 = __importDefault(require("./routes/superAdmin"));
 const signaling_1 = require("./sockets/signaling");
 const dotenv_1 = __importDefault(require("dotenv"));
-const persistentStorage_1 = require("./data/persistentStorage");
 const path_1 = __importDefault(require("path")); // Added for serving static files
 
-// Destructure the imported persistentStorage to get individual items
-const { 
-  companies: importedCompanies, 
-  agents: importedAgents, 
-  users: importedUsers, 
-  sessions: importedSessions, 
-  chatSessions: importedChatSessions,
-  saveCompanies,
-  saveAgents,
-  saveUsers,
-  saveSessions,
-  persistentStorage: importedPersistentStorage
-} = persistentStorage_1;
+// Robust import strategy for persistentStorage
+let persistentStorage_1;
+let importedCompanies, importedAgents, importedUsers, importedSessions, importedChatSessions;
+let saveCompanies, saveAgents, saveUsers, saveSessions, importedPersistentStorage;
+
+try {
+    // Try multiple import strategies
+    const possiblePaths = [
+        './data/tempDB',
+        './data/persistentStorage',
+        path_1.default.resolve(__dirname, './data/tempDB'),
+        path_1.default.resolve(__dirname, './data/tempDB.js'),
+        path_1.default.resolve(__dirname, './data/persistentStorage'),
+        path_1.default.resolve(__dirname, './data/persistentStorage.js')
+    ];
+    
+    let importSuccess = false;
+    for (const importPath of possiblePaths) {
+        try {
+            persistentStorage_1 = require(importPath);
+            importedCompanies = persistentStorage_1.companies;
+            importedAgents = persistentStorage_1.agents;
+            importedUsers = persistentStorage_1.users;
+            importedSessions = persistentStorage_1.sessions;
+            importedChatSessions = persistentStorage_1.chatSessions;
+            saveCompanies = persistentStorage_1.saveCompanies;
+            saveAgents = persistentStorage_1.saveAgents;
+            saveUsers = persistentStorage_1.saveUsers;
+            saveSessions = persistentStorage_1.saveSessions;
+            importedPersistentStorage = persistentStorage_1.persistentStorage || persistentStorage_1.tempStorage || persistentStorage_1;
+            console.log(`✅ Server: persistentStorage imported successfully from: ${importPath}`);
+            importSuccess = true;
+            break;
+        } catch (pathError) {
+            console.log(`⚠️  Server: Failed to import from: ${importPath}`);
+        }
+    }
+    
+    if (!importSuccess) {
+        // Log available files for debugging
+        const fs = require('fs');
+        const dataDir = path_1.default.join(__dirname, './data');
+        let availableFiles = [];
+        try {
+            availableFiles = fs.readdirSync(dataDir);
+        } catch (dirError) {
+            availableFiles = ['Directory not accessible'];
+        }
+        console.error('❌ Server: Failed to import persistentStorage: All import paths failed');
+        console.error('📁 Server current directory:', __dirname);
+        console.error('📁 Server available files in dist/data:', availableFiles.join(', '));
+        console.error('🔍 Server tried paths:', possiblePaths.join(', '));
+        throw new Error('All import paths failed');
+    }
+} catch (error) {
+    console.error('❌ Server: Failed to import persistentStorage:', error.message);
+    throw error;
+}
 dotenv_1.default.config();
 global.tempStorage = {
     callQueue: {},

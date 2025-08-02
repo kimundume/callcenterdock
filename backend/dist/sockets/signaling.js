@@ -16,9 +16,14 @@ let calls;
 try {
     // Try multiple import strategies
     const possiblePaths = [
+        '../data/tempDB',
         '../data/persistentStorage',
+        path_1.default.resolve(__dirname, '../data/tempDB'),
+        path_1.default.resolve(__dirname, '../data/tempDB.js'),
         path_1.default.resolve(__dirname, '../data/persistentStorage'),
         path_1.default.resolve(__dirname, '../data/persistentStorage.js'),
+        path_1.default.join(__dirname, '../data/tempDB'),
+        path_1.default.join(__dirname, '../data/tempDB.js'),
         path_1.default.join(__dirname, '../data/persistentStorage'),
         path_1.default.join(__dirname, '../data/persistentStorage.js')
     ];
@@ -40,6 +45,19 @@ try {
         }
     }
     if (!importSuccess) {
+        // Log available files for debugging
+        const fs = require('fs');
+        const dataDir = path_1.default.join(__dirname, '../data');
+        let availableFiles = [];
+        try {
+            availableFiles = fs.readdirSync(dataDir);
+        } catch (dirError) {
+            availableFiles = ['Directory not accessible'];
+        }
+        console.error('❌ Failed to import persistentStorage: All import paths failed');
+        console.error('📁 Current directory:', __dirname);
+        console.error('📁 Available files in dist/data:', availableFiles.join(', '));
+        console.error('🔍 Tried paths:', possiblePaths.join(', '));
         throw new Error('All import paths failed');
     }
 }
