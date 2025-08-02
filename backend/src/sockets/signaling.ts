@@ -4,20 +4,44 @@ import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
 import path from 'path';
 
-// Import persistentStorage with fallback
+// Import persistentStorage with robust fallback
 let persistentStorage: any;
 let agents: any;
 let sessions: any;
 let saveSessions: any;
 
 try {
-  persistentStorage = require('../data/persistentStorage');
-  agents = persistentStorage.agents;
-  sessions = persistentStorage.sessions;
-  saveSessions = persistentStorage.saveSessions;
-  console.log('✅ persistentStorage imported successfully');
+  // Try multiple import strategies
+  const possiblePaths = [
+    '../data/persistentStorage',
+    path.resolve(__dirname, '../data/persistentStorage'),
+    path.resolve(__dirname, '../data/persistentStorage.js'),
+    path.join(__dirname, '../data/persistentStorage'),
+    path.join(__dirname, '../data/persistentStorage.js')
+  ];
+  
+  let importSuccess = false;
+  for (const importPath of possiblePaths) {
+    try {
+      persistentStorage = require(importPath);
+      agents = persistentStorage.agents;
+      sessions = persistentStorage.sessions;
+      saveSessions = persistentStorage.saveSessions;
+      console.log(`✅ persistentStorage imported successfully from: ${importPath}`);
+      importSuccess = true;
+      break;
+    } catch (pathError) {
+      console.log(`⚠️  Failed to import from: ${importPath}`);
+    }
+  }
+  
+  if (!importSuccess) {
+    throw new Error('All import paths failed');
+  }
 } catch (error) {
   console.error('❌ Failed to import persistentStorage:', error.message);
+  console.error('📁 Current directory:', __dirname);
+  console.error('📁 Available files in dist/data:', require('fs').readdirSync(path.join(__dirname, '../data')).join(', '));
   throw new Error(`Failed to import persistentStorage: ${error.message}`);
 }
 

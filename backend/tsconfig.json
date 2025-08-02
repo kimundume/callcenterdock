@@ -122,5 +122,10 @@
   "exclude": [
     "node_modules",
     "dist"
+  ],
+  "files": [
+    "src/data/persistentStorage.ts",
+    "src/sockets/signaling.ts",
+    "src/server.ts"
   ]
 }

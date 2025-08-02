@@ -1,20 +1,47 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerSignalingHandlers = registerSignalingHandlers;
-// Import persistentStorage with fallback
+const path_1 = __importDefault(require("path"));
+// Import persistentStorage with robust fallback
 let persistentStorage;
 let agents;
 let sessions;
 let saveSessions;
 try {
-    persistentStorage = require('../data/persistentStorage');
-    agents = persistentStorage.agents;
-    sessions = persistentStorage.sessions;
-    saveSessions = persistentStorage.saveSessions;
-    console.log('✅ persistentStorage imported successfully');
+    // Try multiple import strategies
+    const possiblePaths = [
+        '../data/persistentStorage',
+        path_1.default.resolve(__dirname, '../data/persistentStorage'),
+        path_1.default.resolve(__dirname, '../data/persistentStorage.js'),
+        path_1.default.join(__dirname, '../data/persistentStorage'),
+        path_1.default.join(__dirname, '../data/persistentStorage.js')
+    ];
+    let importSuccess = false;
+    for (const importPath of possiblePaths) {
+        try {
+            persistentStorage = require(importPath);
+            agents = persistentStorage.agents;
+            sessions = persistentStorage.sessions;
+            saveSessions = persistentStorage.saveSessions;
+            console.log(`✅ persistentStorage imported successfully from: ${importPath}`);
+            importSuccess = true;
+            break;
+        }
+        catch (pathError) {
+            console.log(`⚠️  Failed to import from: ${importPath}`);
+        }
+    }
+    if (!importSuccess) {
+        throw new Error('All import paths failed');
+    }
 }
 catch (error) {
     console.error('❌ Failed to import persistentStorage:', error.message);
+    console.error('📁 Current directory:', __dirname);
+    console.error('📁 Available files in dist/data:', require('fs').readdirSync(path_1.default.join(__dirname, '../data')).join(', '));
     throw new Error(`Failed to import persistentStorage: ${error.message}`);
 }
 // In-memory storage for socket connections
