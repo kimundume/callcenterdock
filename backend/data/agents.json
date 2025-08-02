@@ -69,9 +69,9 @@
     "currentCalls": 0,
     "maxCalls": 10,
     "availability": "online",
-    "lastActivity": "2025-08-01T12:15:53.895Z",
+    "lastActivity": "2025-08-02T16:33:57.779Z",
     "createdAt": "2025-08-01T12:15:53.895Z",
-    "updatedAt": "2025-08-01T12:15:53.895Z",
+    "updatedAt": "2025-08-02T16:33:57.780Z",
     "description": "Main CallDocker agent responsible for handling all incoming calls from the CallDocker landing page. This agent is always available and ready to assist customers."
   }
 }

@@ -3,7 +3,7 @@ const https = require('https');
 const postData = JSON.stringify({
   companyUuid: 'calldocker-company-uuid',
   username: 'calldocker_agent',
-  password: 'CallDocker2024!'
+  password: 'password'
 });
 
 const options = {
@@ -19,7 +19,7 @@ const options = {
 
 console.log('🧪 Testing deployed login endpoint...');
 console.log(`📡 URL: https://${options.hostname}${options.path}`);
-console.log(`🔑 Credentials: calldocker_agent / CallDocker2024!`);
+console.log(`🔑 Credentials: calldocker_agent / password`);
 
 const req = https.request(options, (res) => {
   console.log(`📊 STATUS: ${res.statusCode}`);

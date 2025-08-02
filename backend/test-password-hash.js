@@ -1,29 +1,37 @@
 const bcrypt = require('bcrypt');
 
-const password = 'CallDocker2024!';
-const storedHash = '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi';
-
-console.log('🔐 Testing password hash...');
-console.log(`📝 Password: ${password}`);
-console.log(`🔑 Stored hash: ${storedHash}`);
-
-// Test if the stored hash matches the password
-bcrypt.compare(password, storedHash).then(isValid => {
-  console.log(`✅ Hash validation result: ${isValid}`);
+async function testPassword() {
+  const storedHash = '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi';
   
-  if (isValid) {
-    console.log('🎉 Password hash is correct!');
-  } else {
-    console.log('❌ Password hash is incorrect!');
-    
-    // Generate a new hash for the password
-    bcrypt.hash(password, 10).then(newHash => {
-      console.log(`🔄 New hash for "${password}": ${newHash}`);
-    });
+  console.log('Stored hash:', storedHash);
+  
+  // Test common passwords
+  const testPasswords = [
+    'password',
+    'CallDocker2024!',
+    'admin',
+    'adminpass',
+    'agentpass',
+    'agent1',
+    'test',
+    '123456',
+    'password123'
+  ];
+  
+  for (const password of testPasswords) {
+    const isValid = await bcrypt.compare(password, storedHash);
+    if (isValid) {
+      console.log(`✅ Found matching password: "${password}"`);
+      return;
+    }
   }
-});
+  
+  console.log('❌ No matching password found for the stored hash');
+  
+  // Generate correct hash for CallDocker2024!
+  const correctPassword = 'CallDocker2024!';
+  const newHash = await bcrypt.hash(correctPassword, 10);
+  console.log(`🔄 Correct hash for "${correctPassword}": ${newHash}`);
+}
 
-// Also test with a different password to make sure bcrypt is working
-bcrypt.compare('wrongpassword', storedHash).then(isValid => {
-  console.log(`❌ Wrong password validation: ${isValid} (should be false)`);
-}); 
+testPassword().catch(console.error); 

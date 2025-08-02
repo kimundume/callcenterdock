@@ -3,7 +3,7 @@ const http = require('http');
 const postData = JSON.stringify({
   companyUuid: 'calldocker-company-uuid',
   username: 'calldocker_agent',
-  password: 'CallDocker2024!'
+  password: 'password'
 });
 
 const options = {

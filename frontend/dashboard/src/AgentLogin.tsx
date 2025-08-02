@@ -6,8 +6,8 @@ import logoLight from '/logo-light.png';
 const API_URL = `${getBackendUrl()}/api/widget`;
 
 export default function AgentLogin({ onAuth }: { onAuth: (token: string, uuid: string, username: string) => void }) {
-  const [companyUuid, setCompanyUuid] = useState('');
-  const [agentUsername, setAgentUsername] = useState('');
+  const [companyUuid, setCompanyUuid] = useState('calldocker-company-uuid');
+  const [agentUsername, setAgentUsername] = useState('calldocker_agent');
   const [agentPassword, setAgentPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,8 +16,8 @@ export default function AgentLogin({ onAuth }: { onAuth: (token: string, uuid: s
   // Autofill from query params
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const uuid = params.get('companyUuid') || '';
-    const username = params.get('username') || '';
+    const uuid = params.get('companyUuid') || 'calldocker-company-uuid';
+    const username = params.get('username') || 'calldocker_agent';
     const password = params.get('password') || '';
     const demo = params.get('demo');
     if (uuid) setCompanyUuid(uuid);
@@ -59,20 +59,67 @@ export default function AgentLogin({ onAuth }: { onAuth: (token: string, uuid: s
           <img src={logoLight} alt="Calldock Logo" style={{ height: 64, width: 64, borderRadius: '50%', border: '3px solid #F6C23E', background: '#fff', boxShadow: '0 2px 12px #F6C23E22' }} />
         </div>
         <h2 style={{ fontWeight: 900, color: '#2E73FF', margin: 0, fontSize: 28, letterSpacing: 1 }}>Agent Login</h2>
+        
+        {/* Credentials Info Box */}
+        <div style={{ 
+          background: '#f0f8ff', 
+          border: '2px solid #2E73FF', 
+          borderRadius: 12, 
+          padding: '12px 16px', 
+          marginBottom: 8, 
+          fontSize: 14,
+          color: '#2E73FF',
+          fontWeight: 600,
+          textAlign: 'center',
+          width: '100%'
+        }}>
+          <div style={{ marginBottom: 8 }}>🔑 <strong>Test Credentials:</strong></div>
+          <div style={{ fontSize: 13, color: '#1e40af' }}>
+            Company UUID: <code>calldocker-company-uuid</code><br/>
+            Username: <code>calldocker_agent</code><br/>
+            Password: <code>password</code>
+          </div>
+        </div>
+
         <form className="auth-form" onSubmit={handleLogin} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div style={{ marginBottom: 8 }}>
             <label style={{ fontWeight: 600, color: '#213547' }}>Company UUID<br />
-              <input value={companyUuid} onChange={e => setCompanyUuid(e.target.value)} style={{ width: '100%', padding: 10, marginTop: 4, borderRadius: 10, border: '1.5px solid #E0E7FF', outline: 'none', fontSize: 16, transition: 'border 0.2s', boxShadow: '0 1px 4px #2E73FF11' }} required onFocus={e => e.currentTarget.style.border = '2px solid #F6C23E'} onBlur={e => e.currentTarget.style.border = '1.5px solid #E0E7FF'} />
+              <input 
+                value={companyUuid} 
+                onChange={e => setCompanyUuid(e.target.value)} 
+                placeholder="Enter company UUID (e.g., calldocker-company-uuid)"
+                style={{ width: '100%', padding: 10, marginTop: 4, borderRadius: 10, border: '1.5px solid #E0E7FF', outline: 'none', fontSize: 16, transition: 'border 0.2s', boxShadow: '0 1px 4px #2E73FF11' }} 
+                required 
+                onFocus={e => e.currentTarget.style.border = '2px solid #F6C23E'} 
+                onBlur={e => e.currentTarget.style.border = '1.5px solid #E0E7FF'} 
+              />
             </label>
           </div>
           <div style={{ marginBottom: 8 }}>
             <label style={{ fontWeight: 600, color: '#213547' }}>Agent Username<br />
-              <input value={agentUsername} onChange={e => setAgentUsername(e.target.value)} style={{ width: '100%', padding: 10, marginTop: 4, borderRadius: 10, border: '1.5px solid #E0E7FF', outline: 'none', fontSize: 16, transition: 'border 0.2s', boxShadow: '0 1px 4px #2E73FF11' }} required onFocus={e => e.currentTarget.style.border = '2px solid #F6C23E'} onBlur={e => e.currentTarget.style.border = '1.5px solid #E0E7FF'} />
+              <input 
+                value={agentUsername} 
+                onChange={e => setAgentUsername(e.target.value)} 
+                placeholder="Enter agent username (e.g., calldocker_agent)"
+                style={{ width: '100%', padding: 10, marginTop: 4, borderRadius: 10, border: '1.5px solid #E0E7FF', outline: 'none', fontSize: 16, transition: 'border 0.2s', boxShadow: '0 1px 4px #2E73FF11' }} 
+                required 
+                onFocus={e => e.currentTarget.style.border = '2px solid #F6C23E'} 
+                onBlur={e => e.currentTarget.style.border = '1.5px solid #E0E7FF'} 
+              />
             </label>
           </div>
           <div style={{ marginBottom: 8 }}>
             <label style={{ fontWeight: 600, color: '#213547' }}>Password<br />
-              <input type="password" value={agentPassword} onChange={e => setAgentPassword(e.target.value)} style={{ width: '100%', padding: 10, marginTop: 4, borderRadius: 10, border: '1.5px solid #E0E7FF', outline: 'none', fontSize: 16, transition: 'border 0.2s', boxShadow: '0 1px 4px #2E73FF11' }} required onFocus={e => e.currentTarget.style.border = '2px solid #F6C23E'} onBlur={e => e.currentTarget.style.border = '1.5px solid #E0E7FF'} />
+              <input 
+                type="password" 
+                value={agentPassword} 
+                onChange={e => setAgentPassword(e.target.value)} 
+                placeholder="Enter password (e.g., password)"
+                style={{ width: '100%', padding: 10, marginTop: 4, borderRadius: 10, border: '1.5px solid #E0E7FF', outline: 'none', fontSize: 16, transition: 'border 0.2s', boxShadow: '0 1px 4px #2E73FF11' }} 
+                required 
+                onFocus={e => e.currentTarget.style.border = '2px solid #F6C23E'} 
+                onBlur={e => e.currentTarget.style.border = '1.5px solid #E0E7FF'} 
+              />
             </label>
           </div>
           {error && <div style={{ background: '#ffeaea', color: '#d32f2f', borderRadius: 8, padding: '8px 12px', marginBottom: 8, fontWeight: 600, fontSize: 15, boxShadow: '0 1px 4px #F6C23E22' }}>{error}</div>}
