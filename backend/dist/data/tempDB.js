@@ -76,6 +76,3 @@ exports.tempStorage = {
     chatSessions: exports.chatSessions,
     sessions: exports.sessions,
 };
-
-// Add persistentStorage export for compatibility
-exports.persistentStorage = exports.tempStorage;

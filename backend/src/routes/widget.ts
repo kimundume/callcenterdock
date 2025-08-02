@@ -4,73 +4,99 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
-import { companies, agents, sessions, saveSessions } from '../data/persistentStorage';
 import fs from 'fs';
 import path from 'path';
 
 const router = express.Router();
 
-// Simple in-memory storage with file persistence
-const DATA_DIR = process.env.NODE_ENV === 'production' 
-  ? path.join(process.cwd(), 'data')
-  : path.join(__dirname, '../../data');
+// Import persistentStorage with robust fallback
+let persistentStorage: any;
+let companiesData: any;
+let usersData: any;
+let agentsData: any;
+let sessionsData: any;
 
-const COMPANIES_FILE = path.join(DATA_DIR, 'companies.json');
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
-const AGENTS_FILE = path.join(DATA_DIR, 'agents.json');
-
-// Helper functions for file operations
-function readJsonFile(filePath: string, defaultValue: any = {}): any {
-  try {
-    if (fs.existsSync(filePath)) {
-      const data = fs.readFileSync(filePath, 'utf8');
-      return JSON.parse(data);
-    }
-  } catch (error) {
-    console.error(`Error reading ${filePath}:`, error);
-    // Return default value on error
-  }
-  return defaultValue;
-}
-
-function writeJsonFile(filePath: string, data: any): void {
-  try {
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-    console.log(`💾 Saved data to: ${filePath}`);
-  } catch (error) {
-    console.error(`Error writing ${filePath}:`, error);
-    // Don't fail on write errors
-  }
-}
-
-// Load data from files
-let companiesData: any, usersData: any, agentsData: any;
 try {
+  // Try multiple import strategies for persistentStorage
+  const possiblePaths = [
+    '../data/persistentStorage',
+    path.resolve(__dirname, '../data/persistentStorage'),
+    path.resolve(__dirname, '../data/persistentStorage.js'),
+    path.join(__dirname, '../data/persistentStorage'),
+    path.join(__dirname, '../data/persistentStorage.js')
+  ];
+  
+  let importSuccess = false;
+  for (const importPath of possiblePaths) {
+    try {
+      persistentStorage = require(importPath);
+      companiesData = persistentStorage.companies;
+      usersData = persistentStorage.users;
+      agentsData = persistentStorage.agents;
+      sessionsData = persistentStorage.sessions;
+      console.log(`✅ persistentStorage imported successfully from: ${importPath}`);
+      console.log(`📊 Loaded data: ${Object.keys(companiesData).length} companies, ${Object.keys(agentsData).length} agents`);
+      importSuccess = true;
+      break;
+    } catch (pathError) {
+      console.log(`⚠️  Failed to import from: ${importPath}`);
+    }
+  }
+  
+  if (!importSuccess) {
+    throw new Error('All import paths failed');
+  }
+} catch (error) {
+  console.error('❌ Failed to import persistentStorage:', error.message);
+  // Fallback to file-based loading
+  console.log('🔄 Falling back to file-based data loading...');
+  
+  // Simple in-memory storage with file persistence
+  const DATA_DIR = process.env.NODE_ENV === 'production' 
+    ? path.join(process.cwd(), 'data')
+    : path.join(__dirname, '../../data');
+
+  const COMPANIES_FILE = path.join(DATA_DIR, 'companies.json');
+  const USERS_FILE = path.join(DATA_DIR, 'users.json');
+  const AGENTS_FILE = path.join(DATA_DIR, 'agents.json');
+
+  // Helper functions for file operations
+  function readJsonFile(filePath: string, defaultValue: any = {}): any {
+    try {
+      if (fs.existsSync(filePath)) {
+        const data = fs.readFileSync(filePath, 'utf8');
+        return JSON.parse(data);
+      }
+    } catch (error) {
+      console.error(`Error reading ${filePath}:`, error);
+    }
+    return defaultValue;
+  }
+
+  // Load data from files
   companiesData = readJsonFile(COMPANIES_FILE, {});
   usersData = readJsonFile(USERS_FILE, {});
   agentsData = readJsonFile(AGENTS_FILE, {});
-} catch (error) {
-  console.error('Failed to load data files:', error);
-  companiesData = {};
-  usersData = {};
-  agentsData = {};
+  sessionsData = [];
 }
 
-// Save functions
+// Save functions that work with persistentStorage
 function saveCompanies(): void {
-  writeJsonFile(COMPANIES_FILE, companiesData);
+  if (persistentStorage && persistentStorage.saveCompanies) {
+    persistentStorage.saveCompanies();
+  }
 }
 
 function saveUsers(): void {
-  writeJsonFile(USERS_FILE, usersData);
+  if (persistentStorage && persistentStorage.saveUsers) {
+    persistentStorage.saveUsers();
+  }
 }
 
 function saveAgents(): void {
-  writeJsonFile(AGENTS_FILE, agentsData);
+  if (persistentStorage && persistentStorage.saveAgents) {
+    persistentStorage.saveAgents();
+  }
 }
 
 // Initialize CallDocker agent if it doesn't exist
@@ -152,6 +178,33 @@ router.get('/test-callDocker-agent', (req, res) => {
   }
 });
 
+// Debug endpoint to check all agents
+router.get('/debug/agents', (req, res) => {
+  try {
+    console.log('[DEBUG] All agents in agentsData:', agentsData);
+    const allAgents = Object.values(agentsData).map((agent: any) => ({
+      id: agent.uuid,
+      username: agent.username,
+      fullName: agent.fullName,
+      companyUuid: agent.companyUuid,
+      status: agent.status,
+      registrationStatus: agent.registrationStatus,
+      hasPassword: !!agent.password
+    }));
+    
+    res.json({
+      success: true,
+      message: 'All agents retrieved',
+      count: allAgents.length,
+      agents: allAgents,
+      rawData: agentsData
+    });
+  } catch (error) {
+    console.error('Debug agents error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ===== AGENT AUTHENTICATION ENDPOINTS =====
 
 // Agent login endpoint
@@ -178,6 +231,9 @@ router.post('/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Company UUID, username, and password are required' });
     }
     
+    console.log('[DEBUG] Available agents:', Object.keys(agentsData));
+    console.log('[DEBUG] All agents data:', agentsData);
+    
     // Find agent by company UUID and username
     const agent = Object.values(agentsData).find((a: any) => 
       a.companyUuid === companyUuid && a.username === username
@@ -185,14 +241,23 @@ router.post('/auth/login', async (req, res) => {
     
     if (!agent) {
       console.log('[DEBUG] Agent not found:', { companyUuid, username });
+      console.log('[DEBUG] Available agents with companyUuid:', Object.values(agentsData).filter((a: any) => a.companyUuid === companyUuid));
+      console.log('[DEBUG] Available agents with username:', Object.values(agentsData).filter((a: any) => a.username === username));
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
-    console.log('[DEBUG] Agent found:', { agentId: agent.uuid, status: agent.status });
+    console.log('[DEBUG] Agent found:', { 
+      agentId: agent.uuid, 
+      status: agent.status,
+      hasPassword: !!agent.password,
+      passwordLength: agent.password ? agent.password.length : 0
+    });
     
     // Verify password
     const isValidPassword = await bcrypt.compare(password, agent.password);
     console.log('[DEBUG] Password validation result:', isValidPassword);
+    console.log('[DEBUG] Expected password hash:', agent.password);
+    console.log('[DEBUG] Provided password:', password);
     
     if (!isValidPassword) {
       console.log('[DEBUG] Invalid password for agent:', username);

@@ -20,63 +20,87 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const router = express_1.default.Router();
-// Simple in-memory storage with file persistence
-const DATA_DIR = process.env.NODE_ENV === 'production'
-    ? path_1.default.join(process.cwd(), 'data')
-    : path_1.default.join(__dirname, '../../data');
-const COMPANIES_FILE = path_1.default.join(DATA_DIR, 'companies.json');
-const USERS_FILE = path_1.default.join(DATA_DIR, 'users.json');
-const AGENTS_FILE = path_1.default.join(DATA_DIR, 'agents.json');
-// Helper functions for file operations
-function readJsonFile(filePath, defaultValue = {}) {
-    try {
-        if (fs_1.default.existsSync(filePath)) {
-            const data = fs_1.default.readFileSync(filePath, 'utf8');
-            return JSON.parse(data);
-        }
-    }
-    catch (error) {
-        console.error(`Error reading ${filePath}:`, error);
-        // Return default value on error
-    }
-    return defaultValue;
-}
-function writeJsonFile(filePath, data) {
-    try {
-        const dir = path_1.default.dirname(filePath);
-        if (!fs_1.default.existsSync(dir)) {
-            fs_1.default.mkdirSync(dir, { recursive: true });
-        }
-        fs_1.default.writeFileSync(filePath, JSON.stringify(data, null, 2));
-        console.log(`💾 Saved data to: ${filePath}`);
-    }
-    catch (error) {
-        console.error(`Error writing ${filePath}:`, error);
-        // Don't fail on write errors
-    }
-}
-// Load data from files
-let companiesData, usersData, agentsData;
+// Import persistentStorage with robust fallback
+let persistentStorage;
+let companiesData;
+let usersData;
+let agentsData;
+let sessionsData;
 try {
+    // Try multiple import strategies for persistentStorage
+    const possiblePaths = [
+        '../data/persistentStorage',
+        path_1.default.resolve(__dirname, '../data/persistentStorage'),
+        path_1.default.resolve(__dirname, '../data/persistentStorage.js'),
+        path_1.default.join(__dirname, '../data/persistentStorage'),
+        path_1.default.join(__dirname, '../data/persistentStorage.js')
+    ];
+    let importSuccess = false;
+    for (const importPath of possiblePaths) {
+        try {
+            persistentStorage = require(importPath);
+            companiesData = persistentStorage.companies;
+            usersData = persistentStorage.users;
+            agentsData = persistentStorage.agents;
+            sessionsData = persistentStorage.sessions;
+            console.log(`✅ persistentStorage imported successfully from: ${importPath}`);
+            console.log(`📊 Loaded data: ${Object.keys(companiesData).length} companies, ${Object.keys(agentsData).length} agents`);
+            importSuccess = true;
+            break;
+        }
+        catch (pathError) {
+            console.log(`⚠️  Failed to import from: ${importPath}`);
+        }
+    }
+    if (!importSuccess) {
+        throw new Error('All import paths failed');
+    }
+}
+catch (error) {
+    console.error('❌ Failed to import persistentStorage:', error.message);
+    // Fallback to file-based loading
+    console.log('🔄 Falling back to file-based data loading...');
+    // Simple in-memory storage with file persistence
+    const DATA_DIR = process.env.NODE_ENV === 'production'
+        ? path_1.default.join(process.cwd(), 'data')
+        : path_1.default.join(__dirname, '../../data');
+    const COMPANIES_FILE = path_1.default.join(DATA_DIR, 'companies.json');
+    const USERS_FILE = path_1.default.join(DATA_DIR, 'users.json');
+    const AGENTS_FILE = path_1.default.join(DATA_DIR, 'agents.json');
+    // Helper functions for file operations
+    function readJsonFile(filePath, defaultValue = {}) {
+        try {
+            if (fs_1.default.existsSync(filePath)) {
+                const data = fs_1.default.readFileSync(filePath, 'utf8');
+                return JSON.parse(data);
+            }
+        }
+        catch (error) {
+            console.error(`Error reading ${filePath}:`, error);
+        }
+        return defaultValue;
+    }
+    // Load data from files
     companiesData = readJsonFile(COMPANIES_FILE, {});
     usersData = readJsonFile(USERS_FILE, {});
     agentsData = readJsonFile(AGENTS_FILE, {});
+    sessionsData = [];
 }
-catch (error) {
-    console.error('Failed to load data files:', error);
-    companiesData = {};
-    usersData = {};
-    agentsData = {};
-}
-// Save functions
+// Save functions that work with persistentStorage
 function saveCompanies() {
-    writeJsonFile(COMPANIES_FILE, companiesData);
+    if (persistentStorage && persistentStorage.saveCompanies) {
+        persistentStorage.saveCompanies();
+    }
 }
 function saveUsers() {
-    writeJsonFile(USERS_FILE, usersData);
+    if (persistentStorage && persistentStorage.saveUsers) {
+        persistentStorage.saveUsers();
+    }
 }
 function saveAgents() {
-    writeJsonFile(AGENTS_FILE, agentsData);
+    if (persistentStorage && persistentStorage.saveAgents) {
+        persistentStorage.saveAgents();
+    }
 }
 // Initialize CallDocker agent if it doesn't exist
 function ensureCallDockerAgent() {
@@ -154,6 +178,32 @@ router.get('/test-callDocker-agent', (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+// Debug endpoint to check all agents
+router.get('/debug/agents', (req, res) => {
+    try {
+        console.log('[DEBUG] All agents in agentsData:', agentsData);
+        const allAgents = Object.values(agentsData).map((agent) => ({
+            id: agent.uuid,
+            username: agent.username,
+            fullName: agent.fullName,
+            companyUuid: agent.companyUuid,
+            status: agent.status,
+            registrationStatus: agent.registrationStatus,
+            hasPassword: !!agent.password
+        }));
+        res.json({
+            success: true,
+            message: 'All agents retrieved',
+            count: allAgents.length,
+            agents: allAgents,
+            rawData: agentsData
+        });
+    }
+    catch (error) {
+        console.error('Debug agents error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 // ===== AGENT AUTHENTICATION ENDPOINTS =====
 // Agent login endpoint
 router.post('/auth/login', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -175,16 +225,27 @@ router.post('/auth/login', (req, res) => __awaiter(void 0, void 0, void 0, funct
             console.log('[DEBUG] Validation failed - missing required fields');
             return res.status(400).json({ error: 'Company UUID, username, and password are required' });
         }
+        console.log('[DEBUG] Available agents:', Object.keys(agentsData));
+        console.log('[DEBUG] All agents data:', agentsData);
         // Find agent by company UUID and username
         const agent = Object.values(agentsData).find((a) => a.companyUuid === companyUuid && a.username === username);
         if (!agent) {
             console.log('[DEBUG] Agent not found:', { companyUuid, username });
+            console.log('[DEBUG] Available agents with companyUuid:', Object.values(agentsData).filter((a) => a.companyUuid === companyUuid));
+            console.log('[DEBUG] Available agents with username:', Object.values(agentsData).filter((a) => a.username === username));
             return res.status(401).json({ error: 'Invalid credentials' });
         }
-        console.log('[DEBUG] Agent found:', { agentId: agent.uuid, status: agent.status });
+        console.log('[DEBUG] Agent found:', {
+            agentId: agent.uuid,
+            status: agent.status,
+            hasPassword: !!agent.password,
+            passwordLength: agent.password ? agent.password.length : 0
+        });
         // Verify password
         const isValidPassword = yield bcrypt_1.default.compare(password, agent.password);
         console.log('[DEBUG] Password validation result:', isValidPassword);
+        console.log('[DEBUG] Expected password hash:', agent.password);
+        console.log('[DEBUG] Provided password:', password);
         if (!isValidPassword) {
             console.log('[DEBUG] Invalid password for agent:', username);
             return res.status(401).json({ error: 'Invalid credentials' });
