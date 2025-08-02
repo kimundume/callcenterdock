@@ -66,12 +66,12 @@
       "avgRating": 4.9,
       "successRate": 98.5
     },
-    "currentCalls": 2,
+    "currentCalls": 0,
     "maxCalls": 10,
     "availability": "online",
-    "lastActivity": "2025-08-02T17:15:59.615Z",
+    "lastActivity": "2025-08-02T18:34:19.794Z",
     "createdAt": "2025-08-01T12:15:53.895Z",
-    "updatedAt": "2025-08-02T17:15:59.615Z",
+    "updatedAt": "2025-08-02T18:34:19.795Z",
     "description": "Main CallDocker agent responsible for handling all incoming calls from the CallDocker landing page. This agent is always available and ready to assist customers."
   }
 }

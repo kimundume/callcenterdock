@@ -20,8 +20,8 @@
     if (window.CallDockerWidget && window.CallDockerWidget.config && window.CallDockerWidget.config.uuid) {
       return window.CallDockerWidget.config.uuid;
     }
-    // Fallback to global variable or demo UUID
-    return window.CALLDOCKER_COMPANY_UUID || 'demo-company-uuid';
+    // Fallback to global variable or correct CallDocker UUID
+    return window.CALLDOCKER_COMPANY_UUID || 'calldocker-company-uuid';
   };
 
   let socket = null;

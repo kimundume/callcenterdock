@@ -725,4 +725,94 @@ router.post('/route-call', (req, res) => {
   }
 });
 
+// ===== ADDITIONAL MISSING ENDPOINTS =====
+
+// Get call logs for a company
+router.get('/call/logs/:companyUuid', (req, res) => {
+  try {
+    const { companyUuid } = req.params;
+    console.log('[DEBUG] Getting call logs for company:', companyUuid);
+    
+    // Mock call logs data for now
+    const callLogs = [
+      {
+        id: 'call-001',
+        visitorId: 'visitor_123',
+        agentId: 'calldocker-main-agent',
+        agentName: 'CallDocker Main Agent',
+        status: 'completed',
+        duration: 180,
+        startTime: new Date(Date.now() - 3600000).toISOString(),
+        endTime: new Date(Date.now() - 3420000).toISOString(),
+        callType: 'voice',
+        pageUrl: 'https://calldocker.netlify.app/',
+        notes: 'Test call'
+      },
+      {
+        id: 'call-002',
+        visitorId: 'visitor_456',
+        agentId: 'calldocker-main-agent',
+        agentName: 'CallDocker Main Agent',
+        status: 'completed',
+        duration: 240,
+        startTime: new Date(Date.now() - 7200000).toISOString(),
+        endTime: new Date(Date.now() - 6960000).toISOString(),
+        callType: 'chat',
+        pageUrl: 'https://calldocker.netlify.app/',
+        notes: 'Support chat'
+      }
+    ];
+    
+    res.json({
+      success: true,
+      logs: callLogs,
+      count: callLogs.length
+    });
+  } catch (error) {
+    console.error('Get call logs error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update agent status
+router.post('/agent/status', (req, res) => {
+  try {
+    const { agentId, status, availability, currentCalls } = req.body;
+    console.log('[DEBUG] Updating agent status:', { agentId, status, availability, currentCalls });
+    
+    // Find agent by ID
+    const agent = agentsData[agentId];
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+    
+    // Update agent status
+    if (status) agent.status = status;
+    if (availability) agent.availability = availability;
+    if (currentCalls !== undefined) agent.currentCalls = currentCalls;
+    
+    agent.lastActivity = new Date().toISOString();
+    agent.updatedAt = new Date().toISOString();
+    saveAgents();
+    
+    console.log('[DEBUG] Agent status updated:', agent.username, 'Status:', agent.status);
+    
+    res.json({
+      success: true,
+      message: 'Agent status updated successfully',
+      agent: {
+        id: agent.uuid,
+        username: agent.username,
+        status: agent.status,
+        availability: agent.availability,
+        currentCalls: agent.currentCalls,
+        lastActivity: agent.lastActivity
+      }
+    });
+  } catch (error) {
+    console.error('Update agent status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
