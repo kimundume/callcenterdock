@@ -58,7 +58,7 @@ export default function LandingPage() {
     console.log('[LandingPage] Call Us button clicked');
     try {
       // Check availability for public landing page widget (no companyUuid)
-      const res = await fetch('http://localhost:5001/api/widget/availability');
+      const res = await fetch('https://callcenterdock.onrender.com/api/widget/availability');
       const data = await res.json();
       
       console.log('[LandingPage] Availability response:', data);
@@ -276,9 +276,9 @@ export default function LandingPage() {
         <IVRChatWidget 
           open={widgetOpen} 
           // Debug log for widget open state
-          key={widgetOpen ? 'open' : 'closed'}
+          key={`${widgetOpen ? 'open' : 'closed'}-calldocker-company-uuid`}
           onClose={() => setWidgetOpen(false)} 
-          companyUuid={null}
+          companyUuid="calldocker-company-uuid"
           logoSrc={logoLight}
         />
       </div>

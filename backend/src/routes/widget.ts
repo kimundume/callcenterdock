@@ -815,4 +815,37 @@ router.post('/agent/status', (req, res) => {
   }
 });
 
+// Check widget availability (for public landing page)
+router.get('/availability', (req, res) => {
+  try {
+    console.log('[DEBUG] Checking widget availability');
+    
+    // Find any online agents (for public routing)
+    const onlineAgents = Object.values(agentsData).filter((agent: any) => 
+      agent.status === 'online' && 
+      agent.availability === 'online' && 
+      agent.currentCalls < agent.maxCalls
+    );
+    
+    console.log('[DEBUG] Found online agents:', onlineAgents.length);
+    
+    const isOnline = onlineAgents.length > 0;
+    
+    res.json({
+      online: isOnline,
+      routingType: 'public',
+      availableAgents: onlineAgents.length,
+      message: isOnline ? 'Agents are available' : 'No agents currently available'
+    });
+  } catch (error) {
+    console.error('Check availability error:', error);
+    res.status(500).json({ 
+      online: false, 
+      routingType: 'public',
+      availableAgents: 0,
+      error: 'Internal server error' 
+    });
+  }
+});
+
 export default router;

@@ -68,6 +68,12 @@ interface IVRChatWidgetProps {
 
 export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: IVRChatWidgetProps) {
   console.log('[IVRChatWidget] Rendered with open:', open, 'companyUuid:', companyUuid, 'logoSrc:', logoSrc);
+  
+  // Add useEffect to track prop changes
+  useEffect(() => {
+    console.log('[IVRChatWidget] Props changed - open:', open, 'companyUuid:', companyUuid);
+  }, [open, companyUuid]);
+  
   const [ivrConfig, setIvrConfig] = useState<IVRConfig | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -124,9 +130,10 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
 
   // Check agent online status when widget opens or companyUuid changes
   useEffect(() => {
-    if (!open || !companyUuid) return;
-    console.log('[Widget] companyUuid:', companyUuid);
-    fetch(`${getBackendUrl()}/api/agents/${companyUuid}`)
+    if (!open) return;
+    const effectiveCompanyUuid = companyUuid || 'calldocker-company-uuid';
+    console.log('[Widget] companyUuid:', effectiveCompanyUuid);
+    fetch(`${getBackendUrl()}/api/agents/${effectiveCompanyUuid}`)
       .then(res => res.json())
       .then(list => setAgentsOnline(Array.isArray(list) && list.some(a => a.online)))
       .catch(() => setAgentsOnline(false));
@@ -135,27 +142,22 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
   // Fetch IVR config when opened or companyUuid changes
   useEffect(() => {
     if (!open) return;
-    console.log('[IVRChatWidget] Widget opened. companyUuid:', companyUuid);
-    if (companyUuid) {
-      fetch(`${getBackendUrl()}/api/widget/ivr/${companyUuid}`)
-        .then(res => res.json())
-        .then(config => {
-          console.log('[IVRChatWidget] IVR config loaded:', config);
-          setIvrConfig(config);
-          setMessages([{ from: 'system', text: config.steps[0].prompt }]);
-          setIvrStep(0);
-        })
-        .catch((err) => {
-          console.error('[IVRChatWidget] Error loading IVR config:', err);
-          setIvrConfig({ steps: demoIVR });
-          setMessages([{ from: 'system', text: demoIVR[0].prompt }]);
-          setIvrStep(0);
-        });
-    } else {
-      setIvrConfig({ steps: demoIVR });
-      setMessages([{ from: 'system', text: demoIVR[0].prompt }]);
-      setIvrStep(0);
-    }
+    const effectiveCompanyUuid = companyUuid || 'calldocker-company-uuid';
+    console.log('[IVRChatWidget] Widget opened. companyUuid:', effectiveCompanyUuid);
+    fetch(`${getBackendUrl()}/api/widget/ivr/${effectiveCompanyUuid}`)
+      .then(res => res.json())
+      .then(config => {
+        console.log('[IVRChatWidget] IVR config loaded:', config);
+        setIvrConfig(config);
+        setMessages([{ from: 'system', text: config.steps[0].prompt }]);
+        setIvrStep(0);
+      })
+      .catch((err) => {
+        console.error('[IVRChatWidget] Error loading IVR config:', err);
+        setIvrConfig({ steps: demoIVR });
+        setMessages([{ from: 'system', text: demoIVR[0].prompt }]);
+        setIvrStep(0);
+      });
   }, [open, companyUuid]);
 
   // Socket.IO setup/teardown
@@ -599,11 +601,13 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
     try {
       const visitorId = uuidv4();
       const pageUrl = window.location.href;
-      console.log('[IVRChatWidget] Starting call. Params:', { companyUuid, visitorId, pageUrl });
+      // Use fallback companyUuid if prop is null
+      const effectiveCompanyUuid = companyUuid || 'calldocker-company-uuid';
+      console.log('[IVRChatWidget] Starting call. Params:', { companyUuid: effectiveCompanyUuid, visitorId, pageUrl });
       const response = await fetch(`${getBackendUrl()}/api/widget/route-call`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyUuid, visitorId, pageUrl, callType: 'chat' }),
+        body: JSON.stringify({ companyUuid: effectiveCompanyUuid, visitorId, pageUrl, callType: 'chat' }),
       });
       const data = await response.json();
       console.log('[IVRChatWidget] /api/widget/route-call response:', data);
