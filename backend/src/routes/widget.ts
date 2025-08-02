@@ -43,11 +43,39 @@ try {
     }
   }
   
+  // If persistentStorage failed, try tempDB as fallback
   if (!importSuccess) {
-    throw new Error('All import paths failed');
+    console.log('🔄 Falling back to tempDB...');
+    const tempDBPaths = [
+      '../data/tempDB',
+      path.resolve(__dirname, '../data/tempDB'),
+      path.resolve(__dirname, '../data/tempDB.js'),
+      path.join(__dirname, '../data/tempDB'),
+      path.join(__dirname, '../data/tempDB.js')
+    ];
+    
+    for (const importPath of tempDBPaths) {
+      try {
+        const tempDB = require(importPath);
+        companiesData = tempDB.companies || tempDB.tempStorage?.companies || {};
+        usersData = tempDB.users || tempDB.tempStorage?.users || {};
+        agentsData = tempDB.agents || tempDB.tempStorage?.agents || {};
+        sessionsData = tempDB.sessions || tempDB.tempStorage?.sessions || [];
+        console.log(`✅ tempDB imported successfully from: ${importPath}`);
+        console.log(`📊 Loaded data: ${Object.keys(companiesData).length} companies, ${Object.keys(agentsData).length} agents`);
+        importSuccess = true;
+        break;
+      } catch (pathError) {
+        console.log(`⚠️  Failed to import tempDB from: ${importPath}`);
+      }
+    }
+  }
+  
+  if (!importSuccess) {
+    throw new Error('All import paths failed for both persistentStorage and tempDB');
   }
 } catch (error) {
-  console.error('❌ Failed to import persistentStorage:', error.message);
+  console.error('❌ Failed to import storage:', error.message);
   // Fallback to file-based loading
   console.log('🔄 Falling back to file-based data loading...');
   

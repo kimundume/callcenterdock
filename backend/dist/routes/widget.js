@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var _a, _b, _c, _d;
 Object.defineProperty(exports, "__esModule", { value: true });
 // @ts-nocheck
 // Updated: Agent authentication endpoints moved to widget routes for proper URL mapping
@@ -52,12 +53,39 @@ try {
             console.log(`⚠️  Failed to import from: ${importPath}`);
         }
     }
+    // If persistentStorage failed, try tempDB as fallback
     if (!importSuccess) {
-        throw new Error('All import paths failed');
+        console.log('🔄 Falling back to tempDB...');
+        const tempDBPaths = [
+            '../data/tempDB',
+            path_1.default.resolve(__dirname, '../data/tempDB'),
+            path_1.default.resolve(__dirname, '../data/tempDB.js'),
+            path_1.default.join(__dirname, '../data/tempDB'),
+            path_1.default.join(__dirname, '../data/tempDB.js')
+        ];
+        for (const importPath of tempDBPaths) {
+            try {
+                const tempDB = require(importPath);
+                companiesData = tempDB.companies || ((_a = tempDB.tempStorage) === null || _a === void 0 ? void 0 : _a.companies) || {};
+                usersData = tempDB.users || ((_b = tempDB.tempStorage) === null || _b === void 0 ? void 0 : _b.users) || {};
+                agentsData = tempDB.agents || ((_c = tempDB.tempStorage) === null || _c === void 0 ? void 0 : _c.agents) || {};
+                sessionsData = tempDB.sessions || ((_d = tempDB.tempStorage) === null || _d === void 0 ? void 0 : _d.sessions) || [];
+                console.log(`✅ tempDB imported successfully from: ${importPath}`);
+                console.log(`📊 Loaded data: ${Object.keys(companiesData).length} companies, ${Object.keys(agentsData).length} agents`);
+                importSuccess = true;
+                break;
+            }
+            catch (pathError) {
+                console.log(`⚠️  Failed to import tempDB from: ${importPath}`);
+            }
+        }
+    }
+    if (!importSuccess) {
+        throw new Error('All import paths failed for both persistentStorage and tempDB');
     }
 }
 catch (error) {
-    console.error('❌ Failed to import persistentStorage:', error.message);
+    console.error('❌ Failed to import storage:', error.message);
     // Fallback to file-based loading
     console.log('🔄 Falling back to file-based data loading...');
     // Simple in-memory storage with file persistence
