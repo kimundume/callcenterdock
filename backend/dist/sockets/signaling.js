@@ -1,43 +1,21 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerSignalingHandlers = registerSignalingHandlers;
-const path_1 = __importDefault(require("path"));
-// Try to import persistentStorage with debugging
+// Import persistentStorage with fallback
 let persistentStorage;
 let agents;
 let sessions;
 let saveSessions;
 try {
-    console.log('🔍 Attempting to import persistentStorage...');
-    console.log('📁 Current directory:', __dirname);
-    console.log('📁 Expected path:', path_1.default.join(__dirname, '../data/persistentStorage'));
     persistentStorage = require('../data/persistentStorage');
     agents = persistentStorage.agents;
     sessions = persistentStorage.sessions;
     saveSessions = persistentStorage.saveSessions;
     console.log('✅ persistentStorage imported successfully');
-    console.log('📊 Agents count:', Object.keys(agents || {}).length);
-    console.log('📊 Sessions count:', (sessions || []).length);
 }
 catch (error) {
-    console.error('❌ Failed to import persistentStorage:', error);
-    console.error('❌ Error details:', error.message);
-    // Fallback: try alternative paths
-    try {
-        console.log('🔄 Trying alternative import path...');
-        persistentStorage = require(path_1.default.join(__dirname, '../data/persistentStorage.js'));
-        agents = persistentStorage.agents;
-        sessions = persistentStorage.sessions;
-        saveSessions = persistentStorage.saveSessions;
-        console.log('✅ Alternative import successful');
-    }
-    catch (altError) {
-        console.error('❌ Alternative import also failed:', altError.message);
-        throw new Error(`Failed to import persistentStorage: ${error.message}`);
-    }
+    console.error('❌ Failed to import persistentStorage:', error.message);
+    throw new Error(`Failed to import persistentStorage: ${error.message}`);
 }
 // In-memory storage for socket connections
 const socketConnections = {}; // agentId -> socketId
