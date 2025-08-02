@@ -70,7 +70,7 @@ try {
             uuid: 'calldocker-main-agent',
             companyUuid: 'calldocker-company-uuid',
             username: 'calldocker_agent',
-            password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // "CallDocker2024!"
+            password: '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', // "CallDocker2024!"
             email: 'agent@calldocker.com',
             phone: '+1-555-CALL-DOCKER',
             fullName: 'CallDocker Main Agent',
@@ -114,7 +114,7 @@ catch (error) {
             uuid: 'calldocker-main-agent',
             companyUuid: 'calldocker-company-uuid',
             username: 'calldocker_agent',
-            password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+            password: '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy',
             email: 'agent@calldocker.com',
             phone: '+1-555-CALL-DOCKER',
             fullName: 'CallDocker Main Agent',
