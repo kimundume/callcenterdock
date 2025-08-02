@@ -1,9 +1,44 @@
 // @ts-nocheck
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
-import * as persistentStorage from '../data/persistentStorage';
+import path from 'path';
 
-const { agents, sessions, saveSessions } = persistentStorage;
+// Try to import persistentStorage with debugging
+let persistentStorage: any;
+let agents: any;
+let sessions: any;
+let saveSessions: any;
+
+try {
+  console.log('🔍 Attempting to import persistentStorage...');
+  console.log('📁 Current directory:', __dirname);
+  console.log('📁 Expected path:', path.join(__dirname, '../data/persistentStorage'));
+  
+  persistentStorage = require('../data/persistentStorage');
+  agents = persistentStorage.agents;
+  sessions = persistentStorage.sessions;
+  saveSessions = persistentStorage.saveSessions;
+  
+  console.log('✅ persistentStorage imported successfully');
+  console.log('📊 Agents count:', Object.keys(agents || {}).length);
+  console.log('📊 Sessions count:', (sessions || []).length);
+} catch (error) {
+  console.error('❌ Failed to import persistentStorage:', error);
+  console.error('❌ Error details:', error.message);
+  
+  // Fallback: try alternative paths
+  try {
+    console.log('🔄 Trying alternative import path...');
+    persistentStorage = require(path.join(__dirname, '../data/persistentStorage.js'));
+    agents = persistentStorage.agents;
+    sessions = persistentStorage.sessions;
+    saveSessions = persistentStorage.saveSessions;
+    console.log('✅ Alternative import successful');
+  } catch (altError) {
+    console.error('❌ Alternative import also failed:', altError.message);
+    throw new Error(`Failed to import persistentStorage: ${error.message}`);
+  }
+}
 
 // In-memory storage for socket connections
 const socketConnections: Record<string, string> = {}; // agentId -> socketId

@@ -1,41 +1,44 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerSignalingHandlers = registerSignalingHandlers;
-const persistentStorage = __importStar(require("../data/persistentStorage"));
-const { agents, sessions, saveSessions } = persistentStorage;
+const path_1 = __importDefault(require("path"));
+// Try to import persistentStorage with debugging
+let persistentStorage;
+let agents;
+let sessions;
+let saveSessions;
+try {
+    console.log('🔍 Attempting to import persistentStorage...');
+    console.log('📁 Current directory:', __dirname);
+    console.log('📁 Expected path:', path_1.default.join(__dirname, '../data/persistentStorage'));
+    persistentStorage = require('../data/persistentStorage');
+    agents = persistentStorage.agents;
+    sessions = persistentStorage.sessions;
+    saveSessions = persistentStorage.saveSessions;
+    console.log('✅ persistentStorage imported successfully');
+    console.log('📊 Agents count:', Object.keys(agents || {}).length);
+    console.log('📊 Sessions count:', (sessions || []).length);
+}
+catch (error) {
+    console.error('❌ Failed to import persistentStorage:', error);
+    console.error('❌ Error details:', error.message);
+    // Fallback: try alternative paths
+    try {
+        console.log('🔄 Trying alternative import path...');
+        persistentStorage = require(path_1.default.join(__dirname, '../data/persistentStorage.js'));
+        agents = persistentStorage.agents;
+        sessions = persistentStorage.sessions;
+        saveSessions = persistentStorage.saveSessions;
+        console.log('✅ Alternative import successful');
+    }
+    catch (altError) {
+        console.error('❌ Alternative import also failed:', altError.message);
+        throw new Error(`Failed to import persistentStorage: ${error.message}`);
+    }
+}
 // In-memory storage for socket connections
 const socketConnections = {}; // agentId -> socketId
 function registerSignalingHandlers(io) {

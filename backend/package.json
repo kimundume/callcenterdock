@@ -5,7 +5,10 @@
   "main": "dist/server.js",
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsc",
+    "prebuild": "node -e \"const fs=require('fs'); if(!fs.existsSync('dist/data')){fs.mkdirSync('dist/data', {recursive: true});} console.log('Data directory ensured');\"",
+    "build": "tsc && npm run verify-build && npm run copy-data",
+    "verify-build": "node -e \"const fs=require('fs'); const path=require('path'); const requiredFiles=['dist/data/persistentStorage.js','dist/sockets/signaling.js','dist/server.js']; requiredFiles.forEach(f=>{if(!fs.existsSync(f)){console.error('Missing required file:', f); process.exit(1);}else{console.log('✓', f);}}); console.log('Build verification complete!');\"",
+    "copy-data": "node -e \"const fs=require('fs'); const path=require('path'); if(!fs.existsSync('dist/data')){fs.mkdirSync('dist/data', {recursive: true});} console.log('Data directory ensured');\"",
     "start": "node dist/server.js",
     "dev": "nodemon src/server.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
