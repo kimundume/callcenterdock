@@ -2,6 +2,7 @@ const http = require('http');
 
 function testRouteCall() {
   const postData = JSON.stringify({
+    companyUuid: 'calldocker-company-uuid',
     visitorId: 'test-123',
     pageUrl: 'http://localhost:5173/',
     callType: 'chat'
@@ -28,6 +29,12 @@ function testRouteCall() {
     res.on('end', () => {
       console.log('Status:', res.statusCode);
       console.log('Response:', data);
+      try {
+        const parsed = JSON.parse(data);
+        console.log('Parsed response:', JSON.stringify(parsed, null, 2));
+      } catch (e) {
+        console.log('Could not parse JSON response');
+      }
     });
   });
 

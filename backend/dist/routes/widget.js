@@ -518,4 +518,142 @@ router.post('/calls/escalate/:callId', (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+// ===== MISSING ENDPOINTS - ADDING NOW =====
+// Get online agents for a company (MUST COME BEFORE /agents/:companyUuid)
+router.get('/agents/online', (req, res) => {
+    try {
+        const { companyUuid } = req.query;
+        console.log('[DEBUG] Getting online agents for company:', companyUuid);
+        let agents = Object.values(agentsData);
+        // Filter by company if specified
+        if (companyUuid) {
+            agents = agents.filter((agent) => agent.companyUuid === companyUuid);
+        }
+        // Filter for online agents only
+        const onlineAgents = agents.filter((agent) => agent.status === 'online' && agent.availability === 'online');
+        console.log('[DEBUG] Found online agents:', onlineAgents.length);
+        res.json({
+            success: true,
+            agents: onlineAgents.map((agent) => ({
+                id: agent.uuid,
+                username: agent.username,
+                fullName: agent.fullName,
+                email: agent.email,
+                phone: agent.phone,
+                role: agent.role,
+                status: agent.status,
+                availability: agent.availability,
+                currentCalls: agent.currentCalls,
+                maxCalls: agent.maxCalls,
+                skills: agent.skills || [],
+                performance: agent.performance || {
+                    callsHandled: 0,
+                    avgRating: 0,
+                    successRate: 0
+                },
+                lastActivity: agent.lastActivity
+            }))
+        });
+    }
+    catch (error) {
+        console.error('Get online agents error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Get agents for a company
+router.get('/agents/:companyUuid', (req, res) => {
+    try {
+        const { companyUuid } = req.params;
+        console.log('[DEBUG] Getting agents for company:', companyUuid);
+        // Find all agents for this company
+        const companyAgents = Object.values(agentsData).filter((agent) => agent.companyUuid === companyUuid);
+        console.log('[DEBUG] Found agents:', companyAgents.length);
+        res.json({
+            success: true,
+            agents: companyAgents.map((agent) => ({
+                id: agent.uuid,
+                username: agent.username,
+                fullName: agent.fullName,
+                email: agent.email,
+                phone: agent.phone,
+                role: agent.role,
+                status: agent.status,
+                availability: agent.availability,
+                currentCalls: agent.currentCalls,
+                maxCalls: agent.maxCalls,
+                skills: agent.skills || [],
+                performance: agent.performance || {
+                    callsHandled: 0,
+                    avgRating: 0,
+                    successRate: 0
+                },
+                lastActivity: agent.lastActivity,
+                createdAt: agent.createdAt
+            }))
+        });
+    }
+    catch (error) {
+        console.error('Get agents error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Route call endpoint - handles both calls and chats
+router.post('/route-call', (req, res) => {
+    try {
+        const { companyUuid, visitorId, pageUrl, callType = 'call' } = req.body;
+        console.log('[DEBUG] Route call request:', {
+            companyUuid,
+            visitorId,
+            pageUrl,
+            callType
+        });
+        if (!companyUuid) {
+            return res.status(400).json({
+                success: false,
+                error: 'Company UUID is required'
+            });
+        }
+        // Find available agents for this company
+        const availableAgents = Object.values(agentsData).filter((agent) => agent.companyUuid === companyUuid &&
+            agent.status === 'online' &&
+            agent.availability === 'online' &&
+            agent.currentCalls < agent.maxCalls);
+        console.log('[DEBUG] Available agents:', availableAgents.length);
+        if (availableAgents.length === 0) {
+            return res.json({
+                success: false,
+                error: 'No available agents at the moment. Please try again later.',
+                message: 'All agents are currently busy or offline.'
+            });
+        }
+        // Select the best available agent (simple round-robin for now)
+        const selectedAgent = availableAgents[0];
+        // Generate a session ID
+        const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        // Update agent call count
+        selectedAgent.currentCalls += 1;
+        selectedAgent.lastActivity = new Date().toISOString();
+        selectedAgent.updatedAt = new Date().toISOString();
+        saveAgents();
+        console.log('[DEBUG] Call routed to agent:', selectedAgent.username);
+        res.json({
+            success: true,
+            message: callType === 'chat' ? 'Chat connected successfully!' : 'Call connected successfully!',
+            sessionId,
+            agent: selectedAgent.username,
+            agentId: selectedAgent.uuid,
+            agentName: selectedAgent.fullName,
+            callType,
+            visitorId,
+            pageUrl
+        });
+    }
+    catch (error) {
+        console.error('Route call error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error while routing call'
+        });
+    }
+});
 exports.default = router;
