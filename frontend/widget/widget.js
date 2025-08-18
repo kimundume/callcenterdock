@@ -385,6 +385,180 @@
         endCall();
       }
     });
+    
+    // Listen for form push from agent
+    socket.on('form:push', (formData) => {
+      console.log('[Widget] Received form push from agent:', formData);
+      showFormToVisitor(formData);
+    });
+  }
+  
+  function showFormToVisitor(formData) {
+    console.log('[Widget] Showing form to visitor:', formData);
+    
+    // Create form modal
+    const formModal = document.createElement('div');
+    formModal.className = 'calldocker-modal';
+    formModal.style = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    `;
+    
+    const formContent = document.createElement('div');
+    formContent.style = `
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      max-width: 400px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    `;
+    
+    const formTitle = document.createElement('h3');
+    formTitle.textContent = 'Agent Request';
+    formTitle.style = 'margin: 0 0 20px 0; color: #333; font-size: 18px;';
+    
+    const formDescription = document.createElement('p');
+    formDescription.textContent = 'The agent has requested some information from you:';
+    formDescription.style = 'margin: 0 0 20px 0; color: #666; font-size: 14px;';
+    
+    const form = document.createElement('form');
+    form.style = 'display: flex; flex-direction: column; gap: 15px;';
+    
+    // Create form fields
+    formData.fields.forEach((field, index) => {
+      const fieldContainer = document.createElement('div');
+      
+      const label = document.createElement('label');
+      label.textContent = field.label + (field.required ? ' *' : '');
+      label.style = 'font-weight: 500; color: #333; font-size: 14px;';
+      
+      const input = document.createElement('input');
+      input.type = field.type === 'email' ? 'email' : field.type === 'number' ? 'number' : 'text';
+      input.required = field.required;
+      input.style = `
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+        margin-top: 5px;
+      `;
+      
+      fieldContainer.appendChild(label);
+      fieldContainer.appendChild(input);
+      form.appendChild(fieldContainer);
+    });
+    
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style = 'display: flex; gap: 10px; margin-top: 20px;';
+    
+    const submitBtn = document.createElement('button');
+    submitBtn.textContent = 'Submit';
+    submitBtn.type = 'submit';
+    submitBtn.style = `
+      padding: 10px 20px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    `;
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.type = 'button';
+    cancelBtn.style = `
+      padding: 10px 20px;
+      background: #6c757d;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    `;
+    
+    // Handle form submission
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      
+      const formValues = {};
+      const inputs = form.querySelectorAll('input');
+      inputs.forEach((input, index) => {
+        formValues[formData.fields[index].label] = input.value;
+      });
+      
+      console.log('[Widget] Form submitted:', formValues);
+      
+      // Send form response to backend
+      try {
+        const response = await fetch(BACKEND_URL + '/api/form-response', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            companyId: formData.companyId,
+            sessionId: formData.sessionId,
+            formId: formData._id,
+            from: 'visitor',
+            values: formValues
+          })
+        });
+        
+        if (response.ok) {
+          console.log('[Widget] Form response sent successfully');
+          document.body.removeChild(formModal);
+          // Show success message
+          const successMsg = document.createElement('div');
+          successMsg.textContent = 'Form submitted successfully!';
+          successMsg.style = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            z-index: 10001;
+            font-size: 14px;
+          `;
+          document.body.appendChild(successMsg);
+          setTimeout(() => document.body.removeChild(successMsg), 3000);
+        } else {
+          throw new Error('Failed to submit form');
+        }
+      } catch (error) {
+        console.error('[Widget] Form submission error:', error);
+        alert('Failed to submit form. Please try again.');
+      }
+    };
+    
+    // Handle cancel
+    cancelBtn.onclick = () => {
+      document.body.removeChild(formModal);
+    };
+    
+    buttonContainer.appendChild(submitBtn);
+    buttonContainer.appendChild(cancelBtn);
+    form.appendChild(buttonContainer);
+    
+    formContent.appendChild(formTitle);
+    formContent.appendChild(formDescription);
+    formContent.appendChild(form);
+    
+    formModal.appendChild(formContent);
+    document.body.appendChild(formModal);
   }
 
   function endCall() {
