@@ -377,25 +377,40 @@ export function registerSignalingHandlers(io: SocketIOServer) {
 
     // WebRTC signaling: offer
     socket.on('webrtc-offer', (data) => {
-      const { toSocketId, offer } = data;
-      if (toSocketId && offer) {
-        io.to(toSocketId).emit('webrtc-offer', { fromSocketId: socket.id, offer });
+      const { sessionId, offer } = data;
+      if (sessionId && offer) {
+        console.log('[WebRTC] Forwarding offer for session:', sessionId);
+        io.to(`session-${sessionId}`).emit('webrtc-offer', { 
+          fromSocketId: socket.id, 
+          offer,
+          sessionId 
+        });
       }
     });
 
     // WebRTC signaling: answer
     socket.on('webrtc-answer', (data) => {
-      const { toSocketId, answer } = data;
-      if (toSocketId && answer) {
-        io.to(toSocketId).emit('webrtc-answer', { fromSocketId: socket.id, answer });
+      const { sessionId, answer } = data;
+      if (sessionId && answer) {
+        console.log('[WebRTC] Forwarding answer for session:', sessionId);
+        io.to(`session-${sessionId}`).emit('webrtc-answer', { 
+          fromSocketId: socket.id, 
+          answer,
+          sessionId 
+        });
       }
     });
 
     // WebRTC signaling: ICE candidate
     socket.on('webrtc-ice-candidate', (data) => {
-      const { toSocketId, candidate } = data;
-      if (toSocketId && candidate) {
-        io.to(toSocketId).emit('webrtc-ice-candidate', { fromSocketId: socket.id, candidate });
+      const { sessionId, candidate } = data;
+      if (sessionId && candidate) {
+        console.log('[WebRTC] Forwarding ICE candidate for session:', sessionId);
+        io.to(`session-${sessionId}`).emit('webrtc-ice-candidate', { 
+          fromSocketId: socket.id, 
+          candidate,
+          sessionId 
+        });
       }
     });
 

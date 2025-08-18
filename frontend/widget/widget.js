@@ -241,8 +241,39 @@
     }
   }
 
-  async function startWebRTC() {
-    console.log('[WebRTC] startWebRTC called');
+  async function startWebRTC(sessionId, agentName) {
+    console.log('[WebRTC] startWebRTC called with sessionId:', sessionId, 'agentName:', agentName);
+    
+    // First, establish socket connection
+    await new Promise((resolve, reject) => {
+      loadSocketIo(() => {
+        try {
+          socket = io(BACKEND_URL);
+          
+          socket.on('connect', () => {
+            console.log('[WebRTC] Socket connected, socket ID:', socket.id);
+            
+            // Join the session room
+            socket.emit('join-room', { room: `session-${sessionId}` });
+            console.log('[WebRTC] Joined session room:', `session-${sessionId}`);
+            
+            // Set up socket event listeners
+            setupSocketListeners();
+            resolve();
+          });
+          
+          socket.on('connect_error', (error) => {
+            console.error('[WebRTC] Socket connection error:', error);
+            reject(error);
+          });
+          
+        } catch (error) {
+          console.error('[WebRTC] Socket setup error:', error);
+          reject(error);
+        }
+      });
+    });
+    
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       console.log('[WebRTC] getUserMedia success', localStream);
@@ -255,15 +286,35 @@
       muteBtn.disabled = true;
       return;
     }
-    peerConnection = new RTCPeerConnection();
+    
+    // Create remote audio element
+    remoteAudio = document.createElement('audio');
+    remoteAudio.autoplay = true;
+    remoteAudio.controls = false;
+    remoteAudio.style.display = 'none';
+    document.body.appendChild(remoteAudio);
+    
+    peerConnection = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    });
+    
     localStream.getTracks().forEach(track => {
       peerConnection.addTrack(track, localStream);
       console.log('[WebRTC] addTrack', track);
       log('Added local track to peer connection');
     });
+    
     peerConnection.oniceconnectionstatechange = function() {
       console.log('[WebRTC] ICE state:', peerConnection.iceConnectionState);
+      if (peerConnection.iceConnectionState === 'connected') {
+        console.log('[WebRTC] ICE connection established!');
+        updateStatus('Call connected - Audio active');
+      }
     };
+    
     peerConnection.ontrack = function(event) {
       console.log('[WebRTC] ontrack', event);
       if (remoteAudio) {
@@ -275,25 +326,64 @@
         });
       }
     };
+    
     peerConnection.onicecandidate = function(event) {
       if (event.candidate) {
         log('Sending ICE candidate', event.candidate);
         socket.emit('webrtc-ice-candidate', {
-          toSocketId: agentSocketId,
+          sessionId: sessionId,
           candidate: event.candidate
         });
       }
     };
+    
     peerConnection.onconnectionstatechange = function() {
       log('Connection state:', peerConnection.connectionState);
     };
+    
     // Create offer and send to agent
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
     log('Created offer, set local description');
+    
     socket.emit('webrtc-offer', {
-      toSocketId: agentSocketId,
-      offer
+      sessionId: sessionId,
+      offer: offer
+    });
+    
+    console.log('[WebRTC] WebRTC setup completed');
+  }
+  
+  function setupSocketListeners() {
+    // Listen for WebRTC answer from agent
+    socket.on('webrtc-answer', (data) => {
+      console.log('[WebRTC] Received answer:', data);
+      if (peerConnection && data.answer) {
+        peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
+          .then(() => console.log('[WebRTC] Set remote description from answer'))
+          .catch(err => console.error('[WebRTC] Error setting remote description:', err));
+      }
+    });
+    
+    // Listen for ICE candidates from agent
+    socket.on('webrtc-ice-candidate', (data) => {
+      console.log('[WebRTC] Received ICE candidate:', data);
+      if (peerConnection && data.candidate) {
+        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
+          .then(() => console.log('[WebRTC] Added ICE candidate'))
+          .catch(err => console.error('[WebRTC] Error adding ICE candidate:', err));
+      }
+    });
+    
+    // Listen for call status updates
+    socket.on('call-status', (data) => {
+      console.log('[WebRTC] Call status update:', data);
+      if (data.status === 'accepted') {
+        updateStatus('Call accepted by agent');
+      } else if (data.status === 'rejected') {
+        updateStatus('Call rejected by agent');
+        endCall();
+      }
     });
   }
 

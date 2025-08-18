@@ -186,6 +186,13 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
       setIncomingCall(data);
       setCallStatus('Ringing');
       setCallManuallyAccepted(false); // Reset manual acceptance flag for new call
+      
+      // Join the session room for WebRTC communication
+      if (data.sessionId) {
+        socket.emit('join-room', { room: `session-${data.sessionId}` });
+        console.log('[AgentDashboard] Joined session room for WebRTC:', `session-${data.sessionId}`);
+      }
+      
       console.log('callStatus should now be "Ringing"');
     });
     // Listen for chat events
@@ -542,31 +549,39 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
       // ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate && socketRef.current && incomingCall) {
-          socketRef.current.emit('webrtc-ice-candidate', { toSocketId: incomingCall.fromSocketId, candidate: event.candidate });
+          socketRef.current.emit('webrtc-ice-candidate', { 
+            sessionId: incomingCall.sessionId, 
+            candidate: event.candidate 
+          });
         }
       };
       // Handle offer from widget
-      socketRef.current.on('webrtc-offer', ({ offer, fromSocketId }) => {
+      socketRef.current.on('webrtc-offer', ({ offer, sessionId }) => {
+        console.log('[AgentDashboard] Received WebRTC offer for session:', sessionId);
         if (pc.signalingState !== 'closed') {
           pc.setRemoteDescription(new RTCSessionDescription(offer)).then(() => {
             // Only create answer after tracks are added
             pc.createAnswer().then(answer => {
               pc.setLocalDescription(answer);
-              socketRef.current.emit('webrtc-answer', { toSocketId: fromSocketId, answer });
+              socketRef.current.emit('webrtc-answer', { 
+                sessionId: sessionId, 
+                answer: answer 
+              });
               setWebrtcState('connected');
-              console.log('Agent: setRemoteDescription(offer) and sent answer');
+              console.log('[AgentDashboard] WebRTC answer sent for session:', sessionId);
             });
           });
         } else {
-          console.warn('Agent: Tried to setRemoteDescription/createAnswer on closed connection');
+          console.warn('[AgentDashboard] Tried to setRemoteDescription/createAnswer on closed connection');
         }
       });
       // Handle ICE from widget
-      socketRef.current.on('webrtc-ice-candidate', ({ candidate }) => {
+      socketRef.current.on('webrtc-ice-candidate', ({ candidate, sessionId }) => {
+        console.log('[AgentDashboard] Received ICE candidate for session:', sessionId);
         if (pc.signalingState !== 'closed') {
           pc.addIceCandidate(new RTCIceCandidate(candidate));
         } else {
-          console.warn('Agent: Tried to addIceCandidate on closed connection');
+          console.warn('[AgentDashboard] Tried to addIceCandidate on closed connection');
         }
       });
     }
