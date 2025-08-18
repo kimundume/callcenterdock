@@ -1,5 +1,5 @@
 // CallDocker Dashboard Application
-// Force Netlify rebuild - Updated 2025-08-18
+// Force Netlify rebuild - Updated 2025-08-18 - WebRTC Audio Fix
 import React, { useState } from 'react';
 import { BrowserRouter as Router } from 'react-router-dom';
 import './style.css';
