@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CallDocker Functionality Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 CallDocker Functionality Test</h1>
+    
+    <div class="test-section">
+        <h2>1. Backend Health Check</h2>
+        <button class="test-button" onclick="testHealth()">Test Health</button>
+        <div id="health-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Call Routing Test (with Company UUID)</h2>
+        <button class="test-button" onclick="testCallRouting()">Test Call Routing</button>
+        <div id="routing-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Agent Status Test</h2>
+        <button class="test-button" onclick="testAgentStatus()">Test Agent Status</button>
+        <div id="agent-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Widget Test</h2>
+        <p>This will load the actual CallDocker widget and test if it works:</p>
+        <button class="test-button" onclick="loadWidget()">Load Widget</button>
+        <div id="widget-result" class="result"></div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'https://callcenterdock.onrender.com';
+
+        async function testHealth() {
+            const resultDiv = document.getElementById('health-result');
+            resultDiv.className = 'result info';
+            resultDiv.textContent = 'Testing...';
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `✅ Health Check: ${data.status}\nServices: ${JSON.stringify(data.services, null, 2)}`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `❌ Health Check Failed: ${data.error || 'Unknown error'}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ Network Error: ${error.message}`;
+            }
+        }
+
+        async function testCallRouting() {
+            const resultDiv = document.getElementById('routing-result');
+            resultDiv.className = 'result info';
+            resultDiv.textContent = 'Testing call routing...';
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/widget/route-call`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        companyUuid: 'calldocker-company-uuid',
+                        visitorId: 'test_visitor_' + Date.now(),
+                        pageUrl: window.location.href,
+                        callType: 'call'
+                    })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `✅ Call Routing Success!\nAgent: ${data.agent}\nSession: ${data.sessionId}`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `❌ Call Routing Failed: ${data.error}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ Network Error: ${error.message}`;
+            }
+        }
+
+        async function testAgentStatus() {
+            const resultDiv = document.getElementById('agent-result');
+            resultDiv.className = 'result info';
+            resultDiv.textContent = 'Testing agent status...';
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/widget/agents/online?companyUuid=calldocker-company-uuid`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `✅ Online Agents: ${data.agents.length}\nAgents: ${data.agents.map(a => a.username).join(', ')}`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `❌ Agent Status Failed: ${data.error}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ Network Error: ${error.message}`;
+            }
+        }
+
+        function loadWidget() {
+            const resultDiv = document.getElementById('widget-result');
+            resultDiv.className = 'result info';
+            resultDiv.textContent = 'Loading widget...';
+
+            // Set up widget configuration
+            window.CALLDOCKER_COMPANY_UUID = 'calldocker-company-uuid';
+            window.CALLDOCKER_BACKEND_URL = BACKEND_URL;
+
+            // Load the widget script
+            const script = document.createElement('script');
+            script.src = 'https://calldocker.netlify.app/widget.js';
+            script.async = true;
+            script.onload = function() {
+                resultDiv.className = 'result success';
+                resultDiv.textContent = '✅ Widget loaded successfully! You should see Call Us and Chat Us buttons in the bottom-right corner.';
+            };
+            script.onerror = function() {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = '❌ Failed to load widget script';
+            };
+            document.head.appendChild(script);
+        }
+
+        // Auto-run health check on page load
+        window.onload = function() {
+            testHealth();
+        };
+    </script>
+</body>
+</html>

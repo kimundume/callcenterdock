@@ -98,17 +98,35 @@ const corsOptions = {
         'http://localhost:5174',
         'https://calldocker.netlify.app',
         'https://callcenterdock.onrender.com',
-        'https://*.netlify.app'
+        'https://*.netlify.app',
+        'https://calldocker.netlify.app',
+        'https://*.vercel.app'
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept'],
+    optionsSuccessStatus: 200
 };
 app.use((0, cors_1.default)(corsOptions));
+// Handle CORS preflight requests
+app.options('*', (0, cors_1.default)(corsOptions));
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use('/api/widget', widget_1.default);
 app.use('/api/super-admin', superAdmin_1.default);
 app.get('/test', (req, res) => res.send('Test OK'));
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        services: {
+            backend: 'online',
+            database: 'connected',
+            agents: Object.keys(agents).length,
+            companies: Object.keys(companies).length
+        }
+    });
+});
 // --- Chat REST Endpoints (MVP, placeholder) ---
 app.post('/api/chat/send', (req, res) => {
     const { sessionId, message, from } = req.body;

@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -234,7 +225,7 @@ router.get('/debug/agents', (req, res) => {
 });
 // ===== AGENT AUTHENTICATION ENDPOINTS =====
 // Agent login endpoint
-router.post('/auth/login', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/auth/login', async (req, res) => {
     try {
         console.log('[DEBUG] Agent login request received:', {
             body: req.body,
@@ -270,7 +261,7 @@ router.post('/auth/login', (req, res) => __awaiter(void 0, void 0, void 0, funct
             passwordLength: agent.password ? agent.password.length : 0
         });
         // Verify password
-        const isValidPassword = yield bcrypt_1.default.compare(password, agent.password);
+        const isValidPassword = await bcrypt_1.default.compare(password, agent.password);
         console.log('[DEBUG] Password validation result:', isValidPassword);
         console.log('[DEBUG] Expected password hash:', agent.password);
         console.log('[DEBUG] Provided password:', password);
@@ -324,9 +315,9 @@ router.post('/auth/login', (req, res) => __awaiter(void 0, void 0, void 0, funct
         console.error('Agent login error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
-}));
+});
 // Agent logout endpoint
-router.post('/auth/logout', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/auth/logout', async (req, res) => {
     try {
         const { agentId } = req.body;
         if (agentId) {
@@ -345,7 +336,7 @@ router.post('/auth/logout', (req, res) => __awaiter(void 0, void 0, void 0, func
         console.error('Agent logout error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
-}));
+});
 // Get agent status
 router.get('/agent/status/:agentId', (req, res) => {
     try {
@@ -607,19 +598,27 @@ router.post('/route-call', (req, res) => {
             pageUrl,
             callType
         });
-        if (!companyUuid) {
-            return res.status(400).json({
-                success: false,
-                error: 'Company UUID is required'
-            });
-        }
+        // If no companyUuid provided, use CallDocker company as fallback
+        const targetCompanyUuid = companyUuid || 'calldocker-company-uuid';
+        console.log('[DEBUG] Using company UUID:', targetCompanyUuid);
         // Find available agents for this company
-        const availableAgents = Object.values(agentsData).filter((agent) => agent.companyUuid === companyUuid &&
+        const availableAgents = Object.values(agentsData).filter((agent) => agent.companyUuid === targetCompanyUuid &&
             agent.status === 'online' &&
             agent.availability === 'online' &&
             agent.currentCalls < agent.maxCalls);
         console.log('[DEBUG] Available agents:', availableAgents.length);
-        if (availableAgents.length === 0) {
+        // If no agents available for the company, try to use CallDocker agent as fallback
+        let finalAvailableAgents = availableAgents;
+        if (availableAgents.length === 0 && targetCompanyUuid !== 'calldocker-company-uuid') {
+            console.log('[DEBUG] No company agents available, trying CallDocker agent as fallback');
+            const callDockerAgents = Object.values(agentsData).filter((agent) => agent.companyUuid === 'calldocker-company-uuid' &&
+                agent.status === 'online' &&
+                agent.availability === 'online' &&
+                agent.currentCalls < agent.maxCalls);
+            finalAvailableAgents = callDockerAgents;
+            console.log('[DEBUG] CallDocker fallback agents:', finalAvailableAgents.length);
+        }
+        if (finalAvailableAgents.length === 0) {
             return res.json({
                 success: false,
                 error: 'No available agents at the moment. Please try again later.',
@@ -627,7 +626,7 @@ router.post('/route-call', (req, res) => {
             });
         }
         // Select the best available agent (simple round-robin for now)
-        const selectedAgent = availableAgents[0];
+        const selectedAgent = finalAvailableAgents[0];
         // Generate a session ID
         const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         // Update agent call count
@@ -705,24 +704,42 @@ router.get('/call/logs/:companyUuid', (req, res) => {
 // Update agent status
 router.post('/agent/status', (req, res) => {
     try {
-        const { agentId, status, availability, currentCalls } = req.body;
-        console.log('[DEBUG] Updating agent status:', { agentId, status, availability, currentCalls });
-        // Find agent by ID
-        const agent = agentsData[agentId];
+        const { agentId, agentUuid, status, availability, currentCalls } = req.body;
+        console.log('[DEBUG] Updating agent status:', { agentId, agentUuid, status, availability, currentCalls });
+        // Find agent by ID or UUID
+        let agent = null;
+        if (agentId) {
+            agent = agentsData[agentId];
+        }
+        else if (agentUuid) {
+            agent = Object.values(agentsData).find((a) => a.uuid === agentUuid);
+        }
         if (!agent) {
+            console.log('[DEBUG] Agent not found. Available agents:', Object.keys(agentsData));
             return res.status(404).json({ error: 'Agent not found' });
         }
         // Update agent status
-        if (status)
+        if (status) {
             agent.status = status;
-        if (availability)
+            console.log('[DEBUG] Updated agent status to:', status);
+        }
+        if (availability) {
             agent.availability = availability;
-        if (currentCalls !== undefined)
+            console.log('[DEBUG] Updated agent availability to:', availability);
+        }
+        if (currentCalls !== undefined) {
             agent.currentCalls = currentCalls;
+            console.log('[DEBUG] Updated agent currentCalls to:', currentCalls);
+        }
         agent.lastActivity = new Date().toISOString();
         agent.updatedAt = new Date().toISOString();
         saveAgents();
-        console.log('[DEBUG] Agent status updated:', agent.username, 'Status:', agent.status);
+        console.log('[DEBUG] Agent status updated successfully:', {
+            username: agent.username,
+            status: agent.status,
+            availability: agent.availability,
+            currentCalls: agent.currentCalls
+        });
         res.json({
             success: true,
             message: 'Agent status updated successfully',

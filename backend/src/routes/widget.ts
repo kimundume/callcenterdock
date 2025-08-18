@@ -665,16 +665,14 @@ router.post('/route-call', (req, res) => {
       callType
     });
     
-    if (!companyUuid) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Company UUID is required' 
-      });
-    }
+    // If no companyUuid provided, use CallDocker company as fallback
+    const targetCompanyUuid = companyUuid || 'calldocker-company-uuid';
+    
+    console.log('[DEBUG] Using company UUID:', targetCompanyUuid);
     
     // Find available agents for this company
     const availableAgents = Object.values(agentsData).filter((agent: any) => 
-      agent.companyUuid === companyUuid &&
+      agent.companyUuid === targetCompanyUuid &&
       agent.status === 'online' &&
       agent.availability === 'online' &&
       agent.currentCalls < agent.maxCalls
@@ -682,7 +680,21 @@ router.post('/route-call', (req, res) => {
     
     console.log('[DEBUG] Available agents:', availableAgents.length);
     
-    if (availableAgents.length === 0) {
+    // If no agents available for the company, try to use CallDocker agent as fallback
+    let finalAvailableAgents = availableAgents;
+    if (availableAgents.length === 0 && targetCompanyUuid !== 'calldocker-company-uuid') {
+      console.log('[DEBUG] No company agents available, trying CallDocker agent as fallback');
+      const callDockerAgents = Object.values(agentsData).filter((agent: any) => 
+        agent.companyUuid === 'calldocker-company-uuid' &&
+        agent.status === 'online' &&
+        agent.availability === 'online' &&
+        agent.currentCalls < agent.maxCalls
+      );
+      finalAvailableAgents = callDockerAgents;
+      console.log('[DEBUG] CallDocker fallback agents:', finalAvailableAgents.length);
+    }
+    
+    if (finalAvailableAgents.length === 0) {
       return res.json({
         success: false,
         error: 'No available agents at the moment. Please try again later.',
@@ -691,7 +703,7 @@ router.post('/route-call', (req, res) => {
     }
     
     // Select the best available agent (simple round-robin for now)
-    const selectedAgent = availableAgents[0];
+    const selectedAgent = finalAvailableAgents[0];
     
     // Generate a session ID
     const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -777,25 +789,46 @@ router.get('/call/logs/:companyUuid', (req, res) => {
 // Update agent status
 router.post('/agent/status', (req, res) => {
   try {
-    const { agentId, status, availability, currentCalls } = req.body;
-    console.log('[DEBUG] Updating agent status:', { agentId, status, availability, currentCalls });
+    const { agentId, agentUuid, status, availability, currentCalls } = req.body;
+    console.log('[DEBUG] Updating agent status:', { agentId, agentUuid, status, availability, currentCalls });
     
-    // Find agent by ID
-    const agent = agentsData[agentId];
+    // Find agent by ID or UUID
+    let agent = null;
+    if (agentId) {
+      agent = agentsData[agentId];
+    } else if (agentUuid) {
+      agent = Object.values(agentsData).find((a: any) => a.uuid === agentUuid);
+    }
+    
     if (!agent) {
+      console.log('[DEBUG] Agent not found. Available agents:', Object.keys(agentsData));
       return res.status(404).json({ error: 'Agent not found' });
     }
     
     // Update agent status
-    if (status) agent.status = status;
-    if (availability) agent.availability = availability;
-    if (currentCalls !== undefined) agent.currentCalls = currentCalls;
+    if (status) {
+      agent.status = status;
+      console.log('[DEBUG] Updated agent status to:', status);
+    }
+    if (availability) {
+      agent.availability = availability;
+      console.log('[DEBUG] Updated agent availability to:', availability);
+    }
+    if (currentCalls !== undefined) {
+      agent.currentCalls = currentCalls;
+      console.log('[DEBUG] Updated agent currentCalls to:', currentCalls);
+    }
     
     agent.lastActivity = new Date().toISOString();
     agent.updatedAt = new Date().toISOString();
     saveAgents();
     
-    console.log('[DEBUG] Agent status updated:', agent.username, 'Status:', agent.status);
+    console.log('[DEBUG] Agent status updated successfully:', {
+      username: agent.username,
+      status: agent.status,
+      availability: agent.availability,
+      currentCalls: agent.currentCalls
+    });
     
     res.json({
       success: true,
