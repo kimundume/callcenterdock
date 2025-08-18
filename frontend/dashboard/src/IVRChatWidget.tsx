@@ -647,6 +647,89 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
     setTimeout(() => setCallState('idle'), 1200);
   };
 
+  // WebRTC functions for voice calls
+  const startWebRTC = async (sessionId: string, agentName: string) => {
+    console.log('[IVRChatWidget] startWebRTC called with sessionId:', sessionId, 'agentName:', agentName);
+    
+    try {
+      // Get user media for audio
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('[IVRChatWidget] getUserMedia success', stream);
+      
+      // Set local stream for mute controls
+      setLocalStream(stream);
+      
+      // Create RTCPeerConnection
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      });
+      
+      // Add local stream tracks
+      stream.getTracks().forEach(track => {
+        pc.addTrack(track, stream);
+        console.log('[IVRChatWidget] addTrack', track);
+      });
+      
+      // Handle remote stream
+      pc.ontrack = (event) => {
+        console.log('[IVRChatWidget] ontrack', event);
+        const remoteStream = event.streams[0];
+        if (remoteStream) {
+          // Create audio element for remote audio
+          const remoteAudio = document.createElement('audio');
+          remoteAudio.srcObject = remoteStream;
+          remoteAudio.autoplay = true;
+          remoteAudio.controls = false;
+          remoteAudio.style.display = 'none';
+          document.body.appendChild(remoteAudio);
+          console.log('[IVRChatWidget] Remote audio element created');
+        }
+      };
+      
+      // ICE connection state change
+      pc.oniceconnectionstatechange = () => {
+        console.log('[IVRChatWidget] ICE state:', pc.iceConnectionState);
+        if (pc.iceConnectionState === 'connected') {
+          console.log('[IVRChatWidget] ICE connection established!');
+          setMessages(prev => [...prev, { from: 'system', text: 'Audio connection established!' }]);
+        }
+      };
+      
+      // ICE candidates
+      pc.onicecandidate = (event) => {
+        if (event.candidate && socketRef.current) {
+          console.log('[IVRChatWidget] Sending ICE candidate');
+          socketRef.current.emit('webrtc-ice-candidate', {
+            sessionId: sessionId,
+            candidate: event.candidate
+          });
+        }
+      };
+      
+      // Create and send offer
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      console.log('[IVRChatWidget] Created offer, sending to agent');
+      
+      if (socketRef.current) {
+        socketRef.current.emit('webrtc-offer', {
+          sessionId: sessionId,
+          offer: offer
+        });
+      }
+      
+      // Store peer connection for cleanup
+      (window as any).currentPeerConnection = pc;
+      
+    } catch (error) {
+      console.error('[IVRChatWidget] WebRTC setup error:', error);
+      setCallError('Failed to access microphone. Please check permissions.');
+    }
+  };
+
   // Detect dark mode (auto or from prop)
   const prefersDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   const isDark = prefersDark;
@@ -1226,87 +1309,4 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
       </div>
     </Modal>
   );
-
-  // WebRTC functions for voice calls
-  const startWebRTC = async (sessionId: string, agentName: string) => {
-    console.log('[IVRChatWidget] startWebRTC called with sessionId:', sessionId, 'agentName:', agentName);
-    
-    try {
-      // Get user media for audio
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log('[IVRChatWidget] getUserMedia success', stream);
-      
-      // Set local stream for mute controls
-      setLocalStream(stream);
-      
-      // Create RTCPeerConnection
-      const pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' }
-        ]
-      });
-      
-      // Add local stream tracks
-      stream.getTracks().forEach(track => {
-        pc.addTrack(track, stream);
-        console.log('[IVRChatWidget] addTrack', track);
-      });
-      
-      // Handle remote stream
-      pc.ontrack = (event) => {
-        console.log('[IVRChatWidget] ontrack', event);
-        const remoteStream = event.streams[0];
-        if (remoteStream) {
-          // Create audio element for remote audio
-          const remoteAudio = document.createElement('audio');
-          remoteAudio.srcObject = remoteStream;
-          remoteAudio.autoplay = true;
-          remoteAudio.controls = false;
-          remoteAudio.style.display = 'none';
-          document.body.appendChild(remoteAudio);
-          console.log('[IVRChatWidget] Remote audio element created');
-        }
-      };
-      
-      // ICE connection state change
-      pc.oniceconnectionstatechange = () => {
-        console.log('[IVRChatWidget] ICE state:', pc.iceConnectionState);
-        if (pc.iceConnectionState === 'connected') {
-          console.log('[IVRChatWidget] ICE connection established!');
-          setMessages(prev => [...prev, { from: 'system', text: 'Audio connection established!' }]);
-        }
-      };
-      
-      // ICE candidates
-      pc.onicecandidate = (event) => {
-        if (event.candidate && socketRef.current) {
-          console.log('[IVRChatWidget] Sending ICE candidate');
-          socketRef.current.emit('webrtc-ice-candidate', {
-            sessionId: sessionId,
-            candidate: event.candidate
-          });
-        }
-      };
-      
-      // Create and send offer
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      console.log('[IVRChatWidget] Created offer, sending to agent');
-      
-      if (socketRef.current) {
-        socketRef.current.emit('webrtc-offer', {
-          sessionId: sessionId,
-          offer: offer
-        });
-      }
-      
-      // Store peer connection for cleanup
-      (window as any).currentPeerConnection = pc;
-      
-    } catch (error) {
-      console.error('[IVRChatWidget] WebRTC setup error:', error);
-      setCallError('Failed to access microphone. Please check permissions.');
-    }
-  };
 } 
