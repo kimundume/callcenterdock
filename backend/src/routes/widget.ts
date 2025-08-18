@@ -434,6 +434,56 @@ router.put('/agent/status/:agentId', (req, res) => {
 // ===== CALL MANAGEMENT ENDPOINTS =====
 
 // Get active calls for agent
+router.get('/calls/active', (req, res) => {
+  try {
+    const { agentUuid, agentId, username } = req.query;
+    console.log('[DEBUG] Getting active calls for:', { agentUuid, agentId, username });
+    
+    // Find agent by UUID, ID, or username
+    let agent = null;
+    if (agentUuid) {
+      agent = Object.values(agentsData).find((a: any) => a.uuid === agentUuid);
+    } else if (agentId) {
+      agent = agentsData[agentId];
+    } else if (username) {
+      agent = Object.values(agentsData).find((a: any) => a.username === username);
+    }
+    
+    if (!agent) {
+      console.log('[DEBUG] Agent not found for active calls. Available agents:', Object.keys(agentsData));
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+    
+    // Mock active calls data for now
+    const activeCalls = [
+      {
+        id: 'call-001',
+        customerName: 'John Doe',
+        customerPhone: '+1-555-0123',
+        status: 'active',
+        duration: 180,
+        startTime: new Date(Date.now() - 180000).toISOString(),
+        type: 'incoming',
+        priority: 'normal',
+        agentId: agent.uuid,
+        agentName: agent.fullName
+      }
+    ];
+    
+    console.log('[DEBUG] Returning active calls for agent:', agent.username);
+    
+    res.json({
+      success: true,
+      calls: activeCalls,
+      count: activeCalls.length
+    });
+  } catch (error) {
+    console.error('Get active calls error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get active calls for agent (legacy endpoint)
 router.get('/agent/calls/:agentId', (req, res) => {
   try {
     const { agentId } = req.params;

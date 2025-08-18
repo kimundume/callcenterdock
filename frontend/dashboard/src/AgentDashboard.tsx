@@ -79,7 +79,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
         setAgentUuid(agentData.agent.id);
         
         // Then fetch active calls for this agent
-        const callsResponse = await fetch(`${API_URL}/calls/active?agentUuid=${agentData.agent.id}`);
+        const callsResponse = await fetch(`${API_URL}/calls/active?username=${agentUsername}`);
         const callsData = await callsResponse.json();
         if (callsData.success) {
           setActiveCalls(callsData.calls || []);
