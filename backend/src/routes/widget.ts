@@ -770,14 +770,46 @@ router.post('/route-call', (req, res) => {
     try {
       const io = req.app.get('io');
       if (io) {
-        // Find the agent's socket connection
+        console.log('[DEBUG] Socket.io available, attempting to notify agent');
+        
+        // Try multiple approaches to find and notify the agent
+        const agentRoom = `agent-${selectedAgent.username}`;
+        const companyRoom = `company-${targetCompanyUuid}`;
+        
+        console.log('[DEBUG] Attempting to notify agent in room:', agentRoom);
+        
+        // Send to agent-specific room
+        io.to(agentRoom).emit('incoming-call', {
+          uuid: targetCompanyUuid,
+          agentId: selectedAgent.username,
+          callTime: new Date().toISOString(),
+          sessionId: sessionId,
+          visitorId: visitorId,
+          pageUrl: pageUrl,
+          callType: callType
+        });
+        
+        // Also send to company room as backup
+        io.to(companyRoom).emit('incoming-call', {
+          uuid: targetCompanyUuid,
+          agentId: selectedAgent.username,
+          callTime: new Date().toISOString(),
+          sessionId: sessionId,
+          visitorId: visitorId,
+          pageUrl: pageUrl,
+          callType: callType
+        });
+        
+        console.log('[DEBUG] Incoming-call event sent to rooms:', agentRoom, companyRoom);
+        
+        // Also try direct socket lookup as fallback
         const agentSocketId = Object.keys(io.sockets.sockets).find(socketId => {
           const socket = io.sockets.sockets.get(socketId);
           return socket.data && socket.data.agentId === selectedAgent.username;
         });
         
         if (agentSocketId) {
-          console.log('[DEBUG] Sending incoming-call event to agent socket:', agentSocketId);
+          console.log('[DEBUG] Also sending directly to agent socket:', agentSocketId);
           io.to(agentSocketId).emit('incoming-call', {
             uuid: targetCompanyUuid,
             agentId: selectedAgent.username,
@@ -787,8 +819,6 @@ router.post('/route-call', (req, res) => {
             pageUrl: pageUrl,
             callType: callType
           });
-        } else {
-          console.log('[DEBUG] Agent socket not found for:', selectedAgent.username);
         }
       } else {
         console.log('[DEBUG] Socket.io not available');
