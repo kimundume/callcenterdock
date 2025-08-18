@@ -631,9 +631,12 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
       }
     } catch (error) {
       console.error('[IVRChatWidget] Error starting call:', error);
-      setCallError('Network error - please try again');
-      setCallState('ended');
-      setTimeout(() => setCallState('idle'), 2000);
+      // Only show error if it's not a successful call
+      if (callState !== 'in-call') {
+        setCallError('Network error - please try again');
+        setCallState('ended');
+        setTimeout(() => setCallState('idle'), 2000);
+      }
     }
   };
 
@@ -1085,7 +1088,7 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
                     onClick={() => {
                       setMuted(m => !m);
                       if (localStream) {
-                        localStream.getAudioTracks().forEach(track => (track.enabled = muted));
+                        localStream.getAudioTracks().forEach(track => (track.enabled = !muted));
                       }
                     }}
                     style={{ 
@@ -1232,6 +1235,9 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
       // Get user media for audio
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       console.log('[IVRChatWidget] getUserMedia success', stream);
+      
+      // Set local stream for mute controls
+      setLocalStream(stream);
       
       // Create RTCPeerConnection
       const pc = new RTCPeerConnection({
