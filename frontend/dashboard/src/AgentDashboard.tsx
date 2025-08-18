@@ -167,7 +167,8 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               agentUuid: agent.uuid,
-              status: 'online'
+              status: 'online',
+              availability: 'online'
             })
           });
           console.log('[AgentDashboard] Agent status set to online');

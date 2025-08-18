@@ -204,8 +204,12 @@ function registerSignalingHandlers(io) {
             // Add to queue if not already present
             if (!global.tempStorage.callQueue[uuid].includes(socket.id))
                 global.tempStorage.callQueue[uuid].push(socket.id);
-            // If no agents online
-            if (!agents[uuid] || Object.keys(agents[uuid]).length === 0) {
+            // Check if any agents are online for this company
+            const companyAgents = Object.values(agents).filter((agent) => agent.companyUuid === uuid &&
+                agent.status === 'online' &&
+                agent.availability === 'online');
+            if (companyAgents.length === 0) {
+                console.log('[DEBUG] No agents online for company:', uuid);
                 socket.emit('call-routed', { success: false, reason: 'No agents online' });
                 global.tempStorage.callQueue[uuid] = global.tempStorage.callQueue[uuid].filter(id => id !== socket.id);
                 return;
