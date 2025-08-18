@@ -691,6 +691,38 @@ router.post('/route-call', (req, res) => {
         selectedAgent.updatedAt = new Date().toISOString();
         saveAgents();
         console.log('[DEBUG] Call routed to agent:', selectedAgent.username);
+        // Trigger socket.io call routing to notify the agent
+        try {
+            const io = req.app.get('io');
+            if (io) {
+                // Find the agent's socket connection
+                const agentSocketId = Object.keys(io.sockets.sockets).find(socketId => {
+                    const socket = io.sockets.sockets.get(socketId);
+                    return socket.data && socket.data.agentId === selectedAgent.username;
+                });
+                if (agentSocketId) {
+                    console.log('[DEBUG] Sending incoming-call event to agent socket:', agentSocketId);
+                    io.to(agentSocketId).emit('incoming-call', {
+                        uuid: targetCompanyUuid,
+                        agentId: selectedAgent.username,
+                        callTime: new Date().toISOString(),
+                        sessionId: sessionId,
+                        visitorId: visitorId,
+                        pageUrl: pageUrl,
+                        callType: callType
+                    });
+                }
+                else {
+                    console.log('[DEBUG] Agent socket not found for:', selectedAgent.username);
+                }
+            }
+            else {
+                console.log('[DEBUG] Socket.io not available');
+            }
+        }
+        catch (socketError) {
+            console.error('[DEBUG] Socket.io error:', socketError);
+        }
         res.json({
             success: true,
             message: callType === 'chat' ? 'Chat connected successfully!' : 'Call connected successfully!',

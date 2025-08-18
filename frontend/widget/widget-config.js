@@ -3,7 +3,7 @@
 
 window.CALLDOCKER_CONFIG = {
   // Backend API URL - Update this for your deployment
-  BACKEND_URL: 'https://calldocker-backend.onrender.com',
+  BACKEND_URL: 'https://callcenterdock.onrender.com',
   
   // Widget appearance
   BUTTON_COLORS: {
@@ -19,7 +19,7 @@ window.CALLDOCKER_CONFIG = {
   },
   
   // Company UUID - Set this for your specific company
-  COMPANY_UUID: 'demo-company-uuid',
+  COMPANY_UUID: 'calldocker-company-uuid',
   
   // Widget text
   TEXT: {
