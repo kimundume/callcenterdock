@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprehensive CallDocker Fix Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: white;
+        }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-primary { background-color: #007bff; color: white; }
+        .btn-success { background-color: #28a745; color: white; }
+        .btn-danger { background-color: #dc3545; color: white; }
+        .btn-warning { background-color: #ffc107; color: black; }
+        #log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-online { background-color: #28a745; }
+        .status-offline { background-color: #dc3545; }
+        .status-busy { background-color: #ffc107; }
+        .call-controls {
+            display: none;
+            margin-top: 10px;
+        }
+        .call-controls.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 CallDocker Comprehensive Fix Test</h1>
+    
+    <div class="test-section info">
+        <h3>📋 Test Overview</h3>
+        <p>This page tests all CallDocker functionality to identify and fix issues with audio, call routing, and form push.</p>
+        <p><strong>Current Issues:</strong> No audio, calls not connecting, forms not showing</p>
+    </div>
+
+    <div class="test-section">
+        <h3>1. 🔍 System Status Check</h3>
+        <button class="btn-primary" onclick="checkSystemStatus()">Check System Status</button>
+        <div id="system-status"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>2. 👤 Agent Status & Reset</h3>
+        <button class="btn-primary" onclick="checkAgentStatus()">Check Agent Status</button>
+        <button class="btn-warning" onclick="resetAgentCalls()">Reset Agent Calls</button>
+        <div id="agent-status"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>3. 📞 Call Routing Test</h3>
+        <button class="btn-primary" onclick="testCallRouting()">Test Call Routing</button>
+        <button class="btn-success" onclick="startTestCall()">Start Test Call</button>
+        <div id="call-routing-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>4. 🎤 Audio & WebRTC Test</h3>
+        <button class="btn-primary" onclick="testAudioPermissions()">Test Audio Permissions</button>
+        <button class="btn-primary" onclick="testWebRTC()">Test WebRTC</button>
+        <div id="audio-result"></div>
+        <div class="call-controls" id="call-controls">
+            <button class="btn-danger" onclick="endCall()">End Call</button>
+            <button class="btn-warning" onclick="toggleMute()">Toggle Mute</button>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>5. 📋 Form Push Test</h3>
+        <button class="btn-primary" onclick="testFormPush()">Test Form Push</button>
+        <div id="form-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>6. 📊 Queue Management Test</h3>
+        <button class="btn-primary" onclick="checkQueue()">Check Queue</button>
+        <button class="btn-warning" onclick="clearQueue()">Clear Queue</button>
+        <div id="queue-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>7. 🔄 Auto-Fix All Issues</h3>
+        <button class="btn-success" onclick="autoFixAll()">Auto-Fix All Issues</button>
+        <div id="auto-fix-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>📝 Test Log</h3>
+        <div id="log"></div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        const BACKEND_URL = 'https://callcenterdock.onrender.com';
+        let socket = null;
+        let peerConnection = null;
+        let localStream = null;
+        let currentSessionId = null;
+        let isMuted = false;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<span style="color: #666;">[${timestamp}]</span> ${message}`;
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function showResult(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.className = `test-section ${type}`;
+            element.innerHTML = `<p>${message}</p>`;
+        }
+
+        async function checkSystemStatus() {
+            log('🔍 Checking system status...');
+            try {
+                const response = await fetch(`${BACKEND_URL}/health`);
+                const data = await response.json();
+                log('✅ System is online');
+                showResult('system-status', '✅ System is online and responding', 'success');
+            } catch (error) {
+                log('❌ System check failed: ' + error.message);
+                showResult('system-status', '❌ System check failed: ' + error.message, 'error');
+            }
+        }
+
+        async function checkAgentStatus() {
+            log('👤 Checking agent status...');
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/widget/agent/status?username=calldocker_agent`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const agent = data.agent;
+                    const statusClass = agent.status === 'online' ? 'status-online' : 'status-offline';
+                    const busyClass = agent.currentCalls > 0 ? 'status-busy' : 'status-online';
+                    
+                    const statusHtml = `
+                        <div>
+                            <span class="status-indicator ${statusClass}"></span>
+                            <strong>Status:</strong> ${agent.status}<br>
+                            <span class="status-indicator ${busyClass}"></span>
+                            <strong>Availability:</strong> ${agent.availability}<br>
+                            <strong>Current Calls:</strong> ${agent.currentCalls}/${agent.maxCalls}<br>
+                            <strong>Last Activity:</strong> ${new Date(agent.lastActivity).toLocaleString()}
+                        </div>
+                    `;
+                    
+                    log('✅ Agent status retrieved');
+                    document.getElementById('agent-status').innerHTML = statusHtml;
+                } else {
+                    log('❌ Failed to get agent status');
+                    showResult('agent-status', '❌ Failed to get agent status', 'error');
+                }
+            } catch (error) {
+                log('❌ Agent status check failed: ' + error.message);
+                showResult('agent-status', '❌ Agent status check failed: ' + error.message, 'error');
+            }
+        }
+
+        async function resetAgentCalls() {
+            log('🔄 Resetting agent calls...');
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/widget/agent/reset-calls`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: 'calldocker_agent' })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    log('✅ Agent calls reset successfully');
+                    showResult('agent-status', '✅ Agent calls reset successfully', 'success');
+                    // Refresh agent status
+                    setTimeout(checkAgentStatus, 1000);
+                } else {
+                    log('❌ Failed to reset agent calls');
+                    showResult('agent-status', '❌ Failed to reset agent calls', 'error');
+                }
+            } catch (error) {
+                log('❌ Reset agent calls failed: ' + error.message);
+                showResult('agent-status', '❌ Reset agent calls failed: ' + error.message, 'error');
+            }
+        }
+
+        async function testCallRouting() {
+            log('📞 Testing call routing...');
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/widget/route-call`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        companyUuid: 'calldocker-company-uuid',
+                        visitorId: 'test-visitor-' + Date.now(),
+                        pageUrl: window.location.href,
+                        callType: 'call'
+                    })
+                });
+
+                const data = await response.json();
+                log('📊 Call routing response: ' + JSON.stringify(data, null, 2));
+
+                if (data.success) {
+                    currentSessionId = data.sessionId;
+                    log('✅ Call routing successful - Session ID: ' + data.sessionId);
+                    showResult('call-routing-result', `✅ Call routing successful<br>Session ID: ${data.sessionId}<br>Status: ${data.status || 'connected'}`, 'success');
+                } else {
+                    log('❌ Call routing failed: ' + data.error);
+                    showResult('call-routing-result', '❌ Call routing failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                log('❌ Call routing test failed: ' + error.message);
+                showResult('call-routing-result', '❌ Call routing test failed: ' + error.message, 'error');
+            }
+        }
+
+        async function startTestCall() {
+            log('🎯 Starting test call...');
+            
+            // First test call routing
+            await testCallRouting();
+            
+            if (currentSessionId) {
+                // Then test audio
+                await testAudioPermissions();
+                
+                // Then test WebRTC
+                await testWebRTC();
+                
+                log('🎉 Test call started successfully!');
+            }
+        }
+
+        async function testAudioPermissions() {
+            log('🎤 Testing audio permissions...');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                localStream = stream;
+                log('✅ Audio permissions granted');
+                showResult('audio-result', '✅ Audio permissions granted', 'success');
+                return true;
+            } catch (error) {
+                log('❌ Audio permissions failed: ' + error.message);
+                showResult('audio-result', '❌ Audio permissions failed: ' + error.message, 'error');
+                return false;
+            }
+        }
+
+        async function testWebRTC() {
+            log('🔗 Testing WebRTC connection...');
+            try {
+                if (!localStream) {
+                    const audioResult = await testAudioPermissions();
+                    if (!audioResult) return false;
+                }
+
+                peerConnection = new RTCPeerConnection({
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                });
+
+                localStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, localStream);
+                });
+
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        log('ICE candidate generated');
+                    }
+                };
+
+                peerConnection.oniceconnectionstatechange = () => {
+                    log('ICE connection state: ' + peerConnection.iceConnectionState);
+                };
+
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                
+                log('✅ WebRTC connection created successfully');
+                showResult('audio-result', '✅ WebRTC connection created successfully', 'success');
+                
+                // Show call controls
+                document.getElementById('call-controls').classList.add('show');
+                
+                return true;
+            } catch (error) {
+                log('❌ WebRTC connection failed: ' + error.message);
+                showResult('audio-result', '❌ WebRTC connection failed: ' + error.message, 'error');
+                return false;
+            }
+        }
+
+        function endCall() {
+            log('📞 Ending call...');
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            document.getElementById('call-controls').classList.remove('show');
+            log('✅ Call ended');
+        }
+
+        function toggleMute() {
+            if (localStream) {
+                isMuted = !isMuted;
+                localStream.getAudioTracks().forEach(track => {
+                    track.enabled = !isMuted;
+                });
+                log(isMuted ? '🔇 Microphone muted' : '🔊 Microphone unmuted');
+            }
+        }
+
+        async function testFormPush() {
+            log('📋 Testing form push...');
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/form-push`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        companyId: 'calldocker-company-uuid',
+                        sessionId: currentSessionId || 'test-session',
+                        from: 'test-agent',
+                        type: 'email',
+                        fields: [
+                            { label: 'Email Address', type: 'email', required: true }
+                        ]
+                    })
+                });
+
+                const data = await response.json();
+                log('📊 Form push response: ' + JSON.stringify(data, null, 2));
+
+                if (data.success) {
+                    log('✅ Form push successful');
+                    showResult('form-result', '✅ Form push successful - Form ID: ' + data._id, 'success');
+                } else {
+                    log('❌ Form push failed');
+                    showResult('form-result', '❌ Form push failed', 'error');
+                }
+            } catch (error) {
+                log('❌ Form push test failed: ' + error.message);
+                showResult('form-result', '❌ Form push test failed: ' + error.message, 'error');
+            }
+        }
+
+        async function checkQueue() {
+            log('📊 Checking queue...');
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/widget/queue/calldocker-company-uuid`);
+                const data = await response.json();
+                
+                log('📊 Queue response: ' + JSON.stringify(data, null, 2));
+                
+                if (data.success) {
+                    log('✅ Queue check successful');
+                    showResult('queue-result', `✅ Queue check successful<br>Queue Length: ${data.queueLength}`, 'success');
+                } else {
+                    log('❌ Queue check failed');
+                    showResult('queue-result', '❌ Queue check failed', 'error');
+                }
+            } catch (error) {
+                log('❌ Queue check failed: ' + error.message);
+                showResult('queue-result', '❌ Queue check failed: ' + error.message, 'error');
+            }
+        }
+
+        async function clearQueue() {
+            log('🗑️ Clearing queue...');
+            try {
+                // This would need a backend endpoint to clear the queue
+                log('⚠️ Queue clear not implemented yet');
+                showResult('queue-result', '⚠️ Queue clear not implemented yet', 'warning');
+            } catch (error) {
+                log('❌ Queue clear failed: ' + error.message);
+                showResult('queue-result', '❌ Queue clear failed: ' + error.message, 'error');
+            }
+        }
+
+        async function autoFixAll() {
+            log('🔧 Starting auto-fix process...');
+            
+            try {
+                // Step 1: Check system status
+                await checkSystemStatus();
+                
+                // Step 2: Reset agent calls
+                await resetAgentCalls();
+                
+                // Step 3: Wait a moment for reset to take effect
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // Step 4: Check agent status again
+                await checkAgentStatus();
+                
+                // Step 5: Test call routing
+                await testCallRouting();
+                
+                // Step 6: Test audio
+                await testAudioPermissions();
+                
+                // Step 7: Test WebRTC
+                await testWebRTC();
+                
+                // Step 8: Test form push
+                await testFormPush();
+                
+                log('🎉 Auto-fix process completed!');
+                showResult('auto-fix-result', '🎉 Auto-fix process completed! Check the results above.', 'success');
+                
+            } catch (error) {
+                log('❌ Auto-fix failed: ' + error.message);
+                showResult('auto-fix-result', '❌ Auto-fix failed: ' + error.message, 'error');
+            }
+        }
+
+        // Auto-run system check on page load
+        window.addEventListener('load', async () => {
+            log('🚀 CallDocker Comprehensive Fix Test loaded');
+            log('Starting initial system check...');
+            await checkSystemStatus();
+            await checkAgentStatus();
+        });
+    </script>
+</body>
+</html>
