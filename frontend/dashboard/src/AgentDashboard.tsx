@@ -67,6 +67,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
   // Add state for active calls
   const [activeCalls, setActiveCalls] = useState([]);
   const [agentUuid, setAgentUuid] = useState<string | null>(null);
+  const [queueLength, setQueueLength] = useState<number>(0);
 
   // Fetch agent UUID and active calls
   const fetchAgentData = async () => {
@@ -98,7 +99,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
     return () => clearInterval(interval);
   }, [companyUuid, agentUsername]);
 
-  // Poll agent online status every 10s
+  // Poll agent online status and queue length every 10s
   useEffect(() => {
     if (!companyUuid || !agentUsername) return;
     let isMounted = true;
@@ -115,9 +116,27 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
         })
         .catch(() => { if (isMounted) setChatOnline(false); });
     };
+    
+    const fetchQueueLength = () => {
+      fetch(`${getBackendUrl()}/api/widget/queue/${companyUuid}`)
+        .then(res => res.json())
+        .then(data => {
+          if (isMounted && data.success) {
+            setQueueLength(data.queueLength || 0);
+          }
+        })
+        .catch(() => { if (isMounted) setQueueLength(0); });
+    };
+    
     fetchStatus();
-    const interval = setInterval(fetchStatus, 10000);
-    return () => { clearInterval(interval); isMounted = false; };
+    fetchQueueLength();
+    const statusInterval = setInterval(fetchStatus, 10000);
+    const queueInterval = setInterval(fetchQueueLength, 5000); // Poll queue more frequently
+    return () => { 
+      clearInterval(statusInterval); 
+      clearInterval(queueInterval); 
+      isMounted = false; 
+    };
   }, [companyUuid, agentUsername]);
 
   // Sync tab with URL
@@ -350,6 +369,39 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
     return () => clearInterval(timerRef.current);
   }, [callStatus, callStart]);
 
+  const processNextCallInQueue = async (companyUuid: string) => {
+    try {
+      const response = await fetch(`${getBackendUrl()}/api/widget/queue/${companyUuid}`);
+      const data = await response.json();
+      
+      if (data.success && data.queueLength > 0) {
+        console.log('[AgentDashboard] Processing next call in queue:', data.queue[0]);
+        
+        // Get the next call from queue
+        const nextCall = data.queue[0];
+        
+        // Route the next call
+        const routeResponse = await fetch(`${getBackendUrl()}/api/widget/route-call`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            companyUuid: nextCall.companyUuid,
+            visitorId: nextCall.visitorId,
+            pageUrl: nextCall.pageUrl,
+            callType: nextCall.callType
+          })
+        });
+        
+        const routeData = await routeResponse.json();
+        if (routeData.success) {
+          console.log('[AgentDashboard] Next call in queue routed successfully');
+        }
+      }
+    } catch (error) {
+      console.error('[AgentDashboard] Error processing queue:', error);
+    }
+  };
+
   // Accept/Reject/End Call
   const handleCallAction = (action) => {
     console.log('handleCallAction called with action:', action);
@@ -367,6 +419,12 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
       const sessionId = incomingCall?.fromSocketId || 'unknown-session';
       setCallStatus('Wrap-up');
       setWrapUp(true);
+      
+      // Process next call in queue when agent finishes
+      if (incomingCall?.uuid) {
+        processNextCallInQueue(incomingCall.uuid);
+      }
+      
       // Store sessionId in a ref or state before clearing incomingCall
       setIncomingCall(prev => {
         if (prev) {

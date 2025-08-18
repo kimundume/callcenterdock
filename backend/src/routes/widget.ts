@@ -703,6 +703,36 @@ router.get('/agents/:companyUuid', (req, res) => {
   }
 });
 
+// Get call queue information
+router.get('/queue/:companyUuid', (req, res) => {
+  try {
+    const { companyUuid } = req.params;
+    
+    if (!global.tempStorage || !global.tempStorage.callQueue || !global.tempStorage.callQueue[companyUuid]) {
+      return res.json({
+        success: true,
+        queueLength: 0,
+        queue: []
+      });
+    }
+    
+    const queue = global.tempStorage.callQueue[companyUuid];
+    
+    res.json({
+      success: true,
+      queueLength: queue.length,
+      queue: queue.map((entry, index) => ({
+        ...entry,
+        position: index + 1,
+        estimatedWaitTime: (index + 1) * 30
+      }))
+    });
+  } catch (error) {
+    console.error('Get queue error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Route call endpoint - handles both calls and chats
 router.post('/route-call', (req, res) => {
   try {
@@ -720,13 +750,12 @@ router.post('/route-call', (req, res) => {
     
     console.log('[DEBUG] Using company UUID:', targetCompanyUuid);
     
-    // Find available agents for this company (not currently in a call)
+    // Find available agents for this company (can handle multiple calls up to maxCalls)
     const availableAgents = Object.values(agentsData).filter((agent: any) => 
       agent.companyUuid === targetCompanyUuid &&
       agent.status === 'online' &&
       agent.availability === 'online' &&
-      agent.currentCalls < agent.maxCalls &&
-      agent.currentCalls === 0 // Only allow one call at a time
+      agent.currentCalls < (agent.maxCalls || 5) // Allow multiple calls up to maxCalls
     );
     
     console.log('[DEBUG] Available agents:', availableAgents.length);
@@ -739,28 +768,49 @@ router.post('/route-call', (req, res) => {
         agent.companyUuid === 'calldocker-company-uuid' &&
         agent.status === 'online' &&
         agent.availability === 'online' &&
-        agent.currentCalls < agent.maxCalls &&
-        agent.currentCalls === 0 // Only allow one call at a time
+        agent.currentCalls < (agent.maxCalls || 5) // Allow multiple calls up to maxCalls
       );
       finalAvailableAgents = callDockerAgents;
       console.log('[DEBUG] CallDocker fallback agents:', finalAvailableAgents.length);
     }
     
+    // Initialize call queue if it doesn't exist
+    if (!global.tempStorage) global.tempStorage = {};
+    if (!global.tempStorage.callQueue) global.tempStorage.callQueue = {};
+    if (!global.tempStorage.callQueue[targetCompanyUuid]) global.tempStorage.callQueue[targetCompanyUuid] = [];
+    
+    // Generate a session ID
+    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
     if (finalAvailableAgents.length === 0) {
+      // Add to queue instead of rejecting
+      const queueEntry = {
+        sessionId,
+        visitorId,
+        pageUrl,
+        callType,
+        timestamp: new Date().toISOString(),
+        companyUuid: targetCompanyUuid
+      };
+      
+      global.tempStorage.callQueue[targetCompanyUuid].push(queueEntry);
+      const queuePosition = global.tempStorage.callQueue[targetCompanyUuid].length;
+      const estimatedWaitTime = queuePosition * 30; // 30 seconds per call
+      
+      console.log('[DEBUG] Call queued. Position:', queuePosition, 'Estimated wait:', estimatedWaitTime);
+      
       return res.json({
-        success: false,
-        error: 'No available agents at the moment. Please try again later.',
-        message: 'All agents are currently busy or offline.',
-        queuePosition: 1,
-        estimatedWaitTime: 30 // 30 seconds estimated wait time
+        success: true,
+        message: 'Call queued successfully. An agent will be with you shortly.',
+        sessionId: sessionId,
+        queuePosition: queuePosition,
+        estimatedWaitTime: estimatedWaitTime,
+        status: 'queued'
       });
     }
     
     // Select the best available agent (simple round-robin for now)
     const selectedAgent = finalAvailableAgents[0];
-    
-    // Generate a session ID
-    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // Update agent call count
     selectedAgent.currentCalls += 1;
@@ -769,6 +819,12 @@ router.post('/route-call', (req, res) => {
     saveAgents();
     
     console.log('[DEBUG] Call routed to agent:', selectedAgent.username);
+    
+    // Process queue if there are queued calls
+    if (global.tempStorage.callQueue[targetCompanyUuid] && global.tempStorage.callQueue[targetCompanyUuid].length > 0) {
+      console.log('[DEBUG] Processing queue for company:', targetCompanyUuid);
+      // Queue processing will be handled by the agent when they finish a call
+    }
     
     // Trigger socket.io call routing to notify the agent
     try {
