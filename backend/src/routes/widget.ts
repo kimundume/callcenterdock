@@ -786,6 +786,51 @@ router.get('/call/logs/:companyUuid', (req, res) => {
   }
 });
 
+// Get agent status (for frontend polling)
+router.get('/agent/status', (req, res) => {
+  try {
+    const { agentUuid, agentId, username } = req.query;
+    console.log('[DEBUG] Getting agent status:', { agentUuid, agentId, username });
+    
+    // Find agent by UUID, ID, or username
+    let agent = null;
+    if (agentUuid) {
+      agent = Object.values(agentsData).find((a: any) => a.uuid === agentUuid);
+    } else if (agentId) {
+      agent = agentsData[agentId];
+    } else if (username) {
+      agent = Object.values(agentsData).find((a: any) => a.username === username);
+    }
+    
+    if (!agent) {
+      console.log('[DEBUG] Agent not found. Available agents:', Object.keys(agentsData));
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+    
+    res.json({
+      success: true,
+      agent: {
+        id: agent.uuid,
+        username: agent.username,
+        fullName: agent.fullName,
+        status: agent.status,
+        availability: agent.availability,
+        currentCalls: agent.currentCalls || 0,
+        maxCalls: agent.maxCalls || 5,
+        lastActivity: agent.lastActivity,
+        performance: agent.performance || {
+          callsHandled: 0,
+          avgRating: 0,
+          successRate: 0
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get agent status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Update agent status
 router.post('/agent/status', (req, res) => {
   try {

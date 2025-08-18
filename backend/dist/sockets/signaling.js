@@ -149,14 +149,38 @@ function registerSignalingHandlers(io) {
             const { uuid, agentId } = data;
             if (!uuid || !agentId)
                 return;
-            // Find agent in persistent storage
-            const agent = Object.values(agents).find((a) => a.companyUuid === uuid && a.username === agentId);
+            console.log('[DEBUG] Agent registration attempt:', { uuid, agentId });
+            console.log('[DEBUG] Available agents:', Object.keys(agents));
+            // Find agent in persistent storage - try multiple ways
+            let agent = null;
+            // First try: exact match by companyUuid and username
+            agent = Object.values(agents).find((a) => a.companyUuid === uuid && a.username === agentId);
+            // Second try: find by username only (for CallDocker agent)
+            if (!agent) {
+                agent = Object.values(agents).find((a) => a.username === agentId);
+            }
+            // Third try: find by UUID
+            if (!agent) {
+                agent = agents[agentId];
+            }
             if (agent) {
+                console.log('[DEBUG] Agent found:', agent.username, 'Status:', agent.status);
                 // Store socket connection
                 socketConnections[agentId] = socket.id;
-                socket.data = { uuid, agentId };
-                socket.join(`company-${uuid}`);
-                socket.emit('agent-registered', { success: true });
+                socket.data = { uuid: agent.companyUuid, agentId: agent.username };
+                socket.join(`company-${agent.companyUuid}`);
+                socket.join(`agent-${agent.username}`);
+                // Update agent status to online
+                agent.status = 'online';
+                agent.availability = 'online';
+                agent.lastActivity = new Date().toISOString();
+                agent.updatedAt = new Date().toISOString();
+                console.log('[DEBUG] Agent registered successfully:', agent.username);
+                socket.emit('agent-registered', { success: true, agent: agent });
+            }
+            else {
+                console.log('[DEBUG] Agent not found for registration:', { uuid, agentId });
+                socket.emit('agent-registered', { success: false, error: 'Agent not found' });
             }
         });
         // Join room for agent-specific events
@@ -192,17 +216,46 @@ function registerSignalingHandlers(io) {
             socket.emit('queue-update', { position, estimate });
             // If first in queue, try to route to agent
             if (position === 1) {
-                const agentIds = Object.keys(agents[uuid]);
-                if (agentIds.length > 0) {
-                    const agentId = agentIds[0];
-                    const agent = agents[uuid][agentId];
-                    io.to(agent.socketId).emit('incoming-call', { uuid, agentId, callTime: new Date().toISOString(), fromSocketId: socket.id });
-                    // Log the call
-                    if (!global.tempStorage.calls[uuid])
-                        global.tempStorage.calls[uuid] = [];
-                    const callLog = { from: socket.id, to: agentId, time: new Date().toISOString(), status: 'routed' };
-                    global.tempStorage.calls[uuid].push(callLog);
-                    socket.emit('call-routed', { success: true, agentSocketId: agent.socketId });
+                console.log('[DEBUG] Attempting to route call for company:', uuid);
+                // Find available agents for this company
+                let availableAgents = Object.values(agents).filter((agent) => agent.companyUuid === uuid &&
+                    agent.status === 'online' &&
+                    agent.availability === 'online' &&
+                    agent.currentCalls < (agent.maxCalls || 5));
+                // If no agents for this company, try CallDocker agent as fallback
+                if (availableAgents.length === 0 && uuid !== 'calldocker-company-uuid') {
+                    console.log('[DEBUG] No company agents available, trying CallDocker agent as fallback');
+                    availableAgents = Object.values(agents).filter((agent) => agent.companyUuid === 'calldocker-company-uuid' &&
+                        agent.status === 'online' &&
+                        agent.availability === 'online' &&
+                        agent.currentCalls < (agent.maxCalls || 5));
+                }
+                if (availableAgents.length > 0) {
+                    const agent = availableAgents[0]; // Simple round-robin for now
+                    const agentSocketId = socketConnections[agent.username];
+                    if (agentSocketId) {
+                        console.log('[DEBUG] Routing call to agent:', agent.username);
+                        io.to(agentSocketId).emit('incoming-call', {
+                            uuid,
+                            agentId: agent.username,
+                            callTime: new Date().toISOString(),
+                            fromSocketId: socket.id
+                        });
+                        // Log the call
+                        if (!global.tempStorage.calls[uuid])
+                            global.tempStorage.calls[uuid] = [];
+                        const callLog = { from: socket.id, to: agent.username, time: new Date().toISOString(), status: 'routed' };
+                        global.tempStorage.calls[uuid].push(callLog);
+                        socket.emit('call-routed', { success: true, agentSocketId });
+                    }
+                    else {
+                        console.log('[DEBUG] Agent socket not found:', agent.username);
+                        socket.emit('call-routed', { success: false, reason: 'Agent not connected' });
+                    }
+                }
+                else {
+                    console.log('[DEBUG] No available agents found');
+                    socket.emit('call-routed', { success: false, reason: 'No agents available' });
                 }
             }
         });

@@ -71,17 +71,15 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
   // Fetch agent UUID and active calls
   const fetchAgentData = async () => {
     try {
-      // Get all agents for the company to find this agent's UUID
-      const agentResponse = await fetch(`${API_URL}/agents/${companyUuid}`);
+      // Get agent status directly
+      const agentResponse = await fetch(`${API_URL}/agent/status?username=${agentUsername}`);
       const agentData = await agentResponse.json();
-      const agent = agentData.find((a: any) => a.username === agentUsername);
       
-      if (agent) {
-        // For now, use username as UUID since that's what the backend uses
-        setAgentUuid(agentUsername);
+      if (agentData.success) {
+        setAgentUuid(agentData.agent.id);
         
         // Then fetch active calls for this agent
-        const callsResponse = await fetch(`${API_URL}/calls/active?agentUuid=${agentUsername}`);
+        const callsResponse = await fetch(`${API_URL}/calls/active?agentUuid=${agentData.agent.id}`);
         const callsData = await callsResponse.json();
         if (callsData.success) {
           setActiveCalls(callsData.calls || []);
@@ -102,21 +100,25 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
 
   // Poll agent online status every 10s
   useEffect(() => {
-    if (!companyUuid) return;
+    if (!companyUuid || !agentUsername) return;
     let isMounted = true;
     const fetchStatus = () => {
-      fetch(`${getSocketUrl()}/api/agents/${companyUuid}`)
+      fetch(`${API_URL}/agent/status?username=${agentUsername}`)
         .then(res => {
           if (!res.ok) throw new Error('Not found');
           return res.json();
         })
-        .then(list => { if (isMounted) setChatOnline(Array.isArray(list) && list.some(a => a.online)); })
+        .then(data => { 
+          if (isMounted && data.success) {
+            setChatOnline(data.agent.status === 'online' && data.agent.availability === 'online');
+          }
+        })
         .catch(() => { if (isMounted) setChatOnline(false); });
     };
     fetchStatus();
     const interval = setInterval(fetchStatus, 10000);
     return () => { clearInterval(interval); isMounted = false; };
-  }, [companyUuid]);
+  }, [companyUuid, agentUsername]);
 
   // Sync tab with URL
   React.useEffect(() => {

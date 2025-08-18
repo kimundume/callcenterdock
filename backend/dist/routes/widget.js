@@ -1,4 +1,13 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -225,7 +234,7 @@ router.get('/debug/agents', (req, res) => {
 });
 // ===== AGENT AUTHENTICATION ENDPOINTS =====
 // Agent login endpoint
-router.post('/auth/login', async (req, res) => {
+router.post('/auth/login', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         console.log('[DEBUG] Agent login request received:', {
             body: req.body,
@@ -261,7 +270,7 @@ router.post('/auth/login', async (req, res) => {
             passwordLength: agent.password ? agent.password.length : 0
         });
         // Verify password
-        const isValidPassword = await bcrypt_1.default.compare(password, agent.password);
+        const isValidPassword = yield bcrypt_1.default.compare(password, agent.password);
         console.log('[DEBUG] Password validation result:', isValidPassword);
         console.log('[DEBUG] Expected password hash:', agent.password);
         console.log('[DEBUG] Provided password:', password);
@@ -315,9 +324,9 @@ router.post('/auth/login', async (req, res) => {
         console.error('Agent login error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
-});
+}));
 // Agent logout endpoint
-router.post('/auth/logout', async (req, res) => {
+router.post('/auth/logout', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { agentId } = req.body;
         if (agentId) {
@@ -336,7 +345,7 @@ router.post('/auth/logout', async (req, res) => {
         console.error('Agent logout error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
-});
+}));
 // Get agent status
 router.get('/agent/status/:agentId', (req, res) => {
     try {
@@ -698,6 +707,50 @@ router.get('/call/logs/:companyUuid', (req, res) => {
     }
     catch (error) {
         console.error('Get call logs error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Get agent status (for frontend polling)
+router.get('/agent/status', (req, res) => {
+    try {
+        const { agentUuid, agentId, username } = req.query;
+        console.log('[DEBUG] Getting agent status:', { agentUuid, agentId, username });
+        // Find agent by UUID, ID, or username
+        let agent = null;
+        if (agentUuid) {
+            agent = Object.values(agentsData).find((a) => a.uuid === agentUuid);
+        }
+        else if (agentId) {
+            agent = agentsData[agentId];
+        }
+        else if (username) {
+            agent = Object.values(agentsData).find((a) => a.username === username);
+        }
+        if (!agent) {
+            console.log('[DEBUG] Agent not found. Available agents:', Object.keys(agentsData));
+            return res.status(404).json({ error: 'Agent not found' });
+        }
+        res.json({
+            success: true,
+            agent: {
+                id: agent.uuid,
+                username: agent.username,
+                fullName: agent.fullName,
+                status: agent.status,
+                availability: agent.availability,
+                currentCalls: agent.currentCalls || 0,
+                maxCalls: agent.maxCalls || 5,
+                lastActivity: agent.lastActivity,
+                performance: agent.performance || {
+                    callsHandled: 0,
+                    avgRating: 0,
+                    successRate: 0
+                }
+            }
+        });
+    }
+    catch (error) {
+        console.error('Get agent status error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
