@@ -733,6 +733,45 @@ router.get('/queue/:companyUuid', (req, res) => {
   }
 });
 
+// Reset agent currentCalls (for testing/debugging)
+router.post('/agent/reset-calls', (req, res) => {
+  try {
+    const { username } = req.body;
+    console.log('[DEBUG] Resetting currentCalls for agent:', username);
+    
+    // Find agent by username
+    const agent = Object.values(agentsData).find((a: any) => a.username === username);
+    
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+    
+    // Reset currentCalls
+    agent.currentCalls = 0;
+    agent.lastActivity = new Date().toISOString();
+    agent.updatedAt = new Date().toISOString();
+    saveAgents();
+    
+    console.log('[DEBUG] Agent currentCalls reset successfully:', {
+      username: agent.username,
+      currentCalls: agent.currentCalls
+    });
+    
+    res.json({
+      success: true,
+      message: 'Agent currentCalls reset successfully',
+      agent: {
+        username: agent.username,
+        currentCalls: agent.currentCalls,
+        lastActivity: agent.lastActivity
+      }
+    });
+  } catch (error) {
+    console.error('Reset agent calls error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Route call endpoint - handles both calls and chats
 router.post('/route-call', (req, res) => {
   try {
@@ -751,12 +790,26 @@ router.post('/route-call', (req, res) => {
     console.log('[DEBUG] Using company UUID:', targetCompanyUuid);
     
     // Find available agents for this company (can handle multiple calls up to maxCalls)
-    const availableAgents = Object.values(agentsData).filter((agent: any) => 
-      agent.companyUuid === targetCompanyUuid &&
-      agent.status === 'online' &&
-      agent.availability === 'online' &&
-      agent.currentCalls < (agent.maxCalls || 5) // Allow multiple calls up to maxCalls
-    );
+    const availableAgents = Object.values(agentsData).filter((agent: any) => {
+      // Reset currentCalls if it's been more than 5 minutes since last activity
+      if (agent.lastActivity) {
+        const lastActivity = new Date(agent.lastActivity);
+        const now = new Date();
+        const minutesSinceLastActivity = (now.getTime() - lastActivity.getTime()) / (1000 * 60);
+        
+        if (minutesSinceLastActivity > 5 && agent.currentCalls > 0) {
+          console.log(`[DEBUG] Resetting currentCalls for agent ${agent.username} (inactive for ${Math.round(minutesSinceLastActivity)} minutes)`);
+          agent.currentCalls = 0;
+          agent.lastActivity = now.toISOString();
+          agent.updatedAt = now.toISOString();
+        }
+      }
+      
+      return agent.companyUuid === targetCompanyUuid &&
+        agent.status === 'online' &&
+        agent.availability === 'online' &&
+        agent.currentCalls < (agent.maxCalls || 5); // Allow multiple calls up to maxCalls
+    });
     
     console.log('[DEBUG] Available agents:', availableAgents.length);
     
