@@ -415,7 +415,7 @@ app.post('/api/form-push', async (req, res) => {
     console.log('Form created successfully (temp storage):', form);
 
     // Real-time: emit to session room
-    io.to(sessionId).emit('form:push', form);
+    io.to(`session-${sessionId}`).emit('form:push', form);
     res.json(form);
   } catch (error) {
     console.error('Form push error:', error);
@@ -549,8 +549,8 @@ app.post('/api/form-response', async (req, res) => {
     console.log('Form message saved to chat:', formMessage);
 
     // Real-time: emit to session room
-    io.to(sessionId).emit('form:response', response);
-    io.to(sessionId).emit('chat:message', formMessage);
+    io.to(`session-${sessionId}`).emit('form:response', response);
+    io.to(`session-${sessionId}`).emit('chat:message', formMessage);
     
     // Include contact info in response if created/updated
     res.json({

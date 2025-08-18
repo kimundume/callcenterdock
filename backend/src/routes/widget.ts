@@ -720,12 +720,13 @@ router.post('/route-call', (req, res) => {
     
     console.log('[DEBUG] Using company UUID:', targetCompanyUuid);
     
-    // Find available agents for this company
+    // Find available agents for this company (not currently in a call)
     const availableAgents = Object.values(agentsData).filter((agent: any) => 
       agent.companyUuid === targetCompanyUuid &&
       agent.status === 'online' &&
       agent.availability === 'online' &&
-      agent.currentCalls < agent.maxCalls
+      agent.currentCalls < agent.maxCalls &&
+      agent.currentCalls === 0 // Only allow one call at a time
     );
     
     console.log('[DEBUG] Available agents:', availableAgents.length);
@@ -738,7 +739,8 @@ router.post('/route-call', (req, res) => {
         agent.companyUuid === 'calldocker-company-uuid' &&
         agent.status === 'online' &&
         agent.availability === 'online' &&
-        agent.currentCalls < agent.maxCalls
+        agent.currentCalls < agent.maxCalls &&
+        agent.currentCalls === 0 // Only allow one call at a time
       );
       finalAvailableAgents = callDockerAgents;
       console.log('[DEBUG] CallDocker fallback agents:', finalAvailableAgents.length);
@@ -748,7 +750,9 @@ router.post('/route-call', (req, res) => {
       return res.json({
         success: false,
         error: 'No available agents at the moment. Please try again later.',
-        message: 'All agents are currently busy or offline.'
+        message: 'All agents are currently busy or offline.',
+        queuePosition: 1,
+        estimatedWaitTime: 30 // 30 seconds estimated wait time
       });
     }
     

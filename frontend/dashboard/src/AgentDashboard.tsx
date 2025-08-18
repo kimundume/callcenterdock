@@ -191,6 +191,10 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
       if (data.sessionId) {
         socket.emit('join-room', { room: `session-${data.sessionId}` });
         console.log('[AgentDashboard] Joined session room for WebRTC:', `session-${data.sessionId}`);
+        
+        // Also join the session room for form:push events
+        socket.emit('join-room', { room: `session-${data.sessionId}` });
+        console.log('[AgentDashboard] Joined session room for form:push:', `session-${data.sessionId}`);
       }
       
       console.log('callStatus should now be "Ringing"');

@@ -380,7 +380,7 @@ app.post('/api/form-push', (req, res) => __awaiter(void 0, void 0, void 0, funct
         persistentStorage.formPushes.push(form);
         console.log('Form created successfully (temp storage):', form);
         // Real-time: emit to session room
-        io.to(sessionId).emit('form:push', form);
+        io.to(`session-${sessionId}`).emit('form:push', form);
         res.json(form);
     }
     catch (error) {
@@ -500,8 +500,8 @@ app.post('/api/form-response', (req, res) => __awaiter(void 0, void 0, void 0, f
         console.log('Form response created successfully (temp storage):', response);
         console.log('Form message saved to chat:', formMessage);
         // Real-time: emit to session room
-        io.to(sessionId).emit('form:response', response);
-        io.to(sessionId).emit('chat:message', formMessage);
+        io.to(`session-${sessionId}`).emit('form:response', response);
+        io.to(`session-${sessionId}`).emit('chat:message', formMessage);
         // Include contact info in response if created/updated
         res.json(Object.assign(Object.assign({}, response), { contactCreated }));
     }
