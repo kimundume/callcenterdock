@@ -17,6 +17,10 @@ if [ $? -eq 0 ]; then
     if [ -d "../widget" ]; then
         cp -r $WIDGET_SOURCE $WIDGET_DEST
         echo "Widget files copied successfully!"
+        
+        # Force copy widget.js to ensure it's always updated
+        cp ../widget/widget.js dist/widget.js
+        echo "Widget.js force copied!"
     else
         echo "Warning: Widget source directory not found!"
     fi

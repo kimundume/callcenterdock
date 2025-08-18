@@ -15,6 +15,10 @@ if ($LASTEXITCODE -eq 0) {
     if (Test-Path $widgetSource) {
         Copy-Item -Path $widgetSource -Destination $widgetDest -Recurse -Force
         Write-Host "Widget files copied successfully!" -ForegroundColor Green
+        
+        # Force copy widget.js to ensure it's always updated
+        Copy-Item -Path "..\widget\widget.js" -Destination "dist\widget.js" -Force
+        Write-Host "Widget.js force copied!" -ForegroundColor Green
     } else {
         Write-Host "Warning: Widget source directory not found!" -ForegroundColor Yellow
     }
