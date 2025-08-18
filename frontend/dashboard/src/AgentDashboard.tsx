@@ -1003,7 +1003,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                     // Push email form
                     const formData = {
                       companyId: companyUuid,
-                      sessionId: activeChat || 'demo-session', // Use active chat session ID
+                      sessionId: incomingCall?.sessionId || activeChat || 'demo-session', // Use call session ID first
                       from: agentUsername,
                       type: 'email',
                       fields: [
@@ -1048,7 +1048,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                     // Push phone form
                     const formData = {
                       companyId: companyUuid,
-                      sessionId: activeChat || 'demo-session', // Use active chat session ID
+                      sessionId: incomingCall?.sessionId || activeChat || 'demo-session', // Use call session ID first
                       from: agentUsername,
                       type: 'phone',
                       fields: [
@@ -1093,7 +1093,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                     // Push custom form
                     const formData = {
                       companyId: companyUuid,
-                      sessionId: activeChat || 'demo-session', // Use active chat session ID
+                      sessionId: incomingCall?.sessionId || activeChat || 'demo-session', // Use call session ID first
                       from: agentUsername,
                       type: 'custom',
                       fields: [

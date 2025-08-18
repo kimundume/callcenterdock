@@ -655,24 +655,52 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
       // Establish socket connection and join session room for form:push events
       if (!socketRef.current) {
         socketRef.current = io(SOCKET_URL);
-        socketRef.current.on('connect', () => {
-          console.log('[IVRChatWidget] Socket connected for WebRTC');
+        
+        // Wait for socket to connect before proceeding
+        await new Promise((resolve, reject) => {
+          socketRef.current.on('connect', () => {
+            console.log('[IVRChatWidget] Socket connected for WebRTC');
+            resolve(true);
+          });
           
-          // Join the session room for form:push events
-          socketRef.current.emit('join-room', { room: `session-${sessionId}` });
-          console.log('[IVRChatWidget] Joined session room for form:push:', `session-${sessionId}`);
+          socketRef.current.on('connect_error', (error) => {
+            console.error('[IVRChatWidget] Socket connection error:', error);
+            reject(error);
+          });
           
-          // Set up socket listeners for form:push
+          // Set up socket listeners for form:push and WebRTC
           socketRef.current.on('form:push', (formData) => {
             console.log('[IVRChatWidget] Received form push from agent:', formData);
             showFormToVisitor(formData);
           });
+          
+          // WebRTC answer listener
+          socketRef.current.on('webrtc-answer', (data) => {
+            console.log('[IVRChatWidget] Received WebRTC answer:', data);
+            const pc = (window as any).currentPeerConnection;
+            if (pc && data.answer) {
+              pc.setRemoteDescription(new RTCSessionDescription(data.answer))
+                .then(() => console.log('[IVRChatWidget] Set remote description from answer'))
+                .catch(err => console.error('[IVRChatWidget] Error setting remote description:', err));
+            }
+          });
+          
+          // WebRTC ICE candidate listener
+          socketRef.current.on('webrtc-ice-candidate', (data) => {
+            console.log('[IVRChatWidget] Received ICE candidate:', data);
+            const pc = (window as any).currentPeerConnection;
+            if (pc && data.candidate) {
+              pc.addIceCandidate(new RTCIceCandidate(data.candidate))
+                .then(() => console.log('[IVRChatWidget] Added ICE candidate'))
+                .catch(err => console.error('[IVRChatWidget] Error adding ICE candidate:', err));
+            }
+          });
         });
-      } else {
-        // Join the session room for form:push events
-        socketRef.current.emit('join-room', { room: `session-${sessionId}` });
-        console.log('[IVRChatWidget] Joined session room for form:push:', `session-${sessionId}`);
       }
+      
+      // Join the session room for form:push events
+      socketRef.current.emit('join-room', { room: `session-${sessionId}` });
+      console.log('[IVRChatWidget] Joined session room for form:push:', `session-${sessionId}`);
       
       // Get user media for audio
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
