@@ -136,6 +136,39 @@
       });
   }
 
+  function startChatSession(sessionId, agentName) {
+    console.log('[Widget] Starting chat session:', sessionId, 'with agent:', agentName);
+    
+    // Load Socket.IO and establish connection
+    loadSocketIo(() => {
+      socket = io(BACKEND_URL);
+      
+      socket.on('connect', () => {
+        console.log('[Widget] Socket connected for chat session');
+        
+        // Join the session room for form:push events
+        socket.emit('join-room', { room: `session-${sessionId}` });
+        console.log('[Widget] Joined session room for form:push:', `session-${sessionId}`);
+        
+        // Join the chat room
+        socket.emit('chat:join', {
+          sessionId: sessionId,
+          companyUuid: getCompanyUuid(),
+          visitorId: getVisitorId(),
+          pageUrl: window.location.href
+        });
+        
+        // Set up socket listeners for chat and form:push
+        setupSocketListeners();
+      });
+      
+      socket.on('connect_error', (error) => {
+        console.error('[Widget] Socket connection error:', error);
+        updateChatStatus('Connection error - please try again');
+      });
+    });
+  }
+
   function openCallModal() {
     if (currentModal) {
       document.body.removeChild(currentModal);

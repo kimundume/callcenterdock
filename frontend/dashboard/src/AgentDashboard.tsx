@@ -520,11 +520,13 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
   useEffect(() => {
     let pc;
     let cleanup = false;
+    
     if (callStatus === 'In Call' && socketRef.current) {
       setWebrtcState('connecting');
       pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
       peerRef.current = pc;
       console.log('Agent: Created RTCPeerConnection');
+      
       // Get user media and add tracks before answer
       navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
         setLocalStream(stream);
@@ -533,6 +535,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
       }).catch(err => {
         console.error('Agent getUserMedia error:', err);
       });
+      
       // Handle remote stream
       pc.ontrack = (event) => {
         const [remote] = event.streams;
@@ -540,12 +543,15 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
         if (remoteAudioRef.current) remoteAudioRef.current.srcObject = remote;
         if (remote) console.log('Agent received remoteStream tracks:', remote.getTracks());
       };
+      
       pc.onsignalingstatechange = () => {
         console.log('Agent signalingState:', pc.signalingState);
       };
+      
       pc.oniceconnectionstatechange = () => {
         console.log('Agent ICE state:', pc.iceConnectionState);
       };
+      
       // ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate && socketRef.current && incomingCall) {
@@ -555,10 +561,11 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
           });
         }
       };
+      
       // Handle offer from widget
-      socketRef.current.on('webrtc-offer', ({ offer, sessionId }) => {
+      const handleOffer = ({ offer, sessionId }) => {
         console.log('[AgentDashboard] Received WebRTC offer for session:', sessionId);
-        if (pc.signalingState !== 'closed') {
+        if (pc && pc.signalingState !== 'closed') {
           pc.setRemoteDescription(new RTCSessionDescription(offer)).then(() => {
             // Only create answer after tracks are added
             pc.createAnswer().then(answer => {
@@ -574,29 +581,42 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
         } else {
           console.warn('[AgentDashboard] Tried to setRemoteDescription/createAnswer on closed connection');
         }
-      });
+      };
+      
       // Handle ICE from widget
-      socketRef.current.on('webrtc-ice-candidate', ({ candidate, sessionId }) => {
+      const handleIceCandidate = ({ candidate, sessionId }) => {
         console.log('[AgentDashboard] Received ICE candidate for session:', sessionId);
-        if (pc.signalingState !== 'closed') {
+        if (pc && pc.signalingState !== 'closed') {
           pc.addIceCandidate(new RTCIceCandidate(candidate));
         } else {
           console.warn('[AgentDashboard] Tried to addIceCandidate on closed connection');
         }
-      });
+      };
+      
+      // Add event listeners
+      socketRef.current.on('webrtc-offer', handleOffer);
+      socketRef.current.on('webrtc-ice-candidate', handleIceCandidate);
+      
+      // Store cleanup function
+      cleanup = () => {
+        socketRef.current.off('webrtc-offer', handleOffer);
+        socketRef.current.off('webrtc-ice-candidate', handleIceCandidate);
+        if (pc) {
+          console.log('Agent: Closing RTCPeerConnection');
+          pc.close();
+          pc = null;
+        }
+        setWebrtcState('idle');
+        setRemoteStream(null);
+        setLocalStream(null);
+      };
     }
-    // Only clean up on unmount or call truly ending
+    
+    // Cleanup function
     return () => {
-      if (cleanup) return;
-      cleanup = true;
-      if (peerRef.current) {
-        console.log('Agent: Closing RTCPeerConnection');
-        peerRef.current.close();
-        peerRef.current = null;
+      if (cleanup && typeof cleanup === 'function') {
+        cleanup();
       }
-      setWebrtcState('idle');
-      setRemoteStream(null);
-      setLocalStream(null);
     };
   }, [callStatus === 'In Call', incomingCall]);
 

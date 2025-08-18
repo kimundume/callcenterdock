@@ -652,6 +652,28 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
     console.log('[IVRChatWidget] startWebRTC called with sessionId:', sessionId, 'agentName:', agentName);
     
     try {
+      // Establish socket connection and join session room for form:push events
+      if (!socketRef.current) {
+        socketRef.current = io(SOCKET_URL);
+        socketRef.current.on('connect', () => {
+          console.log('[IVRChatWidget] Socket connected for WebRTC');
+          
+          // Join the session room for form:push events
+          socketRef.current.emit('join-room', { room: `session-${sessionId}` });
+          console.log('[IVRChatWidget] Joined session room for form:push:', `session-${sessionId}`);
+          
+          // Set up socket listeners for form:push
+          socketRef.current.on('form:push', (formData) => {
+            console.log('[IVRChatWidget] Received form push from agent:', formData);
+            showFormToVisitor(formData);
+          });
+        });
+      } else {
+        // Join the session room for form:push events
+        socketRef.current.emit('join-room', { room: `session-${sessionId}` });
+        console.log('[IVRChatWidget] Joined session room for form:push:', `session-${sessionId}`);
+      }
+      
       // Get user media for audio
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       console.log('[IVRChatWidget] getUserMedia success', stream);
@@ -728,6 +750,158 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
       console.error('[IVRChatWidget] WebRTC setup error:', error);
       setCallError('Failed to access microphone. Please check permissions.');
     }
+  };
+
+  // Function to show form to visitor
+  const showFormToVisitor = (formData: any) => {
+    console.log('[IVRChatWidget] Showing form to visitor:', formData);
+    
+    // Create form modal
+    const formModal = document.createElement('div');
+    formModal.className = 'calldocker-modal';
+    formModal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    `;
+    
+    const formContent = document.createElement('div');
+    formContent.style.cssText = `
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      max-width: 400px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    `;
+    
+    const formTitle = document.createElement('h3');
+    formTitle.textContent = 'Agent Request';
+    formTitle.style.cssText = 'margin: 0 0 20px 0; color: #333; font-size: 18px;';
+    
+    const formDescription = document.createElement('p');
+    formDescription.textContent = 'The agent has requested some information from you:';
+    formDescription.style.cssText = 'margin: 0 0 20px 0; color: #666; font-size: 14px;';
+    
+    const form = document.createElement('form');
+    form.style.cssText = 'display: flex; flex-direction: column; gap: 15px;';
+    
+    // Create form fields
+    formData.fields.forEach((field: any, index: number) => {
+      const fieldContainer = document.createElement('div');
+      
+      const label = document.createElement('label');
+      label.textContent = field.label + (field.required ? ' *' : '');
+      label.style.cssText = 'font-weight: 500; color: #333; font-size: 14px;';
+      
+      const input = document.createElement('input');
+      input.type = field.type === 'email' ? 'email' : field.type === 'number' ? 'number' : 'text';
+      input.required = field.required;
+      input.style.cssText = `
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+        margin-top: 5px;
+      `;
+      
+      fieldContainer.appendChild(label);
+      fieldContainer.appendChild(input);
+      form.appendChild(fieldContainer);
+    });
+    
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = 'display: flex; gap: 10px; margin-top: 20px;';
+    
+    const submitBtn = document.createElement('button');
+    submitBtn.textContent = 'Submit';
+    submitBtn.type = 'submit';
+    submitBtn.style.cssText = `
+      padding: 10px 20px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    `;
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.type = 'button';
+    cancelBtn.style.cssText = `
+      padding: 10px 20px;
+      background: #6c757d;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    `;
+    
+    // Handle form submission
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const formValues: any = {};
+      
+      // Collect form values
+      form.querySelectorAll('input').forEach((input: any) => {
+        const label = input.previousElementSibling?.textContent?.replace(' *', '') || 'field';
+        formValues[label] = input.value;
+      });
+      
+      try {
+        // Send form response to backend
+        await fetch(`${getBackendUrl()}/api/form-response`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            companyId: formData.companyId,
+            sessionId: formData.sessionId,
+            formId: formData._id,
+            from: 'visitor',
+            values: formValues
+          })
+        });
+        
+        // Remove modal
+        document.body.removeChild(formModal);
+        
+        // Show success message
+        setMessages(prev => [...prev, { from: 'system', text: 'Form submitted successfully!' }]);
+        
+      } catch (error) {
+        console.error('[IVRChatWidget] Form submission error:', error);
+        alert('Failed to submit form. Please try again.');
+      }
+    };
+    
+    // Handle cancel
+    cancelBtn.onclick = () => {
+      document.body.removeChild(formModal);
+    };
+    
+    buttonContainer.appendChild(submitBtn);
+    buttonContainer.appendChild(cancelBtn);
+    form.appendChild(buttonContainer);
+    
+    formContent.appendChild(formTitle);
+    formContent.appendChild(formDescription);
+    formContent.appendChild(form);
+    
+    formModal.appendChild(formContent);
+    document.body.appendChild(formModal);
   };
 
   // Detect dark mode (auto or from prop)
