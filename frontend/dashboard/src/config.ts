@@ -42,4 +42,6 @@ console.log('🔧 Backend Configuration:', {
   environment: window.location.hostname === 'localhost' ? 'development' : 'production',
   backendUrl: getBackendUrl(),
   socketUrl: getSocketUrl()
-}); 
+});
+
+// Force deployment trigger for WebRTC audio fix - v2.1 

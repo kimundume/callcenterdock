@@ -993,7 +993,8 @@ router.post('/route-call', (req, res) => {
           sessionId: sessionId,
           visitorId: visitorId,
           pageUrl: pageUrl,
-          callType: callType
+          callType: callType,
+          fromSocketId: visitorId // Use visitorId as the socket identifier for WebRTC
         });
         
         // Also send to company room as backup
@@ -1004,7 +1005,8 @@ router.post('/route-call', (req, res) => {
           sessionId: sessionId,
           visitorId: visitorId,
           pageUrl: pageUrl,
-          callType: callType
+          callType: callType,
+          fromSocketId: visitorId // Use visitorId as the socket identifier for WebRTC
         });
         
         console.log('[DEBUG] Incoming-call event sent to rooms:', agentRoom, companyRoom);
