@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CallDocker Backend Diagnostic Tool</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+        }
+        h1 { text-align: center; margin-bottom: 30px; }
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .test-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid transparent;
+        }
+        .test-card.success { border-color: #28a745; }
+        .test-card.error { border-color: #dc3545; }
+        .test-card.warning { border-color: #ffc107; }
+        .test-card.info { border-color: #17a2b8; }
+        
+        button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+        button:hover { background: #218838; transform: translateY(-2px); }
+        button:disabled { background: #6c757d; cursor: not-allowed; transform: none; }
+        button.danger { background: #dc3545; }
+        button.danger:hover { background: #c82333; }
+        button.warning { background: #ffc107; color: #212529; }
+        button.warning:hover { background: #e0a800; }
+        
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        .success { background: rgba(40, 167, 69, 0.3); border: 1px solid #28a745; }
+        .error { background: rgba(220, 53, 69, 0.3); border: 1px solid #dc3545; }
+        .info { background: rgba(23, 162, 184, 0.3); border: 1px solid #17a2b8; }
+        .warning { background: rgba(255, 193, 7, 0.3); border: 1px solid #ffc107; color: #212529; }
+        
+        .results {
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin-top: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .endpoint-test {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 8px 0;
+            padding: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 5px;
+        }
+        
+        .overall-status {
+            text-align: center;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 CallDocker Backend Diagnostic Tool</h1>
+        
+        <div class="overall-status" id="overallStatus">
+            <div class="loading"></div> Initializing diagnostic tests...
+        </div>
+        
+        <div style="text-align: center; margin: 20px 0;">
+            <button onclick="runFullDiagnostic()">🔍 Run Full Diagnostic</button>
+            <button onclick="testBasicConnectivity()">🌐 Test Basic Connection</button>
+            <button onclick="testWebRTCEndpoints()">🎤 Test WebRTC Endpoints</button>
+            <button onclick="resetAgents()">🔄 Reset Agents</button>
+            <button onclick="manuallyTriggerDeploy()" class="warning">⚡ Trigger Manual Deploy</button>
+        </div>
+        
+        <div class="test-grid">
+            <div class="test-card" id="basicConnectivity">
+                <h3>🌐 Basic Connectivity</h3>
+                <div id="basicStatus">Ready to test...</div>
+                <div id="basicResults" class="results" style="display: none;"></div>
+            </div>
+            
+            <div class="test-card" id="endpointTests">
+                <h3>📡 Endpoint Tests</h3>
+                <div id="endpointStatus">Ready to test...</div>
+                <div id="endpointResults" class="results" style="display: none;"></div>
+            </div>
+            
+            <div class="test-card" id="webrtcTests">
+                <h3>🎤 WebRTC Tests</h3>
+                <div id="webrtcStatus">Ready to test...</div>
+                <div id="webrtcResults" class="results" style="display: none;"></div>
+            </div>
+            
+            <div class="test-card" id="agentTests">
+                <h3>👥 Agent Tests</h3>
+                <div id="agentStatus">Ready to test...</div>
+                <div id="agentResults" class="results" style="display: none;"></div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 30px;">
+            <h3>🎯 Quick Actions</h3>
+            <button onclick="testSpecificEndpoint('/api/agents/calldocker-company-uuid')">Test Agents Endpoint</button>
+            <button onclick="testSpecificEndpoint('/api/widget/queue/calldocker-company-uuid')">Test Queue Endpoint</button>
+            <button onclick="testSpecificEndpoint('/api/widget/agent/status')">Test Agent Status</button>
+            <button onclick="checkRenderStatus()" class="warning">Check Render Deploy Status</button>
+        </div>
+        
+        <div id="actionResults" class="results" style="display: none; margin-top: 20px;"></div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'https://callcenterdock.onrender.com';
+        
+        // Critical endpoints to test
+        const ENDPOINTS = [
+            { path: '/api/agents/calldocker-company-uuid', method: 'GET', name: 'Agents List' },
+            { path: '/api/widget/queue/calldocker-company-uuid', method: 'GET', name: 'Queue Status' },
+            { path: '/api/widget/agent/status?username=calldocker_agent', method: 'GET', name: 'Agent Status' },
+            { path: '/api/widget/agent/end-call', method: 'POST', name: 'End Call' },
+            { path: '/api/widget/agent/auto-reset', method: 'POST', name: 'Auto Reset' },
+            { path: '/api/widget/route-call', method: 'POST', name: 'Route Call' },
+            { path: '/socket.io/?transport=polling', method: 'GET', name: 'Socket.IO' }
+        ];
+        
+        function updateStatus(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="status ${type}">${message}</div>`;
+            
+            // Update card border
+            const card = element.closest('.test-card');
+            if (card) {
+                card.className = `test-card ${type}`;
+            }
+        }
+        
+        function showResults(elementId, data) {
+            const resultsElement = document.getElementById(elementId);
+            resultsElement.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            resultsElement.style.display = 'block';
+        }
+        
+        function updateOverallStatus(message, type = 'info') {
+            const element = document.getElementById('overallStatus');
+            element.className = `overall-status ${type}`;
+            element.innerHTML = message;
+        }
+        
+        async function testBasicConnectivity() {
+            updateStatus('basicStatus', '🔍 Testing basic connectivity...', 'info');
+            
+            try {
+                const startTime = Date.now();
+                const response = await fetch(`${BACKEND_URL}/`, { 
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                const endTime = Date.now();
+                const responseTime = endTime - startTime;
+                
+                const result = {
+                    status: response.status,
+                    statusText: response.statusText,
+                    responseTime: `${responseTime}ms`,
+                    headers: Object.fromEntries(response.headers.entries()),
+                    url: response.url
+                };
+                
+                if (response.ok) {
+                    updateStatus('basicStatus', `✅ Backend reachable (${responseTime}ms)`, 'success');
+                } else {
+                    updateStatus('basicStatus', `❌ Backend returned ${response.status}`, 'error');
+                }
+                
+                showResults('basicResults', result);
+                
+            } catch (error) {
+                updateStatus('basicStatus', `❌ Connection failed: ${error.message}`, 'error');
+                showResults('basicResults', { error: error.message, stack: error.stack });
+            }
+        }
+        
+        async function testEndpoints() {
+            updateStatus('endpointStatus', '📡 Testing all endpoints...', 'info');
+            
+            const results = [];
+            
+            for (const endpoint of ENDPOINTS) {
+                try {
+                    const url = `${BACKEND_URL}${endpoint.path}`;
+                    const options = { method: endpoint.method };
+                    
+                    if (endpoint.method === 'POST') {
+                        options.headers = { 'Content-Type': 'application/json' };
+                        options.body = JSON.stringify({});
+                    }
+                    
+                    const startTime = Date.now();
+                    const response = await fetch(url, options);
+                    const endTime = Date.now();
+                    
+                    const result = {
+                        name: endpoint.name,
+                        path: endpoint.path,
+                        status: response.status,
+                        statusText: response.statusText,
+                        responseTime: `${endTime - startTime}ms`,
+                        success: response.ok
+                    };
+                    
+                    results.push(result);
+                    
+                } catch (error) {
+                    results.push({
+                        name: endpoint.name,
+                        path: endpoint.path,
+                        error: error.message,
+                        success: false
+                    });
+                }
+            }
+            
+            const successCount = results.filter(r => r.success).length;
+            const totalCount = results.length;
+            
+            if (successCount === totalCount) {
+                updateStatus('endpointStatus', `✅ All endpoints working (${successCount}/${totalCount})`, 'success');
+            } else if (successCount > 0) {
+                updateStatus('endpointStatus', `⚠️ Partial success (${successCount}/${totalCount})`, 'warning');
+            } else {
+                updateStatus('endpointStatus', `❌ All endpoints failed (0/${totalCount})`, 'error');
+            }
+            
+            showResults('endpointResults', results);
+        }
+        
+        async function testWebRTCEndpoints() {
+            updateStatus('webrtcStatus', '🎤 Testing WebRTC endpoints...', 'info');
+            
+            const webrtcTests = [
+                { name: 'Agent Registration', path: '/socket.io/' },
+                { name: 'Session Creation', path: '/api/widget/route-call' },
+                { name: 'Agent Status', path: '/api/widget/agent/status' }
+            ];
+            
+            const results = [];
+            
+            for (const test of webrtcTests) {
+                try {
+                    const response = await fetch(`${BACKEND_URL}${test.path}`);
+                    results.push({
+                        name: test.name,
+                        status: response.status,
+                        success: response.status !== 404 && response.status !== 502
+                    });
+                } catch (error) {
+                    results.push({
+                        name: test.name,
+                        error: error.message,
+                        success: false
+                    });
+                }
+            }
+            
+            const successCount = results.filter(r => r.success).length;
+            
+            if (successCount === results.length) {
+                updateStatus('webrtcStatus', '✅ WebRTC endpoints ready', 'success');
+            } else {
+                updateStatus('webrtcStatus', `❌ WebRTC endpoints failed (${successCount}/${results.length})`, 'error');
+            }
+            
+            showResults('webrtcResults', results);
+        }
+        
+        async function testAgents() {
+            updateStatus('agentStatus', '👥 Testing agent functionality...', 'info');
+            
+            try {
+                // Test agent list
+                const agentsResponse = await fetch(`${BACKEND_URL}/api/agents/calldocker-company-uuid`);
+                
+                if (agentsResponse.ok) {
+                    const agents = await agentsResponse.json();
+                    const availableAgents = agents.filter(a => 
+                        a.status === 'online' && 
+                        a.availability === 'online' && 
+                        a.currentCalls < (a.maxCalls || 5)
+                    );
+                    
+                    updateStatus('agentStatus', `✅ Found ${agents.length} agents, ${availableAgents.length} available`, 'success');
+                    
+                    showResults('agentResults', {
+                        totalAgents: agents.length,
+                        availableAgents: availableAgents.length,
+                        agents: agents.map(a => ({
+                            username: a.username,
+                            status: a.status,
+                            currentCalls: a.currentCalls,
+                            maxCalls: a.maxCalls
+                        }))
+                    });
+                } else {
+                    updateStatus('agentStatus', `❌ Agent API failed: ${agentsResponse.status}`, 'error');
+                    showResults('agentResults', { error: `HTTP ${agentsResponse.status}` });
+                }
+                
+            } catch (error) {
+                updateStatus('agentStatus', `❌ Agent test failed: ${error.message}`, 'error');
+                showResults('agentResults', { error: error.message });
+            }
+        }
+        
+        async function resetAgents() {
+            updateOverallStatus('🔄 Resetting all agents...', 'info');
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/widget/agent/auto-reset`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    updateOverallStatus('✅ Agents reset successfully!', 'success');
+                    document.getElementById('actionResults').innerHTML = `<pre>${JSON.stringify(result, null, 2)}</pre>`;
+                    document.getElementById('actionResults').style.display = 'block';
+                } else {
+                    updateOverallStatus(`❌ Reset failed: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                updateOverallStatus(`❌ Reset error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testSpecificEndpoint(path) {
+            const fullUrl = `${BACKEND_URL}${path}`;
+            updateOverallStatus(`🔍 Testing ${path}...`, 'info');
+            
+            try {
+                const response = await fetch(fullUrl);
+                const result = {
+                    url: fullUrl,
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries())
+                };
+                
+                if (response.ok) {
+                    try {
+                        const data = await response.json();
+                        result.data = data;
+                    } catch (e) {
+                        result.rawResponse = await response.text();
+                    }
+                }
+                
+                updateOverallStatus(`${response.ok ? '✅' : '❌'} ${path}: ${response.status}`, response.ok ? 'success' : 'error');
+                document.getElementById('actionResults').innerHTML = `<pre>${JSON.stringify(result, null, 2)}</pre>`;
+                document.getElementById('actionResults').style.display = 'block';
+                
+            } catch (error) {
+                updateOverallStatus(`❌ ${path} failed: ${error.message}`, 'error');
+                document.getElementById('actionResults').innerHTML = `<pre>${JSON.stringify({ error: error.message }, null, 2)}</pre>`;
+                document.getElementById('actionResults').style.display = 'block';
+            }
+        }
+        
+        async function checkRenderStatus() {
+            updateOverallStatus('🔍 Checking Render deployment status...', 'info');
+            
+            // Test multiple Render health indicators
+            const tests = [
+                { name: 'Root endpoint', url: BACKEND_URL },
+                { name: 'Health check', url: `${BACKEND_URL}/health` },
+                { name: 'API root', url: `${BACKEND_URL}/api` },
+            ];
+            
+            const results = [];
+            
+            for (const test of tests) {
+                try {
+                    const response = await fetch(test.url, { 
+                        method: 'GET',
+                        mode: 'cors',
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    
+                    results.push({
+                        name: test.name,
+                        url: test.url,
+                        status: response.status,
+                        ok: response.ok,
+                        statusText: response.statusText
+                    });
+                } catch (error) {
+                    results.push({
+                        name: test.name,
+                        url: test.url,
+                        error: error.message,
+                        ok: false
+                    });
+                }
+            }
+            
+            const anySuccess = results.some(r => r.ok);
+            
+            if (anySuccess) {
+                updateOverallStatus('✅ Render backend is responding', 'success');
+            } else {
+                updateOverallStatus('❌ Render backend appears to be down', 'error');
+            }
+            
+            document.getElementById('actionResults').innerHTML = `<pre>${JSON.stringify(results, null, 2)}</pre>`;
+            document.getElementById('actionResults').style.display = 'block';
+        }
+        
+        async function manuallyTriggerDeploy() {
+            updateOverallStatus('⚡ This would trigger a manual deploy (not implemented)', 'warning');
+            alert('Manual deploy trigger not implemented. Please check Render dashboard manually.');
+        }
+        
+        async function runFullDiagnostic() {
+            updateOverallStatus('🔍 Running comprehensive diagnostic...', 'info');
+            
+            // Run all tests in sequence
+            await testBasicConnectivity();
+            await testEndpoints();
+            await testWebRTCEndpoints();
+            await testAgents();
+            
+            // Determine overall health
+            const cards = document.querySelectorAll('.test-card');
+            const successCards = document.querySelectorAll('.test-card.success');
+            const errorCards = document.querySelectorAll('.test-card.error');
+            
+            if (errorCards.length === 0) {
+                updateOverallStatus('🎉 All systems operational!', 'success');
+            } else if (successCards.length > errorCards.length) {
+                updateOverallStatus('⚠️ Partial system functionality', 'warning');
+            } else {
+                updateOverallStatus('❌ Critical system issues detected', 'error');
+            }
+        }
+        
+        // Auto-run basic connectivity test on load
+        window.onload = () => {
+            updateOverallStatus('🔧 CallDocker Backend Diagnostic Ready', 'info');
+            testBasicConnectivity();
+        };
+    </script>
+</body>
+</html>

@@ -1743,6 +1743,28 @@ app.get('/widget-config.js', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5001;
+
+// Add error handling for server startup
+server.on('error', (error) => {
+  console.error('❌ Server error:', error);
+  console.error('Server failed to start on port', PORT);
+});
+
 server.listen(PORT, () => {
   console.log(`🚀 CallDocker Server v2.1 running on port ${PORT} - WebRTC Audio Fix Deployed`);
+  console.log(`🌐 Server URL: http://localhost:${PORT}`);
+  console.log(`📡 Health check: http://localhost:${PORT}/health`);
+  
+  // Test critical endpoints on startup
+  const testEndpoints = [
+    '/api/agents/calldocker-company-uuid',
+    '/api/widget/queue/calldocker-company-uuid', 
+    '/api/widget/agent/status',
+    '/api/widget/agent/end-call'
+  ];
+  
+  console.log('🔍 Available endpoints:');
+  testEndpoints.forEach(endpoint => {
+    console.log(`   📍 http://localhost:${PORT}${endpoint}`);
+  });
 }); 
