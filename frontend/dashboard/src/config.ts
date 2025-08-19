@@ -44,4 +44,4 @@ console.log('🔧 Backend Configuration:', {
   socketUrl: getSocketUrl()
 });
 
-// Force deployment trigger for WebRTC audio fix - v2.1 
+// Fixed Netlify config error - v2.1.1 - Force deploy after config fix 
