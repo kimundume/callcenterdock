@@ -644,6 +644,173 @@ router.get('/agents/:companyUuid', (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+// Get call queue information
+router.get('/queue/:companyUuid', (req, res) => {
+    try {
+        const { companyUuid } = req.params;
+        if (!global.tempStorage || !global.tempStorage.callQueue || !global.tempStorage.callQueue[companyUuid]) {
+            return res.json({
+                success: true,
+                queueLength: 0,
+                queue: []
+            });
+        }
+        const queue = global.tempStorage.callQueue[companyUuid];
+        res.json({
+            success: true,
+            queueLength: queue.length,
+            queue: queue.map((entry, index) => (Object.assign(Object.assign({}, entry), { position: index + 1, estimatedWaitTime: (index + 1) * 30 })))
+        });
+    }
+    catch (error) {
+        console.error('Get queue error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Reset agent currentCalls (for testing/debugging)
+router.post('/agent/reset-calls', (req, res) => {
+    try {
+        const { username } = req.body;
+        console.log('[DEBUG] Resetting currentCalls for agent:', username);
+        // Find agent by username
+        const agent = Object.values(agentsData).find((a) => a.username === username);
+        if (!agent) {
+            return res.status(404).json({ error: 'Agent not found' });
+        }
+        // Reset currentCalls
+        agent.currentCalls = 0;
+        agent.lastActivity = new Date().toISOString();
+        agent.updatedAt = new Date().toISOString();
+        saveAgents();
+        console.log('[DEBUG] Agent currentCalls reset successfully:', {
+            username: agent.username,
+            currentCalls: agent.currentCalls
+        });
+        res.json({
+            success: true,
+            message: 'Agent currentCalls reset successfully',
+            agent: {
+                username: agent.username,
+                currentCalls: agent.currentCalls,
+                lastActivity: agent.lastActivity
+            }
+        });
+    }
+    catch (error) {
+        console.error('Reset agent calls error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Decrement agent currentCalls when call ends
+router.post('/agent/end-call', (req, res) => {
+    try {
+        const { username, sessionId } = req.body;
+        console.log('[DEBUG] Ending call for agent:', username, 'session:', sessionId);
+        // Find agent by username
+        const agent = Object.values(agentsData).find((a) => a.username === username);
+        if (!agent) {
+            return res.status(404).json({ error: 'Agent not found' });
+        }
+        // Decrement currentCalls but don't go below 0
+        agent.currentCalls = Math.max(0, (agent.currentCalls || 1) - 1);
+        agent.lastActivity = new Date().toISOString();
+        agent.updatedAt = new Date().toISOString();
+        saveAgents();
+        console.log('[DEBUG] Agent call ended successfully:', {
+            username: agent.username,
+            currentCalls: agent.currentCalls,
+            sessionId: sessionId
+        });
+        res.json({
+            success: true,
+            message: 'Agent call ended successfully',
+            agent: {
+                username: agent.username,
+                currentCalls: agent.currentCalls,
+                lastActivity: agent.lastActivity
+            }
+        });
+    }
+    catch (error) {
+        console.error('End call error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Get queue status for a company
+router.get('/queue/:companyUuid', (req, res) => {
+    var _a, _b;
+    try {
+        const { companyUuid } = req.params;
+        console.log('[DEBUG] Getting queue for company:', companyUuid);
+        // Get queue from global storage
+        const queue = ((_b = (_a = global.tempStorage) === null || _a === void 0 ? void 0 : _a.callQueue) === null || _b === void 0 ? void 0 : _b[companyUuid]) || [];
+        res.json({
+            success: true,
+            queueLength: queue.length,
+            queue: queue.map((socketId, index) => ({
+                position: index + 1,
+                socketId: socketId,
+                estimatedWait: (index + 1) * 30 // 30 seconds per position
+            }))
+        });
+    }
+    catch (error) {
+        console.error('Get queue error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Get agent status
+router.get('/agent/status', (req, res) => {
+    try {
+        const { username } = req.query;
+        console.log('[DEBUG] Getting agent status for:', username);
+        // Find agent by username
+        const agent = Object.values(agentsData).find((a) => a.username === username);
+        if (!agent) {
+            return res.status(404).json({ error: 'Agent not found' });
+        }
+        res.json({
+            success: true,
+            agent: {
+                username: agent.username,
+                status: agent.status,
+                availability: agent.availability,
+                currentCalls: agent.currentCalls,
+                maxCalls: agent.maxCalls,
+                lastActivity: agent.lastActivity
+            }
+        });
+    }
+    catch (error) {
+        console.error('Get agent status error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Auto-reset agent availability (emergency fix)
+router.post('/agent/auto-reset', (req, res) => {
+    try {
+        console.log('[DEBUG] Auto-resetting all agents currentCalls to 0');
+        // Reset all agents' currentCalls to 0
+        Object.values(agentsData).forEach((agent) => {
+            if (agent.currentCalls > 0) {
+                console.log(`[DEBUG] Resetting agent ${agent.username} currentCalls from ${agent.currentCalls} to 0`);
+                agent.currentCalls = 0;
+                agent.lastActivity = new Date().toISOString();
+                agent.updatedAt = new Date().toISOString();
+            }
+        });
+        saveAgents();
+        res.json({
+            success: true,
+            message: 'All agents reset successfully',
+            resetCount: Object.values(agentsData).length
+        });
+    }
+    catch (error) {
+        console.error('Auto-reset error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 // Route call endpoint - handles both calls and chats
 router.post('/route-call', (req, res) => {
     try {
@@ -657,13 +824,25 @@ router.post('/route-call', (req, res) => {
         // If no companyUuid provided, use CallDocker company as fallback
         const targetCompanyUuid = companyUuid || 'calldocker-company-uuid';
         console.log('[DEBUG] Using company UUID:', targetCompanyUuid);
-        // Find available agents for this company (not currently in a call)
-        const availableAgents = Object.values(agentsData).filter((agent) => agent.companyUuid === targetCompanyUuid &&
-            agent.status === 'online' &&
-            agent.availability === 'online' &&
-            agent.currentCalls < agent.maxCalls &&
-            agent.currentCalls === 0 // Only allow one call at a time
-        );
+        // Find available agents for this company (can handle multiple calls up to maxCalls)
+        const availableAgents = Object.values(agentsData).filter((agent) => {
+            // Reset currentCalls if it's been more than 5 minutes since last activity
+            if (agent.lastActivity) {
+                const lastActivity = new Date(agent.lastActivity);
+                const now = new Date();
+                const minutesSinceLastActivity = (now.getTime() - lastActivity.getTime()) / (1000 * 60);
+                if (minutesSinceLastActivity > 5 && agent.currentCalls > 0) {
+                    console.log(`[DEBUG] Resetting currentCalls for agent ${agent.username} (inactive for ${Math.round(minutesSinceLastActivity)} minutes)`);
+                    agent.currentCalls = 0;
+                    agent.lastActivity = now.toISOString();
+                    agent.updatedAt = now.toISOString();
+                }
+            }
+            return agent.companyUuid === targetCompanyUuid &&
+                agent.status === 'online' &&
+                agent.availability === 'online' &&
+                agent.currentCalls < (agent.maxCalls || 5); // Allow multiple calls up to maxCalls
+        });
         console.log('[DEBUG] Available agents:', availableAgents.length);
         // If no agents available for the company, try to use CallDocker agent as fallback
         let finalAvailableAgents = availableAgents;
@@ -672,41 +851,71 @@ router.post('/route-call', (req, res) => {
             const callDockerAgents = Object.values(agentsData).filter((agent) => agent.companyUuid === 'calldocker-company-uuid' &&
                 agent.status === 'online' &&
                 agent.availability === 'online' &&
-                agent.currentCalls < agent.maxCalls &&
-                agent.currentCalls === 0 // Only allow one call at a time
+                agent.currentCalls < (agent.maxCalls || 5) // Allow multiple calls up to maxCalls
             );
             finalAvailableAgents = callDockerAgents;
             console.log('[DEBUG] CallDocker fallback agents:', finalAvailableAgents.length);
         }
+        // Initialize call queue if it doesn't exist
+        if (!global.tempStorage)
+            global.tempStorage = {};
+        if (!global.tempStorage.callQueue)
+            global.tempStorage.callQueue = {};
+        if (!global.tempStorage.callQueue[targetCompanyUuid])
+            global.tempStorage.callQueue[targetCompanyUuid] = [];
+        // Generate a session ID
+        const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         if (finalAvailableAgents.length === 0) {
+            // Add to queue instead of rejecting
+            const queueEntry = {
+                sessionId,
+                visitorId,
+                pageUrl,
+                callType,
+                timestamp: new Date().toISOString(),
+                companyUuid: targetCompanyUuid
+            };
+            global.tempStorage.callQueue[targetCompanyUuid].push(queueEntry);
+            const queuePosition = global.tempStorage.callQueue[targetCompanyUuid].length;
+            const estimatedWaitTime = queuePosition * 30; // 30 seconds per call
+            console.log('[DEBUG] Call queued. Position:', queuePosition, 'Estimated wait:', estimatedWaitTime);
             return res.json({
-                success: false,
-                error: 'No available agents at the moment. Please try again later.',
-                message: 'All agents are currently busy or offline.',
-                queuePosition: 1,
-                estimatedWaitTime: 30 // 30 seconds estimated wait time
+                success: true,
+                message: 'Call queued successfully. An agent will be with you shortly.',
+                sessionId: sessionId,
+                queuePosition: queuePosition,
+                estimatedWaitTime: estimatedWaitTime,
+                status: 'queued'
             });
         }
         // Select the best available agent (simple round-robin for now)
         const selectedAgent = finalAvailableAgents[0];
-        // Generate a session ID
-        const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         // Update agent call count
-        selectedAgent.currentCalls += 1;
+        selectedAgent.currentCalls = (selectedAgent.currentCalls || 0) + 1;
         selectedAgent.lastActivity = new Date().toISOString();
         selectedAgent.updatedAt = new Date().toISOString();
         saveAgents();
         console.log('[DEBUG] Call routed to agent:', selectedAgent.username);
-        // Trigger socket.io call routing to notify the agent
+        // Process queue if there are queued calls
+        if (global.tempStorage.callQueue[targetCompanyUuid] && global.tempStorage.callQueue[targetCompanyUuid].length > 0) {
+            console.log('[DEBUG] Processing queue for company:', targetCompanyUuid);
+            // Queue processing will be handled by the agent when they finish a call
+        }
+        // Initialize Call Synchronization - Create call session
         try {
             const io = req.app.get('io');
-            if (io) {
-                console.log('[DEBUG] Socket.io available, attempting to notify agent');
-                // Try multiple approaches to find and notify the agent
+            const callSyncService = req.app.get('callSyncService');
+            if (io && callSyncService) {
+                console.log('[DEBUG] Initializing synchronized call session');
+                // Create synchronized call session
+                const callSession = callSyncService.createCallSession({
+                    sessionId: sessionId,
+                    visitorSocketId: visitorId, // Will be updated when visitor connects
+                    agentUsername: selectedAgent.username,
+                    companyUuid: targetCompanyUuid
+                });
+                // Send enhanced incoming-call event to agent
                 const agentRoom = `agent-${selectedAgent.username}`;
-                const companyRoom = `company-${targetCompanyUuid}`;
-                console.log('[DEBUG] Attempting to notify agent in room:', agentRoom);
-                // Send to agent-specific room
                 io.to(agentRoom).emit('incoming-call', {
                     uuid: targetCompanyUuid,
                     agentId: selectedAgent.username,
@@ -714,43 +923,34 @@ router.post('/route-call', (req, res) => {
                     sessionId: sessionId,
                     visitorId: visitorId,
                     pageUrl: pageUrl,
-                    callType: callType
+                    callType: callType,
+                    fromSocketId: visitorId,
+                    // Enhanced synchronization data
+                    syncEnabled: true,
+                    callSessionId: callSession.sessionId
                 });
-                // Also send to company room as backup
-                io.to(companyRoom).emit('incoming-call', {
-                    uuid: targetCompanyUuid,
-                    agentId: selectedAgent.username,
-                    callTime: new Date().toISOString(),
-                    sessionId: sessionId,
-                    visitorId: visitorId,
-                    pageUrl: pageUrl,
-                    callType: callType
-                });
-                console.log('[DEBUG] Incoming-call event sent to rooms:', agentRoom, companyRoom);
-                // Also try direct socket lookup as fallback
-                const agentSocketId = Object.keys(io.sockets.sockets).find(socketId => {
-                    const socket = io.sockets.sockets.get(socketId);
-                    return socket.data && socket.data.agentId === selectedAgent.username;
-                });
-                if (agentSocketId) {
-                    console.log('[DEBUG] Also sending directly to agent socket:', agentSocketId);
-                    io.to(agentSocketId).emit('incoming-call', {
+                console.log('[DEBUG] Synchronized call session created:', sessionId);
+            }
+            else {
+                console.log('[DEBUG] Socket.io or CallSyncService not available - falling back to basic routing');
+                // Fallback to basic routing if sync service not available
+                if (io) {
+                    const agentRoom = `agent-${selectedAgent.username}`;
+                    io.to(agentRoom).emit('incoming-call', {
                         uuid: targetCompanyUuid,
                         agentId: selectedAgent.username,
                         callTime: new Date().toISOString(),
                         sessionId: sessionId,
                         visitorId: visitorId,
                         pageUrl: pageUrl,
-                        callType: callType
+                        callType: callType,
+                        fromSocketId: visitorId
                     });
                 }
             }
-            else {
-                console.log('[DEBUG] Socket.io not available');
-            }
         }
         catch (socketError) {
-            console.error('[DEBUG] Socket.io error:', socketError);
+            console.error('[DEBUG] Call synchronization error:', socketError);
         }
         res.json({
             success: true,

@@ -21,6 +21,7 @@ const socket_io_1 = require("socket.io");
 const widget_1 = __importDefault(require("./routes/widget"));
 const superAdmin_1 = __importDefault(require("./routes/superAdmin"));
 const signaling_1 = require("./sockets/signaling");
+const callSynchronization_1 = __importDefault(require("./services/callSynchronization"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const path_1 = __importDefault(require("path"));
 // Robust import strategy for persistentStorage
@@ -1367,9 +1368,12 @@ app.put('/api/contacts/:contactId/tags', (req, res) => __awaiter(void 0, void 0,
         res.status(500).json({ error: 'Internal server error' });
     }
 }));
+// Initialize Call Synchronization Service
+const callSyncService = new callSynchronization_1.default(io);
 (0, signaling_1.registerSignalingHandlers)(io);
 // Make io instance available to routes
 app.set('io', io);
+app.set('callSyncService', callSyncService);
 // Serve widget files
 app.get('/widget.js', (req, res) => {
     res.setHeader('Content-Type', 'application/javascript');
@@ -1382,6 +1386,24 @@ app.get('/widget-config.js', (req, res) => {
     res.sendFile(path_1.default.join(__dirname, '../../../frontend/widget/widget-config.js'));
 });
 const PORT = process.env.PORT || 5001;
+// Add error handling for server startup
+server.on('error', (error) => {
+    console.error('❌ Server error:', error);
+    console.error('Server failed to start on port', PORT);
+});
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`🚀 CallDocker Server v2.1.1 running on port ${PORT} - SYNC SYSTEM FORCE DEPLOY`);
+    console.log(`🌐 Server URL: http://localhost:${PORT}`);
+    console.log(`📡 Health check: http://localhost:${PORT}/health`);
+    // Test critical endpoints on startup
+    const testEndpoints = [
+        '/api/agents/calldocker-company-uuid',
+        '/api/widget/queue/calldocker-company-uuid',
+        '/api/widget/agent/status',
+        '/api/widget/agent/end-call'
+    ];
+    console.log('🔍 Available endpoints:');
+    testEndpoints.forEach(endpoint => {
+        console.log(`   📍 http://localhost:${PORT}${endpoint}`);
+    });
 });
