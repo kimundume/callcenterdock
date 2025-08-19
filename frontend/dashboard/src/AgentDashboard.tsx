@@ -214,6 +214,9 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
         // Also join the session room for form:push events
         socket.emit('join-room', { room: `session-${data.sessionId}` });
         console.log('[AgentDashboard] Joined session room for form:push:', `session-${data.sessionId}`);
+        
+        // Store the session ID for later use
+        setIncomingCall(prev => prev ? { ...prev, sessionId: data.sessionId } : null);
       }
       
       console.log('callStatus should now be "Ringing"');
@@ -419,6 +422,24 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
       const sessionId = incomingCall?.fromSocketId || 'unknown-session';
       setCallStatus('Wrap-up');
       setWrapUp(true);
+      
+      // Call the backend to decrement agent's currentCalls
+      fetch(`${getBackendUrl()}/api/widget/agent/end-call`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: agentUsername,
+          sessionId: sessionId
+        })
+      }).then(res => {
+        if (res.ok) {
+          console.log('Agent currentCalls decremented successfully');
+        } else {
+          console.error('Failed to decrement agent currentCalls');
+        }
+      }).catch(error => {
+        console.error('Error calling end-call endpoint:', error);
+      });
       
       // Process next call in queue when agent finishes
       if (incomingCall?.uuid) {

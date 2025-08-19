@@ -619,6 +619,8 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
         setCallStart(new Date());
         if (data.sessionId) {
           console.log('[IVRChatWidget] Call session created:', data.sessionId);
+          // Set the chat session ID for form push events
+          setChatSessionId(data.sessionId);
           // Start WebRTC for voice call
           startWebRTC(data.sessionId, data.agent);
         }

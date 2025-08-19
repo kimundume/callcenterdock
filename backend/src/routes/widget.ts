@@ -772,6 +772,46 @@ router.post('/agent/reset-calls', (req, res) => {
   }
 });
 
+// Decrement agent currentCalls when call ends
+router.post('/agent/end-call', (req, res) => {
+  try {
+    const { username, sessionId } = req.body;
+    console.log('[DEBUG] Ending call for agent:', username, 'session:', sessionId);
+    
+    // Find agent by username
+    const agent = Object.values(agentsData).find((a: any) => a.username === username);
+    
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+    
+    // Decrement currentCalls but don't go below 0
+    agent.currentCalls = Math.max(0, (agent.currentCalls || 1) - 1);
+    agent.lastActivity = new Date().toISOString();
+    agent.updatedAt = new Date().toISOString();
+    saveAgents();
+    
+    console.log('[DEBUG] Agent call ended successfully:', {
+      username: agent.username,
+      currentCalls: agent.currentCalls,
+      sessionId: sessionId
+    });
+    
+    res.json({
+      success: true,
+      message: 'Agent call ended successfully',
+      agent: {
+        username: agent.username,
+        currentCalls: agent.currentCalls,
+        lastActivity: agent.lastActivity
+      }
+    });
+  } catch (error) {
+    console.error('End call error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Route call endpoint - handles both calls and chats
 router.post('/route-call', (req, res) => {
   try {
@@ -866,7 +906,7 @@ router.post('/route-call', (req, res) => {
     const selectedAgent = finalAvailableAgents[0];
     
     // Update agent call count
-    selectedAgent.currentCalls += 1;
+    selectedAgent.currentCalls = (selectedAgent.currentCalls || 0) + 1;
     selectedAgent.lastActivity = new Date().toISOString();
     selectedAgent.updatedAt = new Date().toISOString();
     saveAgents();
