@@ -2,6 +2,7 @@
   base = "frontend/dashboard"
   command = "chmod +x build-with-widget.sh && ./build-with-widget.sh"
   publish = "dist"
+  ignore = false
 
 [build.environment]
   VITE_BACKEND_URL = "https://callcenterdock.onrender.com"

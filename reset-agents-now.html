@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CallDocker Agent Reset Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .success { background: rgba(40, 167, 69, 0.3); border: 2px solid #28a745; }
+        .error { background: rgba(220, 53, 69, 0.3); border: 2px solid #dc3545; }
+        .info { background: rgba(23, 162, 184, 0.3); border: 2px solid #17a2b8; }
+        .warning { background: rgba(255, 193, 7, 0.3); border: 2px solid #ffc107; color: #212529; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 CallDocker Agent Reset Tool</h1>
+        <p>Use this tool to reset agent availability and fix "No available agents" errors.</p>
+        
+        <div id="status"></div>
+        
+        <button onclick="resetAgents()">🔄 Reset All Agents</button>
+        <button onclick="checkAgentStatus()">📊 Check Agent Status</button>
+        <button onclick="testBackendConnection()">🌐 Test Backend Connection</button>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'https://callcenterdock.onrender.com';
+        
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+        
+        function showResults(data) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `<pre style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; overflow-x: auto; margin-top: 20px;">${JSON.stringify(data, null, 2)}</pre>`;
+        }
+        
+        async function testBackendConnection() {
+            showStatus('🔍 Testing backend connection...', 'info');
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/agents/calldocker-company-uuid`);
+                if (response.ok) {
+                    const data = await response.json();
+                    showStatus('✅ Backend connection successful!', 'success');
+                    showResults(data);
+                } else {
+                    showStatus(`❌ Backend returned ${response.status}: ${response.statusText}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Backend connection failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function checkAgentStatus() {
+            showStatus('📊 Checking agent status...', 'info');
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/agents/calldocker-company-uuid`);
+                if (response.ok) {
+                    const agents = await response.json();
+                    const availableAgents = agents.filter(agent => 
+                        agent.status === 'online' && 
+                        agent.availability === 'online' && 
+                        agent.currentCalls < (agent.maxCalls || 5)
+                    );
+                    
+                    showStatus(`📊 Found ${agents.length} total agents, ${availableAgents.length} available`, 
+                        availableAgents.length > 0 ? 'success' : 'warning');
+                    showResults({
+                        totalAgents: agents.length,
+                        availableAgents: availableAgents.length,
+                        agents: agents.map(a => ({
+                            username: a.username,
+                            status: a.status,
+                            availability: a.availability,
+                            currentCalls: a.currentCalls,
+                            maxCalls: a.maxCalls
+                        }))
+                    });
+                } else {
+                    showStatus(`❌ Failed to check agents: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error checking agents: ${error.message}`, 'error');
+            }
+        }
+        
+        async function resetAgents() {
+            showStatus('🔄 Resetting all agents...', 'info');
+            try {
+                // Try the new auto-reset endpoint first
+                let response = await fetch(`${BACKEND_URL}/api/widget/agent/auto-reset`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showStatus('✅ All agents reset successfully!', 'success');
+                    showResults(data);
+                    
+                    // Automatically check status after reset
+                    setTimeout(checkAgentStatus, 1000);
+                } else if (response.status === 404) {
+                    // Fallback to manual reset for specific agent
+                    showStatus('🔄 Using fallback reset method...', 'warning');
+                    response = await fetch(`${BACKEND_URL}/api/widget/agent/reset-calls`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username: 'calldocker_agent' })
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        showStatus('✅ Agent reset successful (fallback method)!', 'success');
+                        showResults(data);
+                    } else {
+                        showStatus(`❌ Reset failed: ${response.status}`, 'error');
+                    }
+                } else {
+                    showStatus(`❌ Reset failed: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Reset error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Auto-check status on page load
+        window.onload = () => {
+            showStatus('🔧 CallDocker Agent Reset Tool Ready', 'info');
+            testBackendConnection();
+        };
+    </script>
+</body>
+</html>
