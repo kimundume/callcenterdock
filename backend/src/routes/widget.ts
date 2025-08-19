@@ -1001,19 +1001,24 @@ router.post('/route-call', (req, res) => {
       // Queue processing will be handled by the agent when they finish a call
     }
     
-    // Trigger socket.io call routing to notify the agent
+    // Initialize Call Synchronization - Create call session
     try {
       const io = req.app.get('io');
-      if (io) {
-        console.log('[DEBUG] Socket.io available, attempting to notify agent');
+      const callSyncService = req.app.get('callSyncService');
+      
+      if (io && callSyncService) {
+        console.log('[DEBUG] Initializing synchronized call session');
         
-        // Try multiple approaches to find and notify the agent
+        // Create synchronized call session
+        const callSession = callSyncService.createCallSession({
+          sessionId: sessionId,
+          visitorSocketId: visitorId, // Will be updated when visitor connects
+          agentUsername: selectedAgent.username,
+          companyUuid: targetCompanyUuid
+        });
+        
+        // Send enhanced incoming-call event to agent
         const agentRoom = `agent-${selectedAgent.username}`;
-        const companyRoom = `company-${targetCompanyUuid}`;
-        
-        console.log('[DEBUG] Attempting to notify agent in room:', agentRoom);
-        
-        // Send to agent-specific room
         io.to(agentRoom).emit('incoming-call', {
           uuid: targetCompanyUuid,
           agentId: selectedAgent.username,
@@ -1022,46 +1027,33 @@ router.post('/route-call', (req, res) => {
           visitorId: visitorId,
           pageUrl: pageUrl,
           callType: callType,
-          fromSocketId: visitorId // Use visitorId as the socket identifier for WebRTC
+          fromSocketId: visitorId,
+          // Enhanced synchronization data
+          syncEnabled: true,
+          callSessionId: callSession.sessionId
         });
         
-        // Also send to company room as backup
-        io.to(companyRoom).emit('incoming-call', {
-          uuid: targetCompanyUuid,
-          agentId: selectedAgent.username,
-          callTime: new Date().toISOString(),
-          sessionId: sessionId,
-          visitorId: visitorId,
-          pageUrl: pageUrl,
-          callType: callType,
-          fromSocketId: visitorId // Use visitorId as the socket identifier for WebRTC
-        });
+        console.log('[DEBUG] Synchronized call session created:', sessionId);
+      } else {
+        console.log('[DEBUG] Socket.io or CallSyncService not available - falling back to basic routing');
         
-        console.log('[DEBUG] Incoming-call event sent to rooms:', agentRoom, companyRoom);
-        
-        // Also try direct socket lookup as fallback
-        const agentSocketId = Object.keys(io.sockets.sockets).find(socketId => {
-          const socket = io.sockets.sockets.get(socketId);
-          return socket.data && socket.data.agentId === selectedAgent.username;
-        });
-        
-        if (agentSocketId) {
-          console.log('[DEBUG] Also sending directly to agent socket:', agentSocketId);
-          io.to(agentSocketId).emit('incoming-call', {
+        // Fallback to basic routing if sync service not available
+        if (io) {
+          const agentRoom = `agent-${selectedAgent.username}`;
+          io.to(agentRoom).emit('incoming-call', {
             uuid: targetCompanyUuid,
             agentId: selectedAgent.username,
             callTime: new Date().toISOString(),
             sessionId: sessionId,
             visitorId: visitorId,
             pageUrl: pageUrl,
-            callType: callType
+            callType: callType,
+            fromSocketId: visitorId
           });
         }
-      } else {
-        console.log('[DEBUG] Socket.io not available');
       }
     } catch (socketError) {
-      console.error('[DEBUG] Socket.io error:', socketError);
+      console.error('[DEBUG] Call synchronization error:', socketError);
     }
     
     res.json({

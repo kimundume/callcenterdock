@@ -5,6 +5,7 @@ import { Server } from 'socket.io';
 import widgetRoutes from './routes/widget';
 import superAdminRoutes from './routes/superAdmin';
 import { registerSignalingHandlers } from './sockets/signaling';
+import CallSynchronizationService from './services/callSynchronization';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -1724,10 +1725,14 @@ app.put('/api/contacts/:contactId/tags', async (req, res) => {
   }
 });
 
+// Initialize Call Synchronization Service
+const callSyncService = new CallSynchronizationService(io);
+
 registerSignalingHandlers(io);
 
 // Make io instance available to routes
 app.set('io', io);
+app.set('callSyncService', callSyncService);
 
 // Serve widget files
 app.get('/widget.js', (req, res) => {
