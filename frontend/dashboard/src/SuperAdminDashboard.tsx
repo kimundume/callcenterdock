@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import SystemDiagnostics from './components/SystemDiagnostics';
 import { 
   Layout, 
   Menu, 
@@ -2446,45 +2447,7 @@ const ContactMessagesTab = () => {
 const SystemHealthTab = () => {
   return (
     <div className="system-health-tab">
-      <Row gutter={[16, 16]}>
-        <Col span={8}>
-          <Card title="Database Status">
-            <Progress percent={95} status="active" />
-            <Tag color="green" style={{ marginTop: 8 }}>Healthy</Tag>
-          </Card>
-        </Col>
-        <Col span={8}>
-          <Card title="API Status">
-            <Progress percent={98} status="active" />
-            <Tag color="green" style={{ marginTop: 8 }}>Operational</Tag>
-          </Card>
-        </Col>
-        <Col span={8}>
-          <Card title="WebSocket Status">
-            <Progress percent={100} status="active" />
-            <Tag color="green" style={{ marginTop: 8 }}>Connected</Tag>
-          </Card>
-        </Col>
-      </Row>
-      
-      <Card title="System Logs" style={{ marginTop: 16 }}>
-        <List
-          size="small"
-          dataSource={[
-            { message: 'System backup completed successfully', time: '2 minutes ago', level: 'info' },
-            { message: 'New user registration: john@example.com', time: '5 minutes ago', level: 'info' },
-            { message: 'API rate limit warning for IP 192.168.1.1', time: '10 minutes ago', level: 'warning' },
-            { message: 'Database connection restored', time: '15 minutes ago', level: 'info' }
-          ]}
-          renderItem={(item) => (
-            <List.Item>
-              <Tag color={item.level === 'warning' ? 'orange' : 'blue'}>{item.level.toUpperCase()}</Tag>
-              <span>{item.message}</span>
-              <span style={{ color: '#999', marginLeft: 'auto' }}>{item.time}</span>
-            </List.Item>
-          )}
-        />
-      </Card>
+      <SystemDiagnostics />
     </div>
   );
 };
