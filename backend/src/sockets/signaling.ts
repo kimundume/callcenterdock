@@ -379,8 +379,9 @@ export function registerSignalingHandlers(io: SocketIOServer) {
     socket.on('webrtc-offer', (data) => {
       const { sessionId, offer } = data;
       if (sessionId && offer) {
-        console.log('[WebRTC] Forwarding offer for session:', sessionId);
-        io.to(`session-${sessionId}`).emit('webrtc-offer', { 
+        console.log('[WebRTC] Forwarding offer for session:', sessionId, 'from socket:', socket.id);
+        // Send offer to all sockets in the session room except the sender
+        socket.to(`session-${sessionId}`).emit('webrtc-offer', { 
           fromSocketId: socket.id, 
           offer,
           sessionId 
@@ -392,8 +393,9 @@ export function registerSignalingHandlers(io: SocketIOServer) {
     socket.on('webrtc-answer', (data) => {
       const { sessionId, answer } = data;
       if (sessionId && answer) {
-        console.log('[WebRTC] Forwarding answer for session:', sessionId);
-        io.to(`session-${sessionId}`).emit('webrtc-answer', { 
+        console.log('[WebRTC] Forwarding answer for session:', sessionId, 'from socket:', socket.id);
+        // Send answer to all sockets in the session room except the sender
+        socket.to(`session-${sessionId}`).emit('webrtc-answer', { 
           fromSocketId: socket.id, 
           answer,
           sessionId 
@@ -405,8 +407,9 @@ export function registerSignalingHandlers(io: SocketIOServer) {
     socket.on('webrtc-ice-candidate', (data) => {
       const { sessionId, candidate } = data;
       if (sessionId && candidate) {
-        console.log('[WebRTC] Forwarding ICE candidate for session:', sessionId);
-        io.to(`session-${sessionId}`).emit('webrtc-ice-candidate', { 
+        console.log('[WebRTC] Forwarding ICE candidate for session:', sessionId, 'from socket:', socket.id);
+        // Send ICE candidate to all sockets in the session room except the sender
+        socket.to(`session-${sessionId}`).emit('webrtc-ice-candidate', { 
           fromSocketId: socket.id, 
           candidate,
           sessionId 

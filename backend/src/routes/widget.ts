@@ -812,6 +812,60 @@ router.post('/agent/end-call', (req, res) => {
   }
 });
 
+// Get queue status for a company
+router.get('/queue/:companyUuid', (req, res) => {
+  try {
+    const { companyUuid } = req.params;
+    console.log('[DEBUG] Getting queue for company:', companyUuid);
+    
+    // Get queue from global storage
+    const queue = global.tempStorage?.callQueue?.[companyUuid] || [];
+    
+    res.json({
+      success: true,
+      queueLength: queue.length,
+      queue: queue.map((socketId, index) => ({
+        position: index + 1,
+        socketId: socketId,
+        estimatedWait: (index + 1) * 30 // 30 seconds per position
+      }))
+    });
+  } catch (error) {
+    console.error('Get queue error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get agent status
+router.get('/agent/status', (req, res) => {
+  try {
+    const { username } = req.query;
+    console.log('[DEBUG] Getting agent status for:', username);
+    
+    // Find agent by username
+    const agent = Object.values(agentsData).find((a: any) => a.username === username);
+    
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+    
+    res.json({
+      success: true,
+      agent: {
+        username: agent.username,
+        status: agent.status,
+        availability: agent.availability,
+        currentCalls: agent.currentCalls,
+        maxCalls: agent.maxCalls,
+        lastActivity: agent.lastActivity
+      }
+    });
+  } catch (error) {
+    console.error('Get agent status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Route call endpoint - handles both calls and chats
 router.post('/route-call', (req, res) => {
   try {
