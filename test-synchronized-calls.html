@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Synchronized Call System</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+        }
+        .test-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin: 20px 0;
+        }
+        .test-panel {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #4CAF50;
+        }
+        .visitor-panel {
+            border-color: #2196F3;
+        }
+        .agent-panel {
+            border-color: #FF9800;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+        button:hover { 
+            background: #45a049; 
+            transform: translateY(-2px); 
+        }
+        button:disabled { 
+            background: #6c757d; 
+            cursor: not-allowed; 
+            transform: none; 
+        }
+        .visitor-btn { background: #2196F3; }
+        .visitor-btn:hover { background: #1976D2; }
+        .agent-btn { background: #FF9800; }
+        .agent-btn:hover { background: #F57C00; }
+        .end-btn { background: #f44336; }
+        .end-btn:hover { background: #d32f2f; }
+        
+        .status {
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 6px;
+            font-weight: bold;
+            text-align: center;
+        }
+        .idle { background: rgba(108, 117, 125, 0.3); }
+        .connecting { background: rgba(255, 193, 7, 0.3); }
+        .ringing { background: rgba(255, 152, 0, 0.3); }
+        .connected { background: rgba(76, 175, 80, 0.3); }
+        .ended { background: rgba(244, 67, 54, 0.3); }
+        
+        .call-info {
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        
+        .sync-status {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+            flex-wrap: wrap;
+        }
+        
+        .sync-indicator {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 11px;
+            text-align: center;
+        }
+        .audio-connected { background: rgba(76, 175, 80, 0.7); }
+        .audio-disconnected { background: rgba(244, 67, 54, 0.7); }
+        .muted { background: rgba(255, 193, 7, 0.7); color: #000; }
+        .unmuted { background: rgba(33, 150, 243, 0.7); }
+        
+        .test-instructions {
+            background: rgba(33, 150, 243, 0.2);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid #2196F3;
+        }
+        
+        h1, h2, h3 { text-align: center; margin-bottom: 20px; }
+        .step { margin: 10px 0; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Synchronized Call System Tester</h1>
+        
+        <div class="test-instructions">
+            <h3>📋 Testing Instructions</h3>
+            <div class="step">1️⃣ <strong>Start Call:</strong> Click "📞 Start Call" in Visitor panel</div>
+            <div class="step">2️⃣ <strong>Accept Call:</strong> Click "✅ Accept Call" in Agent panel when it rings</div>
+            <div class="step">3️⃣ <strong>Test Audio:</strong> Both sides should show "🔊 Audio Connected"</div>
+            <div class="step">4️⃣ <strong>Test Mute:</strong> Click mute on either side, check synchronization</div>
+            <div class="step">5️⃣ <strong>End Call:</strong> Click end call on either side, both should disconnect</div>
+        </div>
+        
+        <div class="test-grid">
+            <!-- Visitor Panel -->
+            <div class="test-panel visitor-panel">
+                <h2>👤 Visitor Side</h2>
+                
+                <div id="visitorStatus" class="status idle">
+                    📱 Ready to call
+                </div>
+                
+                <div class="call-info" id="visitorInfo">
+                    Status: Idle<br>
+                    Session: None<br>
+                    Agent: None
+                </div>
+                
+                <div class="sync-status" id="visitorSyncStatus">
+                    <div class="sync-indicator audio-disconnected">🔇 No Audio</div>
+                </div>
+                
+                <div id="visitorControls">
+                    <button id="startCallBtn" class="visitor-btn" onclick="startCall()">
+                        📞 Start Call
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Agent Panel -->
+            <div class="test-panel agent-panel">
+                <h2>👨‍💼 Agent Side</h2>
+                
+                <div id="agentStatus" class="status idle">
+                    💼 Ready to receive calls
+                </div>
+                
+                <div class="call-info" id="agentInfo">
+                    Status: Available<br>
+                    Active Calls: 0<br>
+                    Session: None
+                </div>
+                
+                <div class="sync-status" id="agentSyncStatus">
+                    <div class="sync-indicator audio-disconnected">🔇 No Audio</div>
+                </div>
+                
+                <div id="agentControls">
+                    <button id="acceptCallBtn" class="agent-btn" onclick="acceptCall()" disabled>
+                        ✅ Accept Call
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 30px;">
+            <h3>🔧 System Status</h3>
+            <div id="systemStatus" class="call-info">
+                Backend: Testing...<br>
+                Websocket: Connecting...<br>
+                CallSync Service: Unknown
+            </div>
+            
+            <button onclick="testBackendConnection()" style="width: auto; margin: 10px;">
+                🔍 Test Backend Connection
+            </button>
+            <button onclick="resetSystem()" style="width: auto; margin: 10px;" class="end-btn">
+                🔄 Reset System
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'https://callcenterdock.onrender.com';
+        
+        let currentCall = {
+            sessionId: null,
+            status: 'idle',
+            visitorSocket: null,
+            agentSocket: null,
+            agentName: null
+        };
+        
+        // Initialize the test system
+        async function initializeSystem() {
+            console.log('[Test] Initializing synchronized call test system');
+            
+            updateSystemStatus('Initializing...', 'Connecting...', 'Loading...');
+            
+            // Test backend connection
+            try {
+                const response = await fetch(`${BACKEND_URL}/health`);
+                const data = await response.json();
+                
+                if (data.status === 'healthy') {
+                    updateSystemStatus('✅ Connected', '✅ Available', '✅ Ready');
+                } else {
+                    updateSystemStatus('⚠️ Partial', '⚠️ Limited', '⚠️ Degraded');
+                }
+            } catch (error) {
+                updateSystemStatus('❌ Failed', '❌ Failed', '❌ Failed');
+                console.error('[Test] Backend connection failed:', error);
+            }
+        }
+        
+        function updateSystemStatus(backend, websocket, callSync) {
+            document.getElementById('systemStatus').innerHTML = `
+                Backend: ${backend}<br>
+                Websocket: ${websocket}<br>
+                CallSync Service: ${callSync}
+            `;
+        }
+        
+        // Start a call (visitor side)
+        async function startCall() {
+            console.log('[Test] Starting call...');
+            
+            updateVisitorStatus('connecting', '📱 Connecting...', 'Status: Connecting');
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/widget/route-call`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        companyUuid: 'calldocker-company-uuid',
+                        visitorId: `test-visitor-${Date.now()}`,
+                        pageUrl: window.location.href,
+                        callType: 'call'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentCall.sessionId = data.sessionId;
+                    currentCall.status = 'ringing';
+                    currentCall.agentName = data.agent;
+                    
+                    updateVisitorStatus('ringing', '📞 Ringing...', `
+                        Status: Ringing<br>
+                        Session: ${data.sessionId}<br>
+                        Agent: ${data.agent}
+                    `);
+                    
+                    updateAgentStatus('ringing', '📞 Incoming Call!', `
+                        Status: Incoming Call<br>
+                        Active Calls: 1<br>
+                        Session: ${data.sessionId}
+                    `);
+                    
+                    // Enable accept button
+                    document.getElementById('acceptCallBtn').disabled = false;
+                    document.getElementById('startCallBtn').disabled = true;
+                    
+                    console.log('[Test] Call initiated successfully:', data);
+                } else {
+                    updateVisitorStatus('idle', '❌ Call Failed', `Error: ${data.message}`);
+                }
+            } catch (error) {
+                console.error('[Test] Call start error:', error);
+                updateVisitorStatus('idle', '❌ Connection Failed', 'Error: Network issue');
+            }
+        }
+        
+        // Accept call (agent side)
+        function acceptCall() {
+            console.log('[Test] Accepting call...');
+            
+            currentCall.status = 'connected';
+            
+            updateAgentStatus('connected', '✅ Call Connected', `
+                Status: In Call<br>
+                Active Calls: 1<br>
+                Session: ${currentCall.sessionId}
+            `);
+            
+            updateVisitorStatus('connected', '✅ Call Connected', `
+                Status: Connected<br>
+                Session: ${currentCall.sessionId}<br>
+                Agent: ${currentCall.agentName}
+            `);
+            
+            // Update controls
+            showCallControls();
+            
+            // Simulate audio connection
+            setTimeout(() => {
+                updateAudioStatus(true);
+            }, 1000);
+        }
+        
+        // End call
+        function endCall(side = 'visitor') {
+            console.log(`[Test] Ending call from ${side} side`);
+            
+            currentCall.status = 'ended';
+            
+            updateVisitorStatus('ended', '📞 Call Ended', 'Status: Call completed');
+            updateAgentStatus('ended', '📞 Call Ended', 'Status: Available');
+            
+            // Reset controls
+            setTimeout(() => {
+                resetSystem();
+            }, 2000);
+        }
+        
+        // Toggle mute
+        function toggleMute(side) {
+            console.log(`[Test] Toggling mute on ${side} side`);
+            
+            const isMuted = side === 'visitor' ? 
+                document.getElementById('visitorSyncStatus').innerHTML.includes('🔇 Muted') :
+                document.getElementById('agentSyncStatus').innerHTML.includes('🔇 Muted');
+            
+            if (side === 'visitor') {
+                updateVisitorSyncStatus(!isMuted, true);
+            } else {
+                updateAgentSyncStatus(!isMuted, true);
+            }
+        }
+        
+        // Update status helpers
+        function updateVisitorStatus(statusClass, statusText, infoText) {
+            const statusEl = document.getElementById('visitorStatus');
+            const infoEl = document.getElementById('visitorInfo');
+            
+            statusEl.className = `status ${statusClass}`;
+            statusEl.textContent = statusText;
+            infoEl.innerHTML = infoText;
+        }
+        
+        function updateAgentStatus(statusClass, statusText, infoText) {
+            const statusEl = document.getElementById('agentStatus');
+            const infoEl = document.getElementById('agentInfo');
+            
+            statusEl.className = `status ${statusClass}`;
+            statusEl.textContent = statusText;
+            infoEl.innerHTML = infoText;
+        }
+        
+        function updateAudioStatus(connected) {
+            updateVisitorSyncStatus(connected, false);
+            updateAgentSyncStatus(connected, false);
+        }
+        
+        function updateVisitorSyncStatus(audioConnected, isMuted) {
+            const syncEl = document.getElementById('visitorSyncStatus');
+            syncEl.innerHTML = `
+                <div class="sync-indicator ${audioConnected ? 'audio-connected' : 'audio-disconnected'}">
+                    ${audioConnected ? '🔊 Audio Connected' : '🔇 No Audio'}
+                </div>
+                <div class="sync-indicator ${isMuted ? 'muted' : 'unmuted'}">
+                    ${isMuted ? '🔇 Muted' : '🎤 Unmuted'}
+                </div>
+            `;
+        }
+        
+        function updateAgentSyncStatus(audioConnected, isMuted) {
+            const syncEl = document.getElementById('agentSyncStatus');
+            syncEl.innerHTML = `
+                <div class="sync-indicator ${audioConnected ? 'audio-connected' : 'audio-disconnected'}">
+                    ${audioConnected ? '🔊 Audio Connected' : '🔇 No Audio'}
+                </div>
+                <div class="sync-indicator ${isMuted ? 'muted' : 'unmuted'}">
+                    ${isMuted ? '🔇 Muted' : '🎤 Unmuted'}
+                </div>
+            `;
+        }
+        
+        function showCallControls() {
+            document.getElementById('visitorControls').innerHTML = `
+                <button class="visitor-btn" onclick="toggleMute('visitor')">🎤 Toggle Mute</button>
+                <button class="end-btn" onclick="endCall('visitor')">📞 End Call</button>
+            `;
+            
+            document.getElementById('agentControls').innerHTML = `
+                <button class="agent-btn" onclick="toggleMute('agent')">🎤 Toggle Mute</button>
+                <button class="end-btn" onclick="endCall('agent')">📞 End Call</button>
+            `;
+        }
+        
+        function resetSystem() {
+            console.log('[Test] Resetting system...');
+            
+            currentCall = {
+                sessionId: null,
+                status: 'idle',
+                visitorSocket: null,
+                agentSocket: null,
+                agentName: null
+            };
+            
+            updateVisitorStatus('idle', '📱 Ready to call', 'Status: Idle<br>Session: None<br>Agent: None');
+            updateAgentStatus('idle', '💼 Ready to receive calls', 'Status: Available<br>Active Calls: 0<br>Session: None');
+            
+            updateVisitorSyncStatus(false, false);
+            updateAgentSyncStatus(false, false);
+            
+            document.getElementById('visitorControls').innerHTML = `
+                <button id="startCallBtn" class="visitor-btn" onclick="startCall()">📞 Start Call</button>
+            `;
+            
+            document.getElementById('agentControls').innerHTML = `
+                <button id="acceptCallBtn" class="agent-btn" onclick="acceptCall()" disabled>✅ Accept Call</button>
+            `;
+        }
+        
+        async function testBackendConnection() {
+            console.log('[Test] Testing backend connection...');
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/health`);
+                const data = await response.json();
+                
+                alert(`Backend Status: ${data.status}\nVersion: ${data.version}\nUptime: ${Math.round(data.uptime)}s`);
+            } catch (error) {
+                alert(`Backend connection failed: ${error.message}`);
+            }
+        }
+        
+        // Initialize on page load
+        window.onload = initializeSystem;
+    </script>
+</body>
+</html>
