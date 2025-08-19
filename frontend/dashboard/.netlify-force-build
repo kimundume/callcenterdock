@@ -1,0 +1,10 @@
+# Force Netlify build - Sync System Deployment
+# This file forces Netlify to detect changes and build
+# Timestamp: 2025-08-19 15:10:00
+# Reason: Deploy comprehensive call synchronization system
+# Version: 2.1.1-sync-system
+
+BUILD_TRIGGER=true
+SYNC_SYSTEM_DEPLOYED=true
+AUDIO_FIXES_INCLUDED=true
+CALL_CONTROLS_SYNC_ENABLED=true
