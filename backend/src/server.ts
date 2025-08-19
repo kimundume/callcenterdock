@@ -1744,5 +1744,5 @@ app.get('/widget-config.js', (req, res) => {
 
 const PORT = process.env.PORT || 5001;
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 CallDocker Server v2.1 running on port ${PORT} - WebRTC Audio Fix Deployed`);
 }); 

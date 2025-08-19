@@ -866,6 +866,34 @@ router.get('/agent/status', (req, res) => {
   }
 });
 
+// Auto-reset agent availability (emergency fix)
+router.post('/agent/auto-reset', (req, res) => {
+  try {
+    console.log('[DEBUG] Auto-resetting all agents currentCalls to 0');
+    
+    // Reset all agents' currentCalls to 0
+    Object.values(agentsData).forEach((agent: any) => {
+      if (agent.currentCalls > 0) {
+        console.log(`[DEBUG] Resetting agent ${agent.username} currentCalls from ${agent.currentCalls} to 0`);
+        agent.currentCalls = 0;
+        agent.lastActivity = new Date().toISOString();
+        agent.updatedAt = new Date().toISOString();
+      }
+    });
+    
+    saveAgents();
+    
+    res.json({
+      success: true,
+      message: 'All agents reset successfully',
+      resetCount: Object.values(agentsData).length
+    });
+  } catch (error) {
+    console.error('Auto-reset error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Route call endpoint - handles both calls and chats
 router.post('/route-call', (req, res) => {
   try {
