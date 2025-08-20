@@ -44,4 +44,4 @@ console.log('🔧 Backend Configuration:', {
   socketUrl: getSocketUrl()
 });
 
-// Fixed Netlify config error - v2.1.1 - Force deploy after config fix 
+// FORCE DEPLOY v2.1.2 - Audio Fix - ${new Date().toISOString()} 

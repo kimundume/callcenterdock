@@ -1756,7 +1756,7 @@ server.on('error', (error) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`🚀 CallDocker Server v2.1.2 running on port ${PORT} - CRITICAL AUDIO FIX DEPLOYMENT`);
+  console.log(`🚀 CallDocker Server v2.1.3 running on port ${PORT} - FORCE DEPLOY WITH AUDIO FIX - ${new Date().toISOString()}`);
   console.log(`🌐 Server URL: http://localhost:${PORT}`);
   console.log(`📡 Health check: http://localhost:${PORT}/health`);
   
