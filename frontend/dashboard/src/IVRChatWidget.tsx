@@ -149,7 +149,9 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
       .then(config => {
         console.log('[IVRChatWidget] IVR config loaded:', config);
         setIvrConfig(config);
-        setMessages([{ from: 'system', text: config.steps[0].prompt }]);
+        // Safely access first step prompt
+        const firstPrompt = config?.steps?.[0]?.prompt || 'Welcome! How can I help you today?';
+        setMessages([{ from: 'system', text: firstPrompt }]);
         setIvrStep(0);
       })
       .catch((err) => {
@@ -163,7 +165,10 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
   // Socket.IO setup/teardown
   useEffect(() => {
     if (!open) return;
-    const socket = io(SOCKET_URL);
+    const socket = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      forceNew: true
+    });
     socketRef.current = socket;
     // Listen for call status updates
     socket.on('call-routed', (data) => {

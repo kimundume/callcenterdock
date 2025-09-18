@@ -159,7 +159,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
     setLoading(true);
     fetch(`${API_URL}/call/logs/${companyUuid}`)
       .then(res => res.json())
-      .then(logs => setCallLog(logs.filter(l => l.agent === agentUsername)))
+      .then(logs => setCallLog(safeFilter(logs, l => l.agent === agentUsername)))
       .finally(() => setLoading(false));
   }, [companyUuid, agentUsername]);
 
@@ -170,7 +170,10 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
 
   // Socket.IO setup
   useEffect(() => {
-    const socket = io(SOCKET_URL);
+    const socket = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      forceNew: true
+    });
     socketRef.current = socket;
     socket.emit('register-agent', { uuid: companyUuid, agentId: agentUsername });
     
