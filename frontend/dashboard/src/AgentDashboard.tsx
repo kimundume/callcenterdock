@@ -69,6 +69,12 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
   const [agentUuid, setAgentUuid] = useState<string | null>(null);
   const [queueLength, setQueueLength] = useState<number>(0);
 
+  // Safe filter utility to prevent xe.filter crashes
+  const safeFilter = (value: any, predicate: (item: any) => boolean) => {
+    if (!Array.isArray(value)) return [];
+    return value.filter(predicate);
+  };
+
   // Fetch agent UUID and active calls
   const fetchAgentData = async () => {
     try {
@@ -581,7 +587,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
     message.success('Call log saved!');
   };
 
-  const filteredLogs = callLog.filter(log =>
+  const filteredLogs = safeFilter(callLog, log =>
     (!search ||
       log.notes?.toLowerCase().includes(search.toLowerCase()) ||
       log.tags?.some((t) => t.toLowerCase().includes(search.toLowerCase())) ||
@@ -660,23 +666,68 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
       };
       
       // Handle offer from widget
-      const handleOffer = ({ offer, sessionId }) => {
-        console.log('[AgentDashboard] Received WebRTC offer for session:', sessionId);
-        if (pc && pc.signalingState !== 'closed') {
-          pc.setRemoteDescription(new RTCSessionDescription(offer)).then(() => {
-            // Only create answer after tracks are added
-            pc.createAnswer().then(answer => {
-              pc.setLocalDescription(answer);
-              socketRef.current.emit('webrtc-answer', { 
-                sessionId: sessionId, 
-                answer: answer 
-              });
-              setWebrtcState('connected');
-              console.log('[AgentDashboard] WebRTC answer sent for session:', sessionId);
+      const handleOffer = async ({ offer, sessionId }) => {
+        try {
+          console.log('[Agent] Received WebRTC offer:', !!offer && !!offer.type);
+          if (!offer || !offer.type) return console.warn('[Agent] Offer missing');
+          
+          // create peer connection if not exists
+          if (!pc) {
+            pc = new RTCPeerConnection({ 
+              iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                {
+                  urls: [
+                    "stun:102.68.86.104:3478",
+                    "turn:102.68.86.104:3478?transport=udp",
+                    "turn:102.68.86.104:3478?transport=tcp"
+                  ],
+                  username: "mindfirm",
+                  credential: "superSecret123"
+                }
+              ]
             });
+            peerRef.current = pc;
+            
+            // attach local audio, ontrack, onicecandidate handlers (mirror widget logic)
+            // ensure peerConnection.ontrack attaches audio element and plays
+            pc.ontrack = (evt) => {
+              console.log('[Agent] Received remote stream from caller:', evt.streams[0]);
+              // create and attach audio element if not exist
+              const audioEl = document.getElementById('remote-audio-agent') || document.createElement('audio');
+              audioEl.id = 'remote-audio-agent';
+              audioEl.autoplay = true;
+              audioEl.srcObject = evt.streams[0];
+              if (!document.getElementById('remote-audio-agent')) document.body.appendChild(audioEl);
+            };
+            pc.onicecandidate = (ev) => {
+              if (ev.candidate) {
+                socketRef.current.emit('webrtc-ice-candidate', {
+                  sessionId: sessionId,
+                  candidate: {
+                    candidate: ev.candidate.candidate,
+                    sdpMid: ev.candidate.sdpMid,
+                    sdpMLineIndex: ev.candidate.sdpMLineIndex
+                  }
+                });
+              }
+            };
+          }
+          
+          // set remote description and create answer
+          const remoteOffer = { type: offer.type, sdp: offer.sdp };
+          await pc.setRemoteDescription(new RTCSessionDescription(remoteOffer));
+          console.log('[Agent] Remote description set (offer)');
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          console.log('[Agent] Created answer, sending back');
+          socketRef.current.emit('webrtc-answer', { 
+            sessionId: sessionId, 
+            answer: { type: answer.type, sdp: answer.sdp } 
           });
-        } else {
-          console.warn('[AgentDashboard] Tried to setRemoteDescription/createAnswer on closed connection');
+        } catch (err) {
+          console.error('[Agent] Error handling webrtc-offer:', err);
         }
       };
       
@@ -691,7 +742,9 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
       };
       
       // Add event listeners
+      socketRef.current.off('webrtc-offer'); // avoid duplicate handlers
       socketRef.current.on('webrtc-offer', handleOffer);
+      socketRef.current.off('webrtc-ice-candidate');
       socketRef.current.on('webrtc-ice-candidate', handleIceCandidate);
       
       // Store cleanup function
@@ -1255,14 +1308,14 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
               <CheckCircleOutlined style={{ fontSize: 36, color: '#fff' }} />
               <div>
                 <div style={{ fontWeight: 600, fontSize: 16 }}>Answered Calls</div>
-                <div style={{ fontSize: 28, fontWeight: 900 }}>{callLog.filter(l => (l.disposition || l.status || '').toLowerCase().includes('answer') || (l.status || '').toLowerCase() === 'accepted').length}</div>
+                <div style={{ fontSize: 28, fontWeight: 900 }}>{safeFilter(callLog, l => (l.disposition || l.status || '').toLowerCase().includes('answer') || (l.status || '').toLowerCase() === 'accepted').length}</div>
               </div>
             </Card>
             <Card className="card" style={{ borderRadius: 20, boxShadow: '0 4px 24px #E74A3B22', background: 'linear-gradient(120deg, #E74A3B 0%, #2E73FF 100%)', color: '#fff', display: 'flex', alignItems: 'center', gap: 16 }}>
               <CloseCircleOutlined style={{ fontSize: 36, color: '#fff' }} />
               <div>
                 <div style={{ fontWeight: 600, fontSize: 16 }}>Missed Calls</div>
-                <div style={{ fontSize: 28, fontWeight: 900 }}>{callLog.filter(l => (l.disposition || l.status || '').toLowerCase().includes('miss') || (l.status || '').toLowerCase() === 'rejected').length}</div>
+                <div style={{ fontSize: 28, fontWeight: 900 }}>{safeFilter(callLog, l => (l.disposition || l.status || '').toLowerCase().includes('miss') || (l.status || '').toLowerCase() === 'rejected').length}</div>
               </div>
             </Card>
             
@@ -1301,8 +1354,8 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
                   style={{ marginBottom: 12, borderRadius: 8 }}
                 />
                 <ul style={{ paddingLeft: 0, listStyle: 'none' }}>
-                  {callLog.filter(log => log.sessionId === timelineSession).length === 0 && <li style={{ color: '#888' }}>(No interactions yet)</li>}
-                  {callLog.filter(log => log.sessionId === timelineSession).map((log, i) => (
+                  {safeFilter(callLog, log => log.sessionId === timelineSession).length === 0 && <li style={{ color: '#888' }}>(No interactions yet)</li>}
+                  {safeFilter(callLog, log => log.sessionId === timelineSession).map((log, i) => (
                     <li key={i} style={{ marginBottom: 12, background: '#fff', padding: 16, borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                       <div style={{ fontWeight: 600, marginBottom: 4 }}>Time: {log.time}</div>
                       <div style={{ marginBottom: 4 }}>Disposition: {log.disposition}</div>

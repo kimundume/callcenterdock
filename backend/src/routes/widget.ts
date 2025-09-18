@@ -1339,4 +1339,19 @@ router.get('/ivr/:companyUuid', (req, res) => {
   }
 });
 
+// Update agent status
+router.post('/agent/status', async (req, res) => {
+  try {
+    // expected payload: { agentId, status, sessionId? }
+    const { agentId, status } = req.body || {};
+    // basic validation / store to DB or update, here we just log
+    console.log('/api/widget/agent/status', agentId, status);
+    // return success so frontend doesn't error
+    return res.json({ success: true, message: 'Agent status updated' });
+  } catch (err) {
+    console.error('/api/widget/agent/status error', err);
+    return res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 export default router;

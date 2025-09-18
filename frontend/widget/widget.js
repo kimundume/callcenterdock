@@ -33,6 +33,7 @@
   let endCallBtn = null;
   let muteBtn = null;
   let currentModal = null;
+  let currentSessionId = null;
 
   function log(...args) { console.log('[Widget]', ...args); }
 
@@ -274,183 +275,157 @@
     }
   }
 
+  // startWebRTC(sessionId, agentName) — replace existing implementation
   async function startWebRTC(sessionId, agentName) {
     console.log('[WebRTC] startWebRTC called with sessionId:', sessionId, 'agentName:', agentName);
-    
-    // First, establish socket connection
+    currentSessionId = sessionId; // store for mute events
+
+    // ensure socket.io library loaded and socket connected
     await new Promise((resolve, reject) => {
       loadSocketIo(() => {
         try {
           socket = io(BACKEND_URL);
-          
           socket.on('connect', () => {
             console.log('[WebRTC] Socket connected, socket ID:', socket.id);
-            
-            // Join the session room
             socket.emit('join-room', { room: `session-${sessionId}` });
             console.log('[WebRTC] Joined session room:', `session-${sessionId}`);
-            
-            // Set up socket event listeners
             setupSocketListeners();
             resolve();
           });
-          
-          socket.on('connect_error', (error) => {
-            console.error('[WebRTC] Socket connection error:', error);
-            reject(error);
+          socket.on('connect_error', (err) => {
+            console.error('[WebRTC] Socket connect error', err);
+            reject(err);
           });
-          
-        } catch (error) {
-          console.error('[WebRTC] Socket setup error:', error);
-          reject(error);
+        } catch (err) {
+          reject(err);
         }
       });
     });
-    
+
+    // get microphone
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       console.log('[WebRTC] getUserMedia success', localStream);
-      muteBtn.innerText = 'Mute';
       isMuted = false;
+      if (muteBtn) muteBtn.innerText = 'Mute';
     } catch (err) {
       console.error('[WebRTC] getUserMedia error', err);
-      document.getElementById('calldocker-status').innerText = 'Microphone access denied or unavailable.';
-      endCallBtn.disabled = true;
-      muteBtn.disabled = true;
+      updateStatus('Microphone access denied or unavailable.');
+      if (endCallBtn) endCallBtn.disabled = true;
+      if (muteBtn) muteBtn.disabled = true;
       return;
     }
-    
-    // Create remote audio element
-    remoteAudio = document.createElement('audio');
-    remoteAudio.autoplay = true;
-    remoteAudio.controls = false;
-    remoteAudio.style.display = 'none';
-    document.body.appendChild(remoteAudio);
-    
+
+    // create hidden remote audio element (playback)
+    if (!remoteAudio) {
+      remoteAudio = document.createElement('audio');
+      remoteAudio.autoplay = true;
+      remoteAudio.controls = false;
+      remoteAudio.style.display = 'none';
+      document.body.appendChild(remoteAudio);
+    }
+
+    // build peer connection with sane defaults
     peerConnection = new RTCPeerConnection({
       iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        {
-          urls: [
-            "stun:102.68.86.104:3478",
-            "turn:102.68.86.104:3478?transport=udp",
-            "turn:102.68.86.104:3478?transport=tcp"
-          ],
-          username: "mindfirm",
-          credential: "superSecret123"
-        }
+        { urls: 'stun:stun.l.google.com:19302' }
+        // additional static TURN servers may be appended by app logic
       ]
     });
-    
+
+    // add local tracks
     localStream.getTracks().forEach(track => {
       peerConnection.addTrack(track, localStream);
-      console.log('[WebRTC] addTrack', track);
-      log('Added local track to peer connection');
+      console.log('[WebRTC] addTrack', track.kind, track.id);
     });
-    
-    peerConnection.oniceconnectionstatechange = function() {
-      console.log('[WebRTC] ICE state:', peerConnection.iceConnectionState);
-      if (peerConnection.iceConnectionState === 'connected') {
-        console.log('[WebRTC] ICE connection established!');
-        updateStatus('Call connected - Audio active');
-      }
-    };
-    
-    peerConnection.ontrack = function(event) {
+
+    // ontrack — attach remote stream to audio element
+    peerConnection.ontrack = (event) => {
       console.log('[WebRTC] ontrack', event);
       if (remoteAudio) {
         remoteAudio.srcObject = event.streams[0];
+        // try autoplay, fallback to showing UI if blocked
         remoteAudio.play().then(() => {
           console.log('[WebRTC] remoteAudio play() success');
-        }).catch(e => {
-          console.error('[WebRTC] remoteAudio play() error', e);
+        }).catch(err => {
+          console.warn('[WebRTC] remoteAudio autoplay blocked — show click-to-play', err);
+          remoteAudio.style.display = 'block';
+          // show a minimal play button
+          const playBtn = document.createElement('button');
+          playBtn.innerText = 'Play audio';
+          playBtn.style = 'position: fixed; bottom: 90px; right: 20px; z-index: 10001;';
+          playBtn.onclick = () => { remoteAudio.play().catch(console.error); playBtn.remove(); };
+          document.body.appendChild(playBtn);
         });
       }
     };
-    
-    peerConnection.onicecandidate = function(event) {
-      if (event.candidate) {
-        log('Sending ICE candidate', event.candidate);
-        
-        // Log candidate details for debugging
-        console.log('[WebRTC] ICE candidate details:', {
+
+    peerConnection.oniceconnectionstatechange = () => {
+      console.log('[WebRTC] ICE state:', peerConnection.iceConnectionState);
+      if (peerConnection.iceConnectionState === 'connected') {
+        updateStatus('Call connected - Audio active');
+      }
+    };
+
+    peerConnection.onconnectionstatechange = () => {
+      console.log('[WebRTC] Connection state:', peerConnection.connectionState);
+    };
+
+    // send only JSON-serializable SDP and candidate fields
+    peerConnection.onicecandidate = (event) => {
+      if (!event.candidate) return;
+      console.log('[WebRTC] Sending ICE candidate', event.candidate.candidate ? event.candidate.candidate.slice(0,60) + '...' : event.candidate);
+      socket.emit('webrtc-ice-candidate', {
+        sessionId,
+        candidate: {
           candidate: event.candidate.candidate,
           sdpMid: event.candidate.sdpMid,
           sdpMLineIndex: event.candidate.sdpMLineIndex
-        });
-        
-        socket.emit('webrtc-ice-candidate', {
-          sessionId,
-          candidate: {
-            candidate: event.candidate.candidate,
-            sdpMid: event.candidate.sdpMid,
-            sdpMLineIndex: event.candidate.sdpMLineIndex
-          }
-        });
-      }
+        }
+      });
     };
-    
-    peerConnection.onconnectionstatechange = function() {
-      log('Connection state:', peerConnection.connectionState);
-      console.log('[WebRTC] Connection state changed:', peerConnection.connectionState);
-      
-      if (peerConnection.connectionState === 'connected') {
-        console.log('[WebRTC] ✅ WebRTC connection established!');
-        updateStatus('Call connected - Audio active');
-      } else if (peerConnection.connectionState === 'failed') {
-        console.error('[WebRTC] ❌ WebRTC connection failed!');
-        updateStatus('Call connection failed - please try again');
-      }
-    };
-    
-    // Create offer and send to agent
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
-    log('Created offer, set local description');
-    
-    // Log offer details for debugging
-    console.log('[WebRTC] Offer details:', {
-      type: offer.type,
-      sdpLength: offer.sdp ? offer.sdp.length : 0,
-      sdpPreview: offer.sdp ? offer.sdp.substring(0, 100) + '...' : 'null'
-    });
-    
-    socket.emit('webrtc-offer', {
-      sessionId,
-      offer: {
-        type: offer.type,
-        sdp: offer.sdp
-      }
-    });
-    
+
+    // create offer -> setLocalDescription -> send plain SDP
+    try {
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+      console.log('[WebRTC] Created offer, set local description. SDP length:', offer.sdp?.length || 0);
+      socket.emit('webrtc-offer', {
+        sessionId,
+        offer: {
+          type: offer.type,
+          sdp: offer.sdp
+        }
+      });
+      console.log('[WebRTC] Offer sent');
+    } catch (err) {
+      console.error('[WebRTC] Error creating/sending offer:', err);
+    }
+
     console.log('[WebRTC] WebRTC setup completed');
   }
   
   function setupSocketListeners() {
-    // Listen for WebRTC answer from agent
+    socket.off('webrtc-answer'); // avoid duplicate handlers
     socket.on('webrtc-answer', (data) => {
       console.log('[WebRTC] Received answer:', data);
-      if (peerConnection && data.answer) {
-        console.log('[WebRTC] Setting remote description with answer:', data.answer);
-        peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
+      if (peerConnection && data && data.answer) {
+        const answer = data.answer;
+        peerConnection.setRemoteDescription(new RTCSessionDescription(answer))
           .then(() => console.log('[WebRTC] Set remote description from answer'))
           .catch(err => console.error('[WebRTC] Error setting remote description:', err));
       } else {
-        console.warn('[WebRTC] No peerConnection or answer data available');
+        console.warn('[WebRTC] Answer missing or peerConnection not initialized', !!peerConnection, data);
       }
     });
-    
-    // Listen for ICE candidates from agent
+
+    socket.off('webrtc-ice-candidate');
     socket.on('webrtc-ice-candidate', (data) => {
-      console.log('[WebRTC] Received ICE candidate:', data);
-      if (peerConnection && data.candidate) {
-        console.log('[WebRTC] Adding ICE candidate:', data.candidate);
+      console.log('[WebRTC] Received ICE candidate:', data && data.candidate ? (data.candidate.candidate || '').slice(0,60) + '...' : data);
+      if (peerConnection && data && data.candidate) {
         peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
           .then(() => console.log('[WebRTC] Added ICE candidate'))
           .catch(err => console.error('[WebRTC] Error adding ICE candidate:', err));
-      } else {
-        console.warn('[WebRTC] No peerConnection or candidate data available');
       }
     });
     
@@ -641,16 +616,38 @@
   }
 
   function endCall() {
-    if (peerConnection) peerConnection.close();
-    if (socket) socket.disconnect();
-    if (remoteAudio) document.body.removeChild(remoteAudio);
-    document.querySelectorAll('.calldocker-modal').forEach(el => el.remove());
+    try {
+      if (peerConnection) {
+        peerConnection.getSenders().forEach(sender => {
+          try { sender.track && sender.track.stop(); } catch(e) {}
+        });
+        peerConnection.close();
+      }
+      if (localStream) {
+        localStream.getTracks().forEach(t => { try { t.stop(); } catch(e) {} });
+        localStream = null;
+      }
+      if (socket) {
+        socket.disconnect();
+        socket = null;
+      }
+      if (remoteAudio && remoteAudio.parentNode) {
+        remoteAudio.srcObject = null;
+        remoteAudio.remove();
+        remoteAudio = null;
+      }
+      document.querySelectorAll('.calldocker-modal').forEach(el => el.remove());
+      updateStatus('Call ended');
+    } catch (err) {
+      console.error('endCall error', err);
+    }
   }
 
   function toggleMute() {
     if (!localStream) return;
     isMuted = !isMuted;
     localStream.getAudioTracks().forEach(track => track.enabled = !isMuted);
+    if (socket) socket.emit('visitor-mute', { sessionId: currentSessionId, isMuted });
     muteBtn.innerText = isMuted ? 'Unmute' : 'Mute';
   }
 
