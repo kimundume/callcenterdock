@@ -142,7 +142,10 @@
     
     // Load Socket.IO and establish connection
     loadSocketIo(() => {
-      socket = io(BACKEND_URL);
+      socket = io(BACKEND_URL, {
+        transports: ['websocket', 'polling'],
+        forceNew: true
+      });
       
       socket.on('connect', () => {
         console.log('[Widget] Socket connected for chat session');
@@ -284,7 +287,10 @@
     await new Promise((resolve, reject) => {
       loadSocketIo(() => {
         try {
-          socket = io(BACKEND_URL);
+          socket = io(BACKEND_URL, {
+        transports: ['websocket', 'polling'],
+        forceNew: true
+      });
           socket.on('connect', () => {
             console.log('[WebRTC] Socket connected, socket ID:', socket.id);
             socket.emit('join-room', { room: `session-${sessionId}` });
@@ -347,9 +353,9 @@
 
     // Handle remote audio track
     peerConnection.ontrack = event => {
-      console.log("[IVRChatWidget] Remote track received:", event.streams[0]);
+      console.log("[IVRChatWidget] Remote track received:", event.streams);
       const audioEl = document.getElementById("remoteAudio");
-      if (audioEl) {
+      if (audioEl && event.streams && event.streams.length > 0) {
         audioEl.srcObject = event.streams[0];
         audioEl.play().catch(e => console.error("Audio play failed:", e));
       }
