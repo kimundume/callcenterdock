@@ -375,62 +375,52 @@ export function registerSignalingHandlers(io: SocketIOServer) {
       }
     });
 
-    // WebRTC signaling: offer - FIXED VERSION
+    // WebRTC signaling: offer - WORKING VERSION
     socket.on('webrtc-offer', (data) => {
-      const { sessionId, type, sdp, from, to } = data;
-      console.log('[WebRTC] Received offer for session:', sessionId, 'from:', from, 'to:', to);
+      const { sessionId, sdp, agent } = data;
+      console.log('[WebRTC] Received offer for session:', sessionId, 'agent:', agent);
       
-      if (sessionId && type && sdp) {
-        // Forward offer to agent (or specific socket if to is specified)
-        const targetRoom = to ? `agent-${to}` : `session-${sessionId}`;
-        console.log('[WebRTC] Forwarding offer to room:', targetRoom);
-        socket.to(targetRoom).emit('webrtc-offer', { 
-          sessionId,
-          type,
-          sdp,
-          from,
-          to: to || 'agent'
+      if (sessionId && sdp) {
+        // Forward offer to agent
+        console.log('[WebRTC] Forwarding offer to session room:', `session-${sessionId}`);
+        socket.to(`session-${sessionId}`).emit('webrtc-offer', {
+          sdp: sdp,
+          sessionId: sessionId,
+          agent: agent
         });
       } else {
         console.warn('[WebRTC] Invalid offer data:', data);
       }
     });
 
-    // WebRTC signaling: answer - FIXED VERSION
+    // WebRTC signaling: answer - WORKING VERSION
     socket.on('webrtc-answer', (data) => {
-      const { sessionId, type, sdp, from, to } = data;
-      console.log('[WebRTC] Received answer for session:', sessionId, 'from:', from, 'to:', to);
+      const { sessionId, sdp } = data;
+      console.log('[WebRTC] Received answer for session:', sessionId);
       
-      if (sessionId && type && sdp) {
+      if (sessionId && sdp) {
         // Forward answer to visitor
-        const targetRoom = to ? `visitor-${to}` : `session-${sessionId}`;
-        console.log('[WebRTC] Forwarding answer to room:', targetRoom);
-        socket.to(targetRoom).emit('webrtc-answer', { 
-          sessionId,
-          type,
-          sdp,
-          from,
-          to: to || 'visitor'
+        console.log('[WebRTC] Forwarding answer to session room:', `session-${sessionId}`);
+        socket.to(`session-${sessionId}`).emit('webrtc-answer', {
+          sdp: sdp,
+          sessionId: sessionId
         });
       } else {
         console.warn('[WebRTC] Invalid answer data:', data);
       }
     });
 
-    // WebRTC signaling: ICE candidate - FIXED VERSION
-    socket.on('webrtc-ice-candidate', (data) => {
-      const { sessionId, candidate, from, to } = data;
-      console.log('[WebRTC] Received ICE candidate for session:', sessionId, 'from:', from, 'to:', to);
+    // WebRTC signaling: ICE candidate - WORKING VERSION
+    socket.on('ice-candidate', (data) => {
+      const { sessionId, candidate } = data;
+      console.log('[WebRTC] Received ICE candidate for session:', sessionId);
       
       if (sessionId && candidate) {
-        // Forward ICE candidate to the other party
-        const targetRoom = to ? (to.includes('agent') ? `agent-${to}` : `visitor-${to}`) : `session-${sessionId}`;
-        console.log('[WebRTC] Forwarding ICE candidate to room:', targetRoom);
-        socket.to(targetRoom).emit('webrtc-ice-candidate', { 
-          sessionId,
-          candidate,
-          from,
-          to: to || 'other'
+        // Forward ICE candidate to session room
+        console.log('[WebRTC] Forwarding ICE candidate to session room:', `session-${sessionId}`);
+        socket.to(`session-${sessionId}`).emit('ice-candidate', {
+          candidate: candidate,
+          sessionId: sessionId
         });
       } else {
         console.warn('[WebRTC] Invalid ICE candidate data:', data);

@@ -96,7 +96,7 @@
         console.log('[Widget] /route-call response (call):', data);
         if (data.success) {
           updateStatus('Call connected! Agent: ' + data.agent);
-          startWebRTC(data.sessionId, data.agent);
+          startRealCall(data.sessionId, data.agent);
         } else {
           updateStatus('Error: ' + (data.error || 'Failed to connect'));
         }
@@ -275,9 +275,9 @@
     }
   }
 
-  // startWebRTC(sessionId, agentName) — FIXED VERSION with proper async/await
-  async function startWebRTC(sessionId, agentName) {
-    console.log('[WebRTC] startWebRTC called with sessionId:', sessionId, 'agentName:', agentName);
+  // startRealCall - WORKING VERSION for two-way audio
+  async function startRealCall(sessionId, agentName) {
+    console.log("[IVRChatWidget] Starting WebRTC for session:", sessionId);
     currentSessionId = sessionId; // store for mute events
 
     // ensure socket.io library loaded and socket connected
@@ -302,35 +302,11 @@
       });
     });
 
-    // get microphone
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log('[WebRTC] getUserMedia success', localStream);
-      isMuted = false;
-      if (muteBtn) muteBtn.innerText = 'Mute';
-    } catch (err) {
-      console.error('[WebRTC] getUserMedia error', err);
-      updateStatus('Microphone access denied or unavailable.');
-      if (endCallBtn) endCallBtn.disabled = true;
-      if (muteBtn) muteBtn.disabled = true;
-      return;
-    }
-
-    // create hidden remote audio element (playback)
-    if (!remoteAudio) {
-      remoteAudio = document.createElement('audio');
-      remoteAudio.autoplay = true;
-      remoteAudio.controls = false;
-      remoteAudio.style.display = 'none';
-      remoteAudio.playsInline = true;
-      document.body.appendChild(remoteAudio);
-    }
-
-    // build peer connection with ICE servers
+    // Create peer connection with ICE servers
     peerConnection = new RTCPeerConnection({
       iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
         {
           urls: [
             "stun:102.68.86.104:3478",
@@ -343,33 +319,51 @@
       ]
     });
 
-    // add local tracks
-    localStream.getTracks().forEach(track => {
-      peerConnection.addTrack(track, localStream);
-      console.log('[WebRTC] addTrack', track.kind, track.id);
-    });
+    // Get local microphone stream
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+      console.log("[IVRChatWidget] Local stream tracks:", localStream.getTracks());
+      isMuted = false;
+      if (muteBtn) muteBtn.innerText = 'Mute';
+    } catch (err) {
+      console.error('[WebRTC] getUserMedia error', err);
+      updateStatus('Microphone access denied or unavailable.');
+      if (endCallBtn) endCallBtn.disabled = true;
+      if (muteBtn) muteBtn.disabled = true;
+      return;
+    }
 
-    // ontrack — attach remote stream to audio element
-    peerConnection.ontrack = (event) => {
-      console.log('[WebRTC] ontrack', event);
-      if (remoteAudio) {
-        remoteAudio.srcObject = event.streams[0];
-        // try autoplay, fallback to showing UI if blocked
-        remoteAudio.play().then(() => {
-          console.log('[WebRTC] remoteAudio play() success');
-        }).catch(err => {
-          console.warn('[WebRTC] remoteAudio autoplay blocked — show click-to-play', err);
-          remoteAudio.style.display = 'block';
-          // show a minimal play button
-          const playBtn = document.createElement('button');
-          playBtn.innerText = 'Play audio';
-          playBtn.style = 'position: fixed; bottom: 90px; right: 20px; z-index: 10001;';
-          playBtn.onclick = () => { remoteAudio.play().catch(console.error); playBtn.remove(); };
-          document.body.appendChild(playBtn);
-        });
+    // Create remote audio element
+    if (!remoteAudio) {
+      remoteAudio = document.createElement('audio');
+      remoteAudio.id = 'remoteAudio';
+      remoteAudio.autoplay = true;
+      remoteAudio.controls = false;
+      remoteAudio.style.display = 'none';
+      remoteAudio.playsInline = true;
+      document.body.appendChild(remoteAudio);
+    }
+
+    // Handle remote audio track
+    peerConnection.ontrack = event => {
+      console.log("[IVRChatWidget] Remote track received:", event.streams[0]);
+      const audioEl = document.getElementById("remoteAudio");
+      if (audioEl) {
+        audioEl.srcObject = event.streams[0];
+        audioEl.play().catch(e => console.error("Audio play failed:", e));
       }
     };
 
+    // ICE candidates
+    peerConnection.onicecandidate = event => {
+      if (event.candidate) {
+        console.log("[IVRChatWidget] Sending ICE candidate:", event.candidate);
+        socket.emit("ice-candidate", { sessionId, candidate: event.candidate });
+      }
+    };
+
+    // Connection state monitoring
     peerConnection.oniceconnectionstatechange = () => {
       console.log('[WebRTC] ICE state:', peerConnection.iceConnectionState);
       if (peerConnection.iceConnectionState === 'connected') {
@@ -381,41 +375,12 @@
       console.log('[WebRTC] Connection state:', peerConnection.connectionState);
     };
 
-    // ICE candidates - FIXED: Send actual candidate data, not null
-    peerConnection.onicecandidate = (event) => {
-      if (event.candidate) {
-        console.log('[WebRTC] Sending ICE candidate:', event.candidate);
-        socket.emit('webrtc-ice-candidate', {
-          sessionId,
-          from: getVisitorId(),
-          to: agentName,
-          candidate: {
-            candidate: event.candidate.candidate,
-            sdpMid: event.candidate.sdpMid,
-            sdpMLineIndex: event.candidate.sdpMLineIndex
-          }
-        });
-      }
-    };
-
-    // create offer -> setLocalDescription -> send offer - FIXED: Proper async/await
+    // Create and send offer
     try {
-      console.log('[WebRTC] Creating offer...');
       const offer = await peerConnection.createOffer();
-      console.log('[WebRTC] Created offer:', offer);
-      
       await peerConnection.setLocalDescription(offer);
-      console.log('[WebRTC] Set local description');
-      
-      // Send the actual offer object, not null
-      socket.emit('webrtc-offer', {
-        sessionId,
-        from: getVisitorId(),
-        to: agentName,
-        type: offer.type,
-        sdp: offer.sdp
-      });
-      console.log('[WebRTC] Offer sent with SDP length:', offer.sdp?.length || 0);
+      console.log("[IVRChatWidget] Sending WebRTC offer:", offer.sdp);
+      socket.emit("webrtc-offer", { sessionId, agent: agentName, sdp: offer });
     } catch (err) {
       console.error('[WebRTC] Error creating/sending offer:', err);
     }
@@ -424,12 +389,16 @@
   }
   
   function setupSocketListeners() {
-    socket.off('webrtc-answer'); // avoid duplicate handlers
+    // Clean up existing listeners
+    socket.off('webrtc-answer');
+    socket.off('ice-candidate');
+    
+    // Handle incoming answer from agent
     socket.on('webrtc-answer', async (data) => {
       console.log('[WebRTC] Received answer:', data);
-      if (peerConnection && data && data.type && data.sdp) {
+      if (peerConnection && data && data.sdp) {
         try {
-          const answer = new RTCSessionDescription({ type: data.type, sdp: data.sdp });
+          const answer = new RTCSessionDescription(data.sdp);
           await peerConnection.setRemoteDescription(answer);
           console.log('[WebRTC] Set remote description from answer');
         } catch (err) {
@@ -440,8 +409,8 @@
       }
     });
 
-    socket.off('webrtc-ice-candidate');
-    socket.on('webrtc-ice-candidate', async (data) => {
+    // Handle incoming ICE candidates from agent
+    socket.on('ice-candidate', async (data) => {
       console.log('[WebRTC] Received ICE candidate:', data);
       if (peerConnection && data && data.candidate) {
         try {
@@ -640,18 +609,25 @@
   }
 
   function endCall() {
+    console.log("[Call] Ending call...");
     try {
       if (peerConnection) {
+        // Stop all local tracks
         peerConnection.getSenders().forEach(sender => {
           try { sender.track && sender.track.stop(); } catch(e) {}
         });
         peerConnection.close();
+        peerConnection = null;
       }
       if (localStream) {
         localStream.getTracks().forEach(t => { try { t.stop(); } catch(e) {} });
         localStream = null;
       }
       if (socket) {
+        // Clean up socket listeners
+        socket.off("webrtc-offer");
+        socket.off("webrtc-answer");
+        socket.off("ice-candidate");
         socket.disconnect();
         socket = null;
       }
