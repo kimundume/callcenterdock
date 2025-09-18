@@ -88,7 +88,25 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
 exports.generateId = generateId;
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
-const io = new socket_io_1.Server(server, { cors: { origin: '*' } });
+const io = new socket_io_1.Server(server, {
+    cors: {
+        origin: [
+            'http://localhost:3000',
+            'http://localhost:5173',
+            'http://localhost:5174',
+            'https://calldocker.netlify.app',
+            'https://callcenterdock.onrender.com',
+            'https://*.netlify.app',
+            'https://*.vercel.app'
+        ],
+        credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+    },
+    transports: ['websocket', 'polling'],
+    allowEIO3: true,
+    pingTimeout: 60000,
+    pingInterval: 25000
+});
 // Expose io on app for use in routes
 app.set('io', io);
 // CORS configuration

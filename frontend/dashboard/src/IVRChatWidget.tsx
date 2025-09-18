@@ -365,7 +365,12 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
         // Create offer only after tracks are added
         pc.createOffer().then(offer => {
           pc.setLocalDescription(offer);
-          socketRef.current.emit('webrtc-offer', { toSocketId: agentSocketId, offer });
+          console.log('[IVRChatWidget] Sending WebRTC offer to agent:', agentSocketId);
+          socketRef.current.emit('webrtc-offer', { 
+            sessionId: sessionId,
+            toSocketId: agentSocketId, 
+            offer 
+          });
         });
       }).catch(err => {
         console.error('Widget getUserMedia error:', err);
@@ -776,9 +781,10 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
       // ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate && socketRef.current) {
-          console.log('[IVRChatWidget] Sending ICE candidate');
+          console.log('[IVRChatWidget] Sending ICE candidate to agent:', agentSocketId);
           socketRef.current.emit('webrtc-ice-candidate', {
             sessionId: sessionId,
+            toSocketId: agentSocketId,
             candidate: event.candidate
           });
         }
@@ -790,8 +796,10 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
       console.log('[IVRChatWidget] Created offer, sending to agent');
       
       if (socketRef.current) {
+        console.log('[IVRChatWidget] Sending WebRTC offer to agent:', agentSocketId);
         socketRef.current.emit('webrtc-offer', {
           sessionId: sessionId,
+          toSocketId: agentSocketId,
           offer: offer
         });
       }

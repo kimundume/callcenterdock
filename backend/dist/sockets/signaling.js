@@ -350,41 +350,77 @@ function registerSignalingHandlers(io) {
         });
         // WebRTC signaling: offer
         socket.on('webrtc-offer', (data) => {
-            const { sessionId, offer } = data;
+            const { sessionId, offer, toSocketId } = data;
+            console.log('[WebRTC] Received offer for session:', sessionId, 'from socket:', socket.id, 'toSocketId:', toSocketId);
             if (sessionId && offer) {
-                console.log('[WebRTC] Forwarding offer for session:', sessionId, 'from socket:', socket.id);
-                // Send offer to all sockets in the session room except the sender
-                socket.to(`session-${sessionId}`).emit('webrtc-offer', {
-                    fromSocketId: socket.id,
-                    offer,
-                    sessionId
-                });
+                // If toSocketId is specified, send directly to that socket
+                if (toSocketId) {
+                    console.log('[WebRTC] Sending offer directly to socket:', toSocketId);
+                    io.to(toSocketId).emit('webrtc-offer', {
+                        fromSocketId: socket.id,
+                        offer,
+                        sessionId
+                    });
+                }
+                else {
+                    // Send offer to all sockets in the session room except the sender
+                    console.log('[WebRTC] Broadcasting offer to session room:', `session-${sessionId}`);
+                    socket.to(`session-${sessionId}`).emit('webrtc-offer', {
+                        fromSocketId: socket.id,
+                        offer,
+                        sessionId
+                    });
+                }
             }
         });
         // WebRTC signaling: answer
         socket.on('webrtc-answer', (data) => {
-            const { sessionId, answer } = data;
+            const { sessionId, answer, toSocketId } = data;
+            console.log('[WebRTC] Received answer for session:', sessionId, 'from socket:', socket.id, 'toSocketId:', toSocketId);
             if (sessionId && answer) {
-                console.log('[WebRTC] Forwarding answer for session:', sessionId, 'from socket:', socket.id);
-                // Send answer to all sockets in the session room except the sender
-                socket.to(`session-${sessionId}`).emit('webrtc-answer', {
-                    fromSocketId: socket.id,
-                    answer,
-                    sessionId
-                });
+                // If toSocketId is specified, send directly to that socket
+                if (toSocketId) {
+                    console.log('[WebRTC] Sending answer directly to socket:', toSocketId);
+                    io.to(toSocketId).emit('webrtc-answer', {
+                        fromSocketId: socket.id,
+                        answer,
+                        sessionId
+                    });
+                }
+                else {
+                    // Send answer to all sockets in the session room except the sender
+                    console.log('[WebRTC] Broadcasting answer to session room:', `session-${sessionId}`);
+                    socket.to(`session-${sessionId}`).emit('webrtc-answer', {
+                        fromSocketId: socket.id,
+                        answer,
+                        sessionId
+                    });
+                }
             }
         });
         // WebRTC signaling: ICE candidate
         socket.on('webrtc-ice-candidate', (data) => {
-            const { sessionId, candidate } = data;
+            const { sessionId, candidate, toSocketId } = data;
+            console.log('[WebRTC] Received ICE candidate for session:', sessionId, 'from socket:', socket.id, 'toSocketId:', toSocketId);
             if (sessionId && candidate) {
-                console.log('[WebRTC] Forwarding ICE candidate for session:', sessionId, 'from socket:', socket.id);
-                // Send ICE candidate to all sockets in the session room except the sender
-                socket.to(`session-${sessionId}`).emit('webrtc-ice-candidate', {
-                    fromSocketId: socket.id,
-                    candidate,
-                    sessionId
-                });
+                // If toSocketId is specified, send directly to that socket
+                if (toSocketId) {
+                    console.log('[WebRTC] Sending ICE candidate directly to socket:', toSocketId);
+                    io.to(toSocketId).emit('webrtc-ice-candidate', {
+                        fromSocketId: socket.id,
+                        candidate,
+                        sessionId
+                    });
+                }
+                else {
+                    // Send ICE candidate to all sockets in the session room except the sender
+                    console.log('[WebRTC] Broadcasting ICE candidate to session room:', `session-${sessionId}`);
+                    socket.to(`session-${sessionId}`).emit('webrtc-ice-candidate', {
+                        fromSocketId: socket.id,
+                        candidate,
+                        sessionId
+                    });
+                }
             }
         });
         // Test call request from admin
