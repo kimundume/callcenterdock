@@ -1120,4 +1120,92 @@ router.post('/agent/status', (req, res) => {
     }
 });
 // Endpoints already defined above
+// Get availability status for a company
+router.get('/availability', (req, res) => {
+    try {
+        const { companyUuid } = req.query;
+        console.log('[DEBUG] Getting availability for company:', companyUuid);
+        // If no companyUuid provided, use CallDocker company as fallback
+        const targetCompanyUuid = companyUuid || 'calldocker-company-uuid';
+        // Find available agents for this company
+        const availableAgents = Object.values(agentsData).filter((agent) => agent.companyUuid === targetCompanyUuid &&
+            agent.status === 'online' &&
+            agent.availability === 'online' &&
+            agent.currentCalls < (agent.maxCalls || 5));
+        const isAvailable = availableAgents.length > 0;
+        res.json({
+            success: true,
+            available: isAvailable,
+            agentsOnline: availableAgents.length,
+            estimatedWaitTime: isAvailable ? 0 : 30, // 30 seconds if no agents available
+            message: isAvailable ? 'Agents are available' : 'No agents available, please try again later'
+        });
+    }
+    catch (error) {
+        console.error('Get availability error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Get call history for a company
+router.get('/calls/history', (req, res) => {
+    try {
+        const { companyUuid, page = 1, limit = 10 } = req.query;
+        console.log('[DEBUG] Getting call history for company:', companyUuid, 'page:', page, 'limit:', limit);
+        // Get sessions for the company
+        const companySessions = Object.values(sessionsData).filter((session) => session.companyUuid === companyUuid);
+        // Sort by timestamp (newest first)
+        const sortedSessions = companySessions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        // Pagination
+        const startIndex = (parseInt(page) - 1) * parseInt(limit);
+        const endIndex = startIndex + parseInt(limit);
+        const paginatedSessions = sortedSessions.slice(startIndex, endIndex);
+        res.json({
+            success: true,
+            calls: paginatedSessions.map((session) => ({
+                sessionId: session.sessionId,
+                agentId: session.agentId,
+                visitorId: session.visitorId,
+                timestamp: session.timestamp,
+                status: session.status,
+                duration: session.duration,
+                callType: session.callType || 'incoming'
+            })),
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                total: companySessions.length,
+                totalPages: Math.ceil(companySessions.length / parseInt(limit))
+            }
+        });
+    }
+    catch (error) {
+        console.error('Get call history error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Get IVR widget data for a company
+router.get('/ivr/:companyUuid', (req, res) => {
+    try {
+        const { companyUuid } = req.params;
+        console.log('[DEBUG] Getting IVR widget data for company:', companyUuid);
+        const company = companiesData[companyUuid];
+        if (!company) {
+            return res.status(404).json({ error: 'Company not found' });
+        }
+        res.json({
+            success: true,
+            company: {
+                uuid: company.uuid,
+                name: company.name,
+                logo: company.logo,
+                welcomeMessage: company.welcomeMessage || 'Welcome to our call center',
+                ivrOptions: company.ivrOptions || []
+            }
+        });
+    }
+    catch (error) {
+        console.error('Get IVR widget data error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 exports.default = router;

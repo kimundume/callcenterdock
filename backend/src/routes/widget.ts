@@ -1235,6 +1235,38 @@ router.post('/agent/status', (req, res) => {
 
 // Endpoints already defined above
 
+// Get availability status for a company
+router.get('/availability', (req, res) => {
+  try {
+    const { companyUuid } = req.query;
+    console.log('[DEBUG] Getting availability for company:', companyUuid);
+    
+    // If no companyUuid provided, use CallDocker company as fallback
+    const targetCompanyUuid = companyUuid || 'calldocker-company-uuid';
+    
+    // Find available agents for this company
+    const availableAgents = Object.values(agentsData).filter((agent: any) => 
+      agent.companyUuid === targetCompanyUuid &&
+      agent.status === 'online' &&
+      agent.availability === 'online' &&
+      agent.currentCalls < (agent.maxCalls || 5)
+    );
+    
+    const isAvailable = availableAgents.length > 0;
+    
+    res.json({
+      success: true,
+      available: isAvailable,
+      agentsOnline: availableAgents.length,
+      estimatedWaitTime: isAvailable ? 0 : 30, // 30 seconds if no agents available
+      message: isAvailable ? 'Agents are available' : 'No agents available, please try again later'
+    });
+  } catch (error) {
+    console.error('Get availability error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get call history for a company
 router.get('/calls/history', (req, res) => {
   try {
