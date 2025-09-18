@@ -275,7 +275,7 @@
     }
   }
 
-  // startWebRTC(sessionId, agentName) — replace existing implementation
+  // startWebRTC(sessionId, agentName) — FIXED VERSION with proper async/await
   async function startWebRTC(sessionId, agentName) {
     console.log('[WebRTC] startWebRTC called with sessionId:', sessionId, 'agentName:', agentName);
     currentSessionId = sessionId; // store for mute events
@@ -322,14 +322,24 @@
       remoteAudio.autoplay = true;
       remoteAudio.controls = false;
       remoteAudio.style.display = 'none';
+      remoteAudio.playsInline = true;
       document.body.appendChild(remoteAudio);
     }
 
-    // build peer connection with sane defaults
+    // build peer connection with ICE servers
     peerConnection = new RTCPeerConnection({
       iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' }
-        // additional static TURN servers may be appended by app logic
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        {
+          urls: [
+            "stun:102.68.86.104:3478",
+            "turn:102.68.86.104:3478?transport=udp",
+            "turn:102.68.86.104:3478?transport=tcp"
+          ],
+          username: "mindfirm",
+          credential: "superSecret123"
+        }
       ]
     });
 
@@ -371,33 +381,41 @@
       console.log('[WebRTC] Connection state:', peerConnection.connectionState);
     };
 
-    // send only JSON-serializable SDP and candidate fields
+    // ICE candidates - FIXED: Send actual candidate data, not null
     peerConnection.onicecandidate = (event) => {
-      if (!event.candidate) return;
-      console.log('[WebRTC] Sending ICE candidate', event.candidate.candidate ? event.candidate.candidate.slice(0,60) + '...' : event.candidate);
-      socket.emit('webrtc-ice-candidate', {
-        sessionId,
-        candidate: {
-          candidate: event.candidate.candidate,
-          sdpMid: event.candidate.sdpMid,
-          sdpMLineIndex: event.candidate.sdpMLineIndex
-        }
-      });
+      if (event.candidate) {
+        console.log('[WebRTC] Sending ICE candidate:', event.candidate);
+        socket.emit('webrtc-ice-candidate', {
+          sessionId,
+          from: getVisitorId(),
+          to: agentName,
+          candidate: {
+            candidate: event.candidate.candidate,
+            sdpMid: event.candidate.sdpMid,
+            sdpMLineIndex: event.candidate.sdpMLineIndex
+          }
+        });
+      }
     };
 
-    // create offer -> setLocalDescription -> send plain SDP
+    // create offer -> setLocalDescription -> send offer - FIXED: Proper async/await
     try {
+      console.log('[WebRTC] Creating offer...');
       const offer = await peerConnection.createOffer();
+      console.log('[WebRTC] Created offer:', offer);
+      
       await peerConnection.setLocalDescription(offer);
-      console.log('[WebRTC] Created offer, set local description. SDP length:', offer.sdp?.length || 0);
+      console.log('[WebRTC] Set local description');
+      
+      // Send the actual offer object, not null
       socket.emit('webrtc-offer', {
         sessionId,
-        offer: {
-          type: offer.type,
-          sdp: offer.sdp
-        }
+        from: getVisitorId(),
+        to: agentName,
+        type: offer.type,
+        sdp: offer.sdp
       });
-      console.log('[WebRTC] Offer sent');
+      console.log('[WebRTC] Offer sent with SDP length:', offer.sdp?.length || 0);
     } catch (err) {
       console.error('[WebRTC] Error creating/sending offer:', err);
     }
@@ -407,25 +425,31 @@
   
   function setupSocketListeners() {
     socket.off('webrtc-answer'); // avoid duplicate handlers
-    socket.on('webrtc-answer', (data) => {
+    socket.on('webrtc-answer', async (data) => {
       console.log('[WebRTC] Received answer:', data);
-      if (peerConnection && data && data.answer) {
-        const answer = data.answer;
-        peerConnection.setRemoteDescription(new RTCSessionDescription(answer))
-          .then(() => console.log('[WebRTC] Set remote description from answer'))
-          .catch(err => console.error('[WebRTC] Error setting remote description:', err));
+      if (peerConnection && data && data.type && data.sdp) {
+        try {
+          const answer = new RTCSessionDescription({ type: data.type, sdp: data.sdp });
+          await peerConnection.setRemoteDescription(answer);
+          console.log('[WebRTC] Set remote description from answer');
+        } catch (err) {
+          console.error('[WebRTC] Error setting remote description:', err);
+        }
       } else {
         console.warn('[WebRTC] Answer missing or peerConnection not initialized', !!peerConnection, data);
       }
     });
 
     socket.off('webrtc-ice-candidate');
-    socket.on('webrtc-ice-candidate', (data) => {
-      console.log('[WebRTC] Received ICE candidate:', data && data.candidate ? (data.candidate.candidate || '').slice(0,60) + '...' : data);
+    socket.on('webrtc-ice-candidate', async (data) => {
+      console.log('[WebRTC] Received ICE candidate:', data);
       if (peerConnection && data && data.candidate) {
-        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
-          .then(() => console.log('[WebRTC] Added ICE candidate'))
-          .catch(err => console.error('[WebRTC] Error adding ICE candidate:', err));
+        try {
+          await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+          console.log('[WebRTC] Added ICE candidate');
+        } catch (err) {
+          console.error('[WebRTC] Error adding ICE candidate:', err);
+        }
       }
     });
     
