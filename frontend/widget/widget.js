@@ -372,15 +372,36 @@
     peerConnection.onicecandidate = function(event) {
       if (event.candidate) {
         log('Sending ICE candidate', event.candidate);
+        
+        // Log candidate details for debugging
+        console.log('[WebRTC] ICE candidate details:', {
+          candidate: event.candidate.candidate,
+          sdpMid: event.candidate.sdpMid,
+          sdpMLineIndex: event.candidate.sdpMLineIndex
+        });
+        
         socket.emit('webrtc-ice-candidate', {
-          sessionId: sessionId,
-          candidate: event.candidate
+          sessionId,
+          candidate: {
+            candidate: event.candidate.candidate,
+            sdpMid: event.candidate.sdpMid,
+            sdpMLineIndex: event.candidate.sdpMLineIndex
+          }
         });
       }
     };
     
     peerConnection.onconnectionstatechange = function() {
       log('Connection state:', peerConnection.connectionState);
+      console.log('[WebRTC] Connection state changed:', peerConnection.connectionState);
+      
+      if (peerConnection.connectionState === 'connected') {
+        console.log('[WebRTC] ✅ WebRTC connection established!');
+        updateStatus('Call connected - Audio active');
+      } else if (peerConnection.connectionState === 'failed') {
+        console.error('[WebRTC] ❌ WebRTC connection failed!');
+        updateStatus('Call connection failed - please try again');
+      }
     };
     
     // Create offer and send to agent
@@ -388,9 +409,19 @@
     await peerConnection.setLocalDescription(offer);
     log('Created offer, set local description');
     
+    // Log offer details for debugging
+    console.log('[WebRTC] Offer details:', {
+      type: offer.type,
+      sdpLength: offer.sdp ? offer.sdp.length : 0,
+      sdpPreview: offer.sdp ? offer.sdp.substring(0, 100) + '...' : 'null'
+    });
+    
     socket.emit('webrtc-offer', {
-      sessionId: sessionId,
-      offer: offer
+      sessionId,
+      offer: {
+        type: offer.type,
+        sdp: offer.sdp
+      }
     });
     
     console.log('[WebRTC] WebRTC setup completed');
@@ -401,9 +432,12 @@
     socket.on('webrtc-answer', (data) => {
       console.log('[WebRTC] Received answer:', data);
       if (peerConnection && data.answer) {
+        console.log('[WebRTC] Setting remote description with answer:', data.answer);
         peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
           .then(() => console.log('[WebRTC] Set remote description from answer'))
           .catch(err => console.error('[WebRTC] Error setting remote description:', err));
+      } else {
+        console.warn('[WebRTC] No peerConnection or answer data available');
       }
     });
     
@@ -411,9 +445,12 @@
     socket.on('webrtc-ice-candidate', (data) => {
       console.log('[WebRTC] Received ICE candidate:', data);
       if (peerConnection && data.candidate) {
+        console.log('[WebRTC] Adding ICE candidate:', data.candidate);
         peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
           .then(() => console.log('[WebRTC] Added ICE candidate'))
           .catch(err => console.error('[WebRTC] Error adding ICE candidate:', err));
+      } else {
+        console.warn('[WebRTC] No peerConnection or candidate data available');
       }
     });
     
