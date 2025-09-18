@@ -77,7 +77,7 @@ export const SynchronizedCallWidget: React.FC<SynchronizedCallWidgetProps> = ({
     // Listen for WebRTC signaling
     socket.on('webrtc-offer', handleWebRTCOffer);
     socket.on('webrtc-answer', handleWebRTCAnswer);
-    socket.on('webrtc-ice-candidate', handleWebRTCIceCandidate);
+    socket.on('ice-candidate', handleWebRTCIceCandidate);
     socket.on('start-webrtc-call', handleStartWebRTCCall);
 
     // Listen for call events
@@ -266,7 +266,7 @@ export const SynchronizedCallWidget: React.FC<SynchronizedCallWidgetProps> = ({
     // Handle ICE candidates
     peerConnectionRef.current.onicecandidate = (event) => {
       if (event.candidate) {
-        socketRef.current?.emit('webrtc-ice-candidate', {
+        socketRef.current?.emit('ice-candidate', {
           sessionId: callState.sessionId,
           candidate: event.candidate
         });

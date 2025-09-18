@@ -391,7 +391,7 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
       // ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate && socketRef.current) {
-          socketRef.current.emit('webrtc-ice-candidate', { sessionId: chatSessionId, candidate: event.candidate });
+          socketRef.current.emit('ice-candidate', { sessionId: chatSessionId, candidate: event.candidate });
         }
       };
       // Handle answer
@@ -406,7 +406,7 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
         }
       });
       // Handle ICE from agent
-      socketRef.current.on('webrtc-ice-candidate', ({ candidate, sessionId }) => {
+      socketRef.current.on('ice-candidate', ({ candidate, sessionId }) => {
         console.log('[IVRChatWidget] Received ICE candidate for session:', sessionId);
         if (pc.signalingState !== 'closed') {
           pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -668,9 +668,9 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
     setTimeout(() => setCallState('idle'), 1200);
   };
 
-  // WebRTC functions for voice calls
+  // WebRTC functions for voice calls - WORKING VERSION
   const startWebRTC = async (sessionId: string, agentName: string) => {
-    console.log('[IVRChatWidget] startWebRTC called with sessionId:', sessionId, 'agentName:', agentName);
+    console.log('[IVRChatWidget] Starting WebRTC for session:', sessionId);
     
     try {
       // Establish socket connection and join session room for form:push events
@@ -695,19 +695,19 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
             showFormToVisitor(formData);
           });
           
-          // WebRTC answer listener
+          // WebRTC answer listener - FIXED VERSION
           socketRef.current.on('webrtc-answer', (data) => {
             console.log('[IVRChatWidget] Received WebRTC answer:', data);
             const pc = (window as any).currentPeerConnection;
-            if (pc && data.answer) {
-              pc.setRemoteDescription(new RTCSessionDescription(data.answer))
+            if (pc && data.sdp) {
+              pc.setRemoteDescription(new RTCSessionDescription(data.sdp))
                 .then(() => console.log('[IVRChatWidget] Set remote description from answer'))
                 .catch(err => console.error('[IVRChatWidget] Error setting remote description:', err));
             }
           });
           
-          // WebRTC ICE candidate listener
-          socketRef.current.on('webrtc-ice-candidate', (data) => {
+          // WebRTC ICE candidate listener - FIXED VERSION
+          socketRef.current.on('ice-candidate', (data) => {
             console.log('[IVRChatWidget] Received ICE candidate:', data);
             const pc = (window as any).currentPeerConnection;
             if (pc && data.candidate) {
@@ -753,19 +753,23 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
         console.log('[IVRChatWidget] addTrack', track);
       });
       
-      // Handle remote stream
+      // Handle remote stream - FIXED VERSION
       pc.ontrack = (event) => {
-        console.log('[IVRChatWidget] ontrack', event);
+        console.log('[IVRChatWidget] Remote track received:', event.streams[0]);
         const remoteStream = event.streams[0];
         if (remoteStream) {
-          // Create audio element for remote audio
-          const remoteAudio = document.createElement('audio');
+          // Create audio element for remote audio with proper ID
+          const remoteAudio = document.getElementById('remoteAudio') || document.createElement('audio');
+          remoteAudio.id = 'remoteAudio';
           remoteAudio.srcObject = remoteStream;
           remoteAudio.autoplay = true;
           remoteAudio.controls = false;
           remoteAudio.style.display = 'none';
-          document.body.appendChild(remoteAudio);
-          console.log('[IVRChatWidget] Remote audio element created');
+          remoteAudio.playsInline = true;
+          if (!document.getElementById('remoteAudio')) {
+            document.body.appendChild(remoteAudio);
+          }
+          console.log('[IVRChatWidget] Remote audio element created and attached');
         }
       };
       
@@ -778,29 +782,28 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
         }
       };
       
-      // ICE candidates
+      // ICE candidates - FIXED VERSION
       pc.onicecandidate = (event) => {
         if (event.candidate && socketRef.current) {
-          console.log('[IVRChatWidget] Sending ICE candidate to agent:', agentSocketId);
-          socketRef.current.emit('webrtc-ice-candidate', {
+          console.log('[IVRChatWidget] Sending ICE candidate:', event.candidate);
+          socketRef.current.emit('ice-candidate', {
             sessionId: sessionId,
-            toSocketId: agentSocketId,
             candidate: event.candidate
           });
         }
       };
       
-      // Create and send offer
+      // Create and send offer - FIXED VERSION
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       console.log('[IVRChatWidget] Created offer, sending to agent');
       
       if (socketRef.current) {
-        console.log('[IVRChatWidget] Sending WebRTC offer to agent:', agentSocketId);
+        console.log('[IVRChatWidget] Sending WebRTC offer:', offer.sdp);
         socketRef.current.emit('webrtc-offer', {
           sessionId: sessionId,
-          toSocketId: agentSocketId,
-          offer: offer
+          agent: agentName,
+          sdp: offer
         });
       }
       

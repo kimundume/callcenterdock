@@ -658,7 +658,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
       // ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate && socketRef.current && incomingCall) {
-          socketRef.current.emit('webrtc-ice-candidate', { 
+          socketRef.current.emit('ice-candidate', { 
             sessionId: incomingCall.sessionId, 
             candidate: event.candidate 
           });
