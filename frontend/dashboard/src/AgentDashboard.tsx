@@ -205,6 +205,100 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
     
     setAgentOnline();
     
+    // Set up WebRTC offer handler immediately when socket connects
+    socket.on('webrtc-offer', async ({ sdp, sessionId, agent }) => {
+      console.log('[Agent] Received WebRTC offer:', { sdpLength: sdp?.sdp?.length, sessionId, agent });
+      if (!sdp || !sdp.sdp) return console.warn('[Agent] Offer missing sdp');
+      
+      // Create peer connection if not exists
+      let pc = peerRef.current;
+      if (!pc) {
+        pc = new RTCPeerConnection({ 
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            {
+              urls: [
+                "stun:102.68.86.104:3478",
+                "turn:102.68.86.104:3478?transport=udp",
+                "turn:102.68.86.104:3478?transport=tcp"
+              ],
+              username: "mindfirm",
+              credential: "superSecret123"
+            }
+          ]
+        });
+        peerRef.current = pc;
+        
+        // Get agent microphone and add to connection
+        try {
+          const agentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          setLocalStream(agentStream);
+          console.log('[Agent] Agent microphone obtained:', agentStream.getTracks());
+          agentStream.getTracks().forEach(track => pc.addTrack(track, agentStream));
+        } catch (err) {
+          console.error('[Agent] Failed to get agent microphone:', err);
+        }
+        
+        // Handle incoming audio from visitor
+        pc.ontrack = (evt) => {
+          console.log('[Agent] Received remote stream from caller:', evt.streams[0]);
+          setRemoteStream(evt.streams[0]);
+          
+          // Create and attach audio element for playback
+          const audioEl = document.getElementById('remoteAudio') || document.createElement('audio');
+          audioEl.id = 'remoteAudio';
+          audioEl.autoplay = true;
+          audioEl.playsInline = true;
+          audioEl.srcObject = evt.streams[0];
+          if (!document.getElementById('remoteAudio')) document.body.appendChild(audioEl);
+          
+          console.log('[Agent] Remote audio element created and attached');
+        };
+        
+        // Send ICE candidates to visitor
+        pc.onicecandidate = (ev) => {
+          if (ev.candidate) {
+            console.log('[Agent] Sending ICE candidate to visitor:', ev.candidate);
+            socket.emit('ice-candidate', {
+              sessionId: sessionId,
+              candidate: ev.candidate
+            });
+          }
+        };
+      }
+      
+      // Set remote description and create answer
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+        console.log('[Agent] Remote description set (offer)');
+        
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        console.log('[Agent] Created answer, sending back');
+        
+        socket.emit('webrtc-answer', { 
+          sessionId: sessionId,
+          sdp: answer
+        });
+      } catch (err) {
+        console.error('[Agent] Error handling webrtc-offer:', err);
+      }
+    });
+
+    // Set up ICE candidate handler
+    socket.on('ice-candidate', ({ candidate, sessionId }) => {
+      console.log('[AgentDashboard] Adding ICE candidate:', candidate);
+      const pc = peerRef.current;
+      if (pc && pc.signalingState !== 'closed') {
+        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => {
+          console.error("Error adding ICE candidate:", e);
+        });
+      } else {
+        console.warn('[Agent] Tried to addIceCandidate on closed connection');
+      }
+    });
+
     socket.on('incoming-call', (data) => {
       console.log('Received incoming-call event:', data);
       console.log('Setting callStatus to "Ringing"');
@@ -605,186 +699,17 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
     { title: 'Session ID', dataIndex: 'sessionId', key: 'sessionId' },
   ];
 
-  // Refactor WebRTC setup and cleanup
+  // WebRTC cleanup on call end
   useEffect(() => {
-    let pc;
-    let cleanup = false;
-    
-    if (callStatus === 'In Call' && socketRef.current) {
-      setWebrtcState('connecting');
-      pc = new RTCPeerConnection({ 
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          {
-            urls: [
-              "stun:102.68.86.104:3478",
-              "turn:102.68.86.104:3478?transport=udp",
-              "turn:102.68.86.104:3478?transport=tcp"
-            ],
-            username: "mindfirm",
-            credential: "superSecret123"
-          }
-        ]
-      });
-      peerRef.current = pc;
-      console.log('Agent: Created RTCPeerConnection');
-      
-      // Get user media and add tracks before answer
-      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-        setLocalStream(stream);
-        console.log('Agent localStream tracks:', stream.getTracks());
-        stream.getTracks().forEach(track => pc.addTrack(track, stream));
-      }).catch(err => {
-        console.error('Agent getUserMedia error:', err);
-      });
-      
-      // Handle remote stream
-      pc.ontrack = (event) => {
-        const [remote] = event.streams;
-        setRemoteStream(remote);
-        if (remoteAudioRef.current) remoteAudioRef.current.srcObject = remote;
-        if (remote) console.log('Agent received remoteStream tracks:', remote.getTracks());
-      };
-      
-      pc.onsignalingstatechange = () => {
-        console.log('Agent signalingState:', pc.signalingState);
-      };
-      
-      pc.oniceconnectionstatechange = () => {
-        console.log('Agent ICE state:', pc.iceConnectionState);
-      };
-      
-      // ICE candidates
-      pc.onicecandidate = (event) => {
-        if (event.candidate && socketRef.current && incomingCall) {
-          socketRef.current.emit('ice-candidate', { 
-            sessionId: incomingCall.sessionId, 
-            candidate: event.candidate 
-          });
-        }
-      };
-      
-      // Handle offer from widget - WORKING VERSION
-      const handleOffer = async ({ sdp, sessionId, agent }) => {
-        try {
-          console.log('[Agent] Received WebRTC offer:', { sdpLength: sdp?.sdp?.length, sessionId, agent });
-          if (!sdp || !sdp.sdp) return console.warn('[Agent] Offer missing sdp');
-          
-          // create peer connection if not exists
-          if (!pc) {
-            pc = new RTCPeerConnection({ 
-              iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                {
-                  urls: [
-                    "stun:102.68.86.104:3478",
-                    "turn:102.68.86.104:3478?transport=udp",
-                    "turn:102.68.86.104:3478?transport=tcp"
-                  ],
-                  username: "mindfirm",
-                  credential: "superSecret123"
-                }
-              ]
-            });
-            peerRef.current = pc;
-            
-            // Get agent microphone and add to connection
-            try {
-              const agentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-              setLocalStream(agentStream);
-              console.log('[Agent] Agent microphone obtained:', agentStream.getTracks());
-              agentStream.getTracks().forEach(track => pc.addTrack(track, agentStream));
-            } catch (err) {
-              console.error('[Agent] Failed to get agent microphone:', err);
-            }
-            
-            // Handle incoming audio from visitor
-            pc.ontrack = (evt) => {
-              console.log('[Agent] Received remote stream from caller:', evt.streams[0]);
-              setRemoteStream(evt.streams[0]);
-              
-              // Create and attach audio element for playback
-              const audioEl = document.getElementById('remoteAudio') || document.createElement('audio');
-              audioEl.id = 'remoteAudio';
-              audioEl.autoplay = true;
-              audioEl.playsInline = true;
-              audioEl.srcObject = evt.streams[0];
-              if (!document.getElementById('remoteAudio')) document.body.appendChild(audioEl);
-              
-              console.log('[Agent] Remote audio element created and attached');
-            };
-            
-            // Send ICE candidates to visitor
-            pc.onicecandidate = (ev) => {
-              if (ev.candidate) {
-                console.log('[Agent] Sending ICE candidate to visitor:', ev.candidate);
-                socketRef.current.emit('ice-candidate', {
-                  sessionId: sessionId,
-                  candidate: ev.candidate
-                });
-              }
-            };
-          }
-          
-          // Set remote description and create answer
-          await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-          console.log('[Agent] Remote description set (offer)');
-          
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          console.log('[Agent] Created answer, sending back');
-          
-          socketRef.current.emit('webrtc-answer', { 
-            sessionId: sessionId,
-            sdp: answer
-          });
-        } catch (err) {
-          console.error('[Agent] Error handling webrtc-offer:', err);
-        }
-      };
-      
-      // Handle ICE from widget - WORKING VERSION
-      const handleIncomingICECandidate = ({ candidate, sessionId }) => {
-        console.log('[AgentDashboard] Adding ICE candidate:', candidate);
-        if (pc && pc.signalingState !== 'closed') {
-          pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => {
-            console.error("Error adding ICE candidate:", e);
-          });
-        } else {
-          console.warn('[Agent] Tried to addIceCandidate on closed connection');
-        }
-      };
-      
-      // Add event listeners
-      socketRef.current.off('webrtc-offer'); // avoid duplicate handlers
-      socketRef.current.on('webrtc-offer', handleOffer);
-      socketRef.current.off('ice-candidate');
-      socketRef.current.on('ice-candidate', handleIncomingICECandidate);
-      
-      // Store cleanup function
-      cleanup = () => {
-        socketRef.current.off('webrtc-offer', handleOffer);
-        socketRef.current.off('ice-candidate', handleIncomingICECandidate);
-        if (pc) {
-          console.log('Agent: Closing RTCPeerConnection');
-          pc.close();
-          pc = null;
-        }
-        setWebrtcState('idle');
-        setRemoteStream(null);
-        setLocalStream(null);
-      };
+    if (callStatus === 'Idle' && peerRef.current) {
+      console.log('Agent: Closing RTCPeerConnection on call end');
+      peerRef.current.close();
+      peerRef.current = null;
+      setLocalStream(null);
+      setRemoteStream(null);
+      setWebrtcState('idle');
     }
-    
-    // Cleanup function
-    return () => {
-      if (cleanup && typeof cleanup === 'function') {
-        cleanup();
-      }
-    };
-  }, [callStatus === 'In Call', incomingCall]);
+  }, [callStatus]);
 
   // Scroll to bottom on new chat message
   useEffect(() => {
