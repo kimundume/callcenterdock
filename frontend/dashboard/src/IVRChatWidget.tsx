@@ -340,7 +340,21 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
     let cleanup = false;
     if (callState === 'in-call' && agentSocketId && socketRef.current) {
       setWebrtcState('connecting');
-      pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      pc = new RTCPeerConnection({ 
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          {
+            urls: [
+              "stun:102.68.86.104:3478",
+              "turn:102.68.86.104:3478?transport=udp",
+              "turn:102.68.86.104:3478?transport=tcp"
+            ],
+            username: "mindfirm",
+            credential: "superSecret123"
+          }
+        ]
+      });
       peerRef.current = pc;
       console.log('Widget: Created RTCPeerConnection');
       // Get user media and add tracks before offer

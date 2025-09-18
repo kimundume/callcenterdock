@@ -606,7 +606,21 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
     
     if (callStatus === 'In Call' && socketRef.current) {
       setWebrtcState('connecting');
-      pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      pc = new RTCPeerConnection({ 
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          {
+            urls: [
+              "stun:102.68.86.104:3478",
+              "turn:102.68.86.104:3478?transport=udp",
+              "turn:102.68.86.104:3478?transport=tcp"
+            ],
+            username: "mindfirm",
+            credential: "superSecret123"
+          }
+        ]
+      });
       peerRef.current = pc;
       console.log('Agent: Created RTCPeerConnection');
       

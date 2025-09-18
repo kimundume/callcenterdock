@@ -1235,4 +1235,76 @@ router.post('/agent/status', (req, res) => {
 
 // Endpoints already defined above
 
+// Get call history for a company
+router.get('/calls/history', (req, res) => {
+  try {
+    const { companyUuid, page = 1, limit = 10 } = req.query;
+    console.log('[DEBUG] Getting call history for company:', companyUuid, 'page:', page, 'limit:', limit);
+    
+    // Get sessions for the company
+    const companySessions = Object.values(sessionsData).filter((session: any) => 
+      session.companyUuid === companyUuid
+    );
+    
+    // Sort by timestamp (newest first)
+    const sortedSessions = companySessions.sort((a: any, b: any) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    
+    // Pagination
+    const startIndex = (parseInt(page as string) - 1) * parseInt(limit as string);
+    const endIndex = startIndex + parseInt(limit as string);
+    const paginatedSessions = sortedSessions.slice(startIndex, endIndex);
+    
+    res.json({
+      success: true,
+      calls: paginatedSessions.map((session: any) => ({
+        sessionId: session.sessionId,
+        agentId: session.agentId,
+        visitorId: session.visitorId,
+        timestamp: session.timestamp,
+        status: session.status,
+        duration: session.duration,
+        callType: session.callType || 'incoming'
+      })),
+      pagination: {
+        page: parseInt(page as string),
+        limit: parseInt(limit as string),
+        total: companySessions.length,
+        totalPages: Math.ceil(companySessions.length / parseInt(limit as string))
+      }
+    });
+  } catch (error) {
+    console.error('Get call history error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get IVR widget data for a company
+router.get('/ivr/:companyUuid', (req, res) => {
+  try {
+    const { companyUuid } = req.params;
+    console.log('[DEBUG] Getting IVR widget data for company:', companyUuid);
+    
+    const company = companiesData[companyUuid];
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+    
+    res.json({
+      success: true,
+      company: {
+        uuid: company.uuid,
+        name: company.name,
+        logo: company.logo,
+        welcomeMessage: company.welcomeMessage || 'Welcome to our call center',
+        ivrOptions: company.ivrOptions || []
+      }
+    });
+  } catch (error) {
+    console.error('Get IVR widget data error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

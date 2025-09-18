@@ -1,0 +1,10 @@
+[33m000dacd[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m Test: Verify git push functionality
+[33m6bf4ee6[m 🚨 FORCE DEPLOY: Audio fix with all missing API endpoints
+[33m1a07a40[m 🚨 AUDIO FIX: Add all missing API endpoints (agent/status, agent/end-call, queue)
+[33m7c55cb2[m 🚨 CRITICAL FIX: Add compiled CallSynchronizationService to fix deployment
+[33m69fb662[m FORCE BACKEND DEPLOY: CallSynchronizationService + All Missing APIs
+[33m0f3aa9d[m 🔧 Add Comprehensive System Diagnostics to SuperAdmin
+[33mfe44547[m FORCE NETLIFY BUILD: Add explicit content changes to trigger deployment
+[33m93ff400[m Add comprehensive synchronized call testing tool
+[33m07964fd[m 🚀 MAJOR: Comprehensive Call Synchronization System
+[33m39b2ede[m 🚨 CRITICAL FIX: Remove invalid ignore=false from netlify.toml
