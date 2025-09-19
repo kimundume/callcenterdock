@@ -348,79 +348,53 @@ function registerSignalingHandlers(io) {
                 delete agents[uuid][agentId];
             }
         });
-        // WebRTC signaling: offer
+        // WebRTC signaling: offer - WORKING VERSION
         socket.on('webrtc-offer', (data) => {
-            const { sessionId, offer, toSocketId } = data;
-            console.log('[WebRTC] Received offer for session:', sessionId, 'from socket:', socket.id, 'toSocketId:', toSocketId);
-            if (sessionId && offer) {
-                // If toSocketId is specified, send directly to that socket
-                if (toSocketId) {
-                    console.log('[WebRTC] Sending offer directly to socket:', toSocketId);
-                    io.to(toSocketId).emit('webrtc-offer', {
-                        fromSocketId: socket.id,
-                        offer,
-                        sessionId
-                    });
-                }
-                else {
-                    // Send offer to all sockets in the session room except the sender
-                    console.log('[WebRTC] Broadcasting offer to session room:', `session-${sessionId}`);
-                    socket.to(`session-${sessionId}`).emit('webrtc-offer', {
-                        fromSocketId: socket.id,
-                        offer,
-                        sessionId
-                    });
-                }
+            const { sessionId, sdp, agent } = data;
+            console.log('[WebRTC] Received offer for session:', sessionId, 'agent:', agent);
+            if (sessionId && sdp) {
+                // Forward offer to agent
+                console.log('[WebRTC] Forwarding offer to session room:', `session-${sessionId}`);
+                socket.to(`session-${sessionId}`).emit('webrtc-offer', {
+                    sdp: sdp,
+                    sessionId: sessionId,
+                    agent: agent
+                });
+            }
+            else {
+                console.warn('[WebRTC] Invalid offer data:', data);
             }
         });
-        // WebRTC signaling: answer
+        // WebRTC signaling: answer - WORKING VERSION
         socket.on('webrtc-answer', (data) => {
-            const { sessionId, answer, toSocketId } = data;
-            console.log('[WebRTC] Received answer for session:', sessionId, 'from socket:', socket.id, 'toSocketId:', toSocketId);
-            if (sessionId && answer) {
-                // If toSocketId is specified, send directly to that socket
-                if (toSocketId) {
-                    console.log('[WebRTC] Sending answer directly to socket:', toSocketId);
-                    io.to(toSocketId).emit('webrtc-answer', {
-                        fromSocketId: socket.id,
-                        answer,
-                        sessionId
-                    });
-                }
-                else {
-                    // Send answer to all sockets in the session room except the sender
-                    console.log('[WebRTC] Broadcasting answer to session room:', `session-${sessionId}`);
-                    socket.to(`session-${sessionId}`).emit('webrtc-answer', {
-                        fromSocketId: socket.id,
-                        answer,
-                        sessionId
-                    });
-                }
+            const { sessionId, sdp } = data;
+            console.log('[WebRTC] Received answer for session:', sessionId);
+            if (sessionId && sdp) {
+                // Forward answer to visitor
+                console.log('[WebRTC] Forwarding answer to session room:', `session-${sessionId}`);
+                socket.to(`session-${sessionId}`).emit('webrtc-answer', {
+                    sdp: sdp,
+                    sessionId: sessionId
+                });
+            }
+            else {
+                console.warn('[WebRTC] Invalid answer data:', data);
             }
         });
-        // WebRTC signaling: ICE candidate
-        socket.on('webrtc-ice-candidate', (data) => {
-            const { sessionId, candidate, toSocketId } = data;
-            console.log('[WebRTC] Received ICE candidate for session:', sessionId, 'from socket:', socket.id, 'toSocketId:', toSocketId);
+        // WebRTC signaling: ICE candidate - WORKING VERSION
+        socket.on('ice-candidate', (data) => {
+            const { sessionId, candidate } = data;
+            console.log('[WebRTC] Received ICE candidate for session:', sessionId);
             if (sessionId && candidate) {
-                // If toSocketId is specified, send directly to that socket
-                if (toSocketId) {
-                    console.log('[WebRTC] Sending ICE candidate directly to socket:', toSocketId);
-                    io.to(toSocketId).emit('webrtc-ice-candidate', {
-                        fromSocketId: socket.id,
-                        candidate,
-                        sessionId
-                    });
-                }
-                else {
-                    // Send ICE candidate to all sockets in the session room except the sender
-                    console.log('[WebRTC] Broadcasting ICE candidate to session room:', `session-${sessionId}`);
-                    socket.to(`session-${sessionId}`).emit('webrtc-ice-candidate', {
-                        fromSocketId: socket.id,
-                        candidate,
-                        sessionId
-                    });
-                }
+                // Forward ICE candidate to session room
+                console.log('[WebRTC] Forwarding ICE candidate to session room:', `session-${sessionId}`);
+                socket.to(`session-${sessionId}`).emit('ice-candidate', {
+                    candidate: candidate,
+                    sessionId: sessionId
+                });
+            }
+            else {
+                console.warn('[WebRTC] Invalid ICE candidate data:', data);
             }
         });
         // Test call request from admin

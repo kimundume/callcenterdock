@@ -58,6 +58,11 @@
       var fallbackScript = document.createElement('script');
       fallbackScript.src = 'https://cdn.socket.io/4.7.2/socket.io.min.js';
       fallbackScript.onload = callback;
+      fallbackScript.onerror = () => {
+        console.error('[Widget] Failed to load Socket.IO from CDN as well');
+        // Still call callback to prevent hanging
+        callback();
+      };
       document.head.appendChild(fallbackScript);
     };
     document.head.appendChild(script);
@@ -144,7 +149,11 @@
     loadSocketIo(() => {
       socket = io(BACKEND_URL, {
         transports: ['websocket', 'polling'],
-        forceNew: true
+        forceNew: true,
+        timeout: 10000,
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000
       });
       
       socket.on('connect', () => {
@@ -289,7 +298,11 @@
         try {
           socket = io(BACKEND_URL, {
         transports: ['websocket', 'polling'],
-        forceNew: true
+        forceNew: true,
+        timeout: 10000,
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000
       });
           socket.on('connect', () => {
             console.log('[WebRTC] Socket connected, socket ID:', socket.id);
@@ -298,10 +311,16 @@
             setupSocketListeners();
             resolve();
           });
-          socket.on('connect_error', (err) => {
-            console.error('[WebRTC] Socket connect error', err);
-            reject(err);
-          });
+      socket.on('connect_error', (err) => {
+        console.error('[WebRTC] Socket connect error', err);
+        updateStatus('Connection failed - please try again');
+        reject(err);
+      });
+      
+      socket.on('disconnect', (reason) => {
+        console.log('[WebRTC] Socket disconnected:', reason);
+        updateStatus('Connection lost - please try again');
+      });
         } catch (err) {
           reject(err);
         }

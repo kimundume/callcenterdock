@@ -812,29 +812,7 @@ router.post('/agent/end-call', (req, res) => {
   }
 });
 
-// Get queue status for a company
-router.get('/queue/:companyUuid', (req, res) => {
-  try {
-    const { companyUuid } = req.params;
-    console.log('[DEBUG] Getting queue for company:', companyUuid);
-    
-    // Get queue from global storage
-    const queue = global.tempStorage?.callQueue?.[companyUuid] || [];
-    
-    res.json({
-      success: true,
-      queueLength: queue.length,
-      queue: queue.map((socketId, index) => ({
-        position: index + 1,
-        socketId: socketId,
-        estimatedWait: (index + 1) * 30 // 30 seconds per position
-      }))
-    });
-  } catch (error) {
-    console.error('Get queue error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+// Get queue status for a company (duplicate route removed - using the first one above)
 
 // Get agent status
 router.get('/agent/status', (req, res) => {
@@ -1126,50 +1104,7 @@ router.get('/call/logs/:companyUuid', (req, res) => {
   }
 });
 
-// Get agent status (for frontend polling)
-router.get('/agent/status', (req, res) => {
-  try {
-    const { agentUuid, agentId, username } = req.query;
-    console.log('[DEBUG] Getting agent status:', { agentUuid, agentId, username });
-    
-    // Find agent by UUID, ID, or username
-    let agent = null;
-    if (agentUuid) {
-      agent = Object.values(agentsData).find((a: any) => a.uuid === agentUuid);
-    } else if (agentId) {
-      agent = agentsData[agentId];
-    } else if (username) {
-      agent = Object.values(agentsData).find((a: any) => a.username === username);
-    }
-    
-    if (!agent) {
-      console.log('[DEBUG] Agent not found. Available agents:', Object.keys(agentsData));
-      return res.status(404).json({ error: 'Agent not found' });
-    }
-    
-    res.json({
-      success: true,
-      agent: {
-        id: agent.uuid,
-        username: agent.username,
-        fullName: agent.fullName,
-        status: agent.status,
-        availability: agent.availability,
-        currentCalls: agent.currentCalls || 0,
-        maxCalls: agent.maxCalls || 5,
-        lastActivity: agent.lastActivity,
-        performance: agent.performance || {
-          callsHandled: 0,
-          avgRating: 0,
-          successRate: 0
-        }
-      }
-    });
-  } catch (error) {
-    console.error('Get agent status error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+// Get agent status (duplicate route removed - using the first one above)
 
 // Update agent status
 router.post('/agent/status', (req, res) => {
@@ -1256,10 +1191,13 @@ router.get('/availability', (req, res) => {
     
     res.json({
       success: true,
+      online: isAvailable,
       available: isAvailable,
       agentsOnline: availableAgents.length,
+      availableAgents: availableAgents.length,
       estimatedWaitTime: isAvailable ? 0 : 30, // 30 seconds if no agents available
-      message: isAvailable ? 'Agents are available' : 'No agents available, please try again later'
+      message: isAvailable ? 'Agents are available' : 'No agents available, please try again later',
+      routingType: isAvailable ? 'direct' : 'queue'
     });
   } catch (error) {
     console.error('Get availability error:', error);

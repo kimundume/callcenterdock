@@ -69,10 +69,17 @@ interface IVRChatWidgetProps {
 export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: IVRChatWidgetProps) {
   console.log('[IVRChatWidget] Rendered with open:', open, 'companyUuid:', companyUuid, 'logoSrc:', logoSrc);
   
+  // Add error boundary state
+  const [hasError, setHasError] = useState(false);
+  
   // Add useEffect to track prop changes
   useEffect(() => {
     console.log('[IVRChatWidget] Props changed - open:', open, 'companyUuid:', companyUuid);
-  }, [open, companyUuid]);
+    // Reset error state when widget opens
+    if (open && hasError) {
+      setHasError(false);
+    }
+  }, [open, companyUuid, hasError]);
   
   const [ivrConfig, setIvrConfig] = useState<IVRConfig | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -135,8 +142,17 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
     console.log('[Widget] companyUuid:', effectiveCompanyUuid);
     fetch(`${getBackendUrl()}/api/agents/${effectiveCompanyUuid}`)
       .then(res => res.json())
-      .then(list => setAgentsOnline(Array.isArray(list) && list.some(a => a.online)))
-      .catch(() => setAgentsOnline(false));
+      .then(list => {
+        if (Array.isArray(list)) {
+          setAgentsOnline(list.some(a => a.online));
+        } else {
+          setAgentsOnline(false);
+        }
+      })
+      .catch((error) => {
+        console.error('[Widget] Error checking agent status:', error);
+        setAgentsOnline(false);
+      });
   }, [open, companyUuid]);
 
   // Fetch IVR config when opened or companyUuid changes
@@ -148,11 +164,17 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
       .then(res => res.json())
       .then(config => {
         console.log('[IVRChatWidget] IVR config loaded:', config);
-        setIvrConfig(config);
-        // Safely access first step prompt
-        const firstPrompt = config?.steps?.[0]?.prompt || 'Welcome! How can I help you today?';
-        setMessages([{ from: 'system', text: firstPrompt }]);
-        setIvrStep(0);
+        if (config && config.success && config.steps && Array.isArray(config.steps) && config.steps.length > 0) {
+          setIvrConfig(config);
+          const firstPrompt = config.steps[0].prompt || 'Welcome! How can I help you today?';
+          setMessages([{ from: 'system', text: firstPrompt }]);
+          setIvrStep(0);
+        } else {
+          console.warn('[IVRChatWidget] Invalid IVR config received, using demo config');
+          setIvrConfig({ steps: demoIVR });
+          setMessages([{ from: 'system', text: demoIVR[0].prompt }]);
+          setIvrStep(0);
+        }
       })
       .catch((err) => {
         console.error('[IVRChatWidget] Error loading IVR config:', err);
@@ -165,10 +187,18 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
   // Socket.IO setup/teardown
   useEffect(() => {
     if (!open) return;
+    
+    console.log('[IVRChatWidget] Setting up socket connection to:', SOCKET_URL);
+    
     const socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
-      forceNew: true
+      forceNew: true,
+      timeout: 10000,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000
     });
+    
     socketRef.current = socket;
     // Listen for call status updates
     socket.on('call-routed', (data) => {
@@ -193,10 +223,23 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
       }
     });
     socket.on('disconnect', () => {
+      console.log('[IVRChatWidget] Socket disconnected');
       setCallState('ended');
       setCallError('Disconnected');
     });
+    
+    socket.on('connect_error', (error) => {
+      console.error('[IVRChatWidget] Socket connection error:', error);
+      setCallError('Connection failed - please try again');
+    });
+    
+    socket.on('reconnect', (attemptNumber) => {
+      console.log('[IVRChatWidget] Socket reconnected after', attemptNumber, 'attempts');
+      setCallError('');
+    });
+    
     return () => {
+      console.log('[IVRChatWidget] Cleaning up socket connection');
       socket.disconnect();
       socketRef.current = null;
     };
@@ -1152,23 +1195,44 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
     );
   }
 
-  return (
-    <Modal
-      open={open}
-      onCancel={onClose}
-      footer={null}
-      width={400}
-      centered={false}
-      styles={{
-        body: {
-          padding: 0,
-          borderRadius: 28,
-          overflow: 'hidden',
-          background: 'linear-gradient(120deg, #2E73FF 0%, #00e6ef 100%)',
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          boxShadow: '0 8px 32px #2E73FF33, 0 2px 8px #00e6ef22, 0 1.5px 6px #F6C23E22',
-          border: '3px solid #F6C23E',
-          position: 'fixed',
+  // Error boundary - if there's an error, show a simple fallback
+  if (hasError) {
+    return (
+      <Modal
+        open={open}
+        onCancel={onClose}
+        footer={null}
+        width={400}
+        centered
+      >
+        <div style={{ padding: 32, textAlign: 'center' }}>
+          <div style={{ fontSize: 48, color: '#dc3545', marginBottom: 16 }}>⚠️</div>
+          <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Something went wrong</div>
+          <div style={{ color: '#888', marginBottom: 24 }}>Please refresh the page and try again.</div>
+          <Button onClick={onClose} type="primary">Close</Button>
+        </div>
+      </Modal>
+    );
+  }
+
+  try {
+    return (
+      <Modal
+        open={open}
+        onCancel={onClose}
+        footer={null}
+        width={400}
+        centered={false}
+        styles={{
+          body: {
+            padding: 0,
+            borderRadius: 28,
+            overflow: 'hidden',
+            background: 'linear-gradient(120deg, #2E73FF 0%, #00e6ef 100%)',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            boxShadow: '0 8px 32px #2E73FF33, 0 2px 8px #00e6ef22, 0 1.5px 6px #F6C23E22',
+            border: '3px solid #F6C23E',
+            position: 'fixed',
           right: 24,
           bottom: 24,
           margin: 0,
@@ -1552,4 +1616,24 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
       </div>
     </Modal>
   );
+  } catch (error) {
+    console.error('[IVRChatWidget] Render error:', error);
+    setHasError(true);
+    return (
+      <Modal
+        open={open}
+        onCancel={onClose}
+        footer={null}
+        width={400}
+        centered
+      >
+        <div style={{ padding: 32, textAlign: 'center' }}>
+          <div style={{ fontSize: 48, color: '#dc3545', marginBottom: 16 }}>⚠️</div>
+          <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Something went wrong</div>
+          <div style={{ color: '#888', marginBottom: 24 }}>Please refresh the page and try again.</div>
+          <Button onClick={onClose} type="primary">Close</Button>
+        </div>
+      </Modal>
+    );
+  }
 } 
