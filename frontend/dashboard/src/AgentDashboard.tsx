@@ -50,6 +50,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
   const [remoteStream, setRemoteStream] = useState(null);
   const peerRef = useRef(null);
   const remoteAudioRef = useRef(null);
+  const pendingCandidatesRef = useRef([]);
   // Add flag to prevent automatic call acceptance
   const [callManuallyAccepted, setCallManuallyAccepted] = useState(false);
   // Chat state
@@ -172,7 +173,11 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
   useEffect(() => {
     const socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
-      forceNew: true
+      forceNew: true,
+      timeout: 10000,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000
     });
     socketRef.current = socket;
     socket.emit('register-agent', { uuid: companyUuid, agentId: agentUsername });
@@ -220,6 +225,7 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
             {
               urls: [
                 "stun:102.68.86.104:3478",
@@ -228,6 +234,12 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
               ],
               username: "mindfirm",
               credential: "superSecret123"
+            },
+            // Additional TURN servers for better connectivity
+            {
+              urls: "turn:numb.viagenie.ca",
+              credential: "muazkh",
+              username: "webrtc@live.com"
             }
           ]
         });
@@ -276,6 +288,13 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
         await pc.setRemoteDescription(new RTCSessionDescription(sdp));
         console.log('[Agent] Remote description set (offer)');
         
+        // Flush queued ICE candidates
+        console.log('[AgentDashboard] Flushing', pendingCandidatesRef.current.length, 'queued ICE candidates');
+        pendingCandidatesRef.current.forEach(candidate => {
+          pc.addIceCandidate(candidate).catch(err => console.error('[AgentDashboard] Error adding queued ICE candidate:', err));
+        });
+        pendingCandidatesRef.current = [];
+        
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         console.log('[Agent] Created answer, sending back');
@@ -289,14 +308,20 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
       }
     });
 
-    // Set up ICE candidate handler
+    // Set up ICE candidate handler with queuing
     socket.on('ice-candidate', ({ candidate, sessionId }) => {
       console.log('[AgentDashboard] Adding ICE candidate:', candidate);
       const pc = peerRef.current;
       if (pc && pc.signalingState !== 'closed') {
-        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => {
-          console.error("Error adding ICE candidate:", e);
-        });
+        const ice = new RTCIceCandidate(candidate);
+        if (pc.remoteDescription) {
+          pc.addIceCandidate(ice).catch(e => {
+            console.error("Error adding ICE candidate:", e);
+          });
+        } else {
+          console.warn('[AgentDashboard] Queueing ICE candidate until remote description is set');
+          pendingCandidatesRef.current.push(ice);
+        }
       } else {
         console.warn('[Agent] Tried to addIceCandidate on closed connection');
       }
@@ -417,6 +442,20 @@ export default function AgentDashboard({ agentToken, companyUuid, agentUsername,
     socket.on('chat:typing', ({ sessionId }) => {
       setVisitorTyping(prev => ({ ...prev, [sessionId]: true }));
       setTimeout(() => setVisitorTyping(prev => ({ ...prev, [sessionId]: false })), 2000);
+    });
+    
+    // Add socket connection error handling
+    socket.on('disconnect', (reason) => {
+      console.log('[AgentDashboard] Socket disconnected:', reason);
+      setWebrtcState('idle');
+    });
+    
+    socket.on('connect_error', (error) => {
+      console.error('[AgentDashboard] Socket connection error:', error);
+    });
+    
+    socket.on('reconnect', (attemptNumber) => {
+      console.log('[AgentDashboard] Socket reconnected after', attemptNumber, 'attempts');
     });
     return () => {
       // Set agent status to offline when disconnecting
