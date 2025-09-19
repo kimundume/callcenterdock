@@ -997,6 +997,41 @@ router.get('/call/logs/:companyUuid', (req, res) => {
     }
 });
 // Get agent status (duplicate route removed - using the first one above)
+// Agent status endpoint for widget (fixes 404 error)
+router.post('/agent/status', (req, res) => {
+    try {
+        const { agentId, agentUuid, username } = req.body;
+        console.log('[DEBUG] Widget requesting agent status:', { agentId, agentUuid, username });
+        // Find agent by UUID, ID, or username
+        let agent = null;
+        if (agentUuid) {
+            agent = Object.values(agentsData).find((a) => a.uuid === agentUuid);
+        }
+        else if (agentId) {
+            agent = agentsData[agentId];
+        }
+        else if (username) {
+            agent = Object.values(agentsData).find((a) => a.username === username);
+        }
+        if (!agent) {
+            console.log('[DEBUG] Agent not found. Available agents:', Object.keys(agentsData));
+            return res.status(404).json({ error: 'Agent not found' });
+        }
+        res.json({
+            success: true,
+            status: agent.status || 'online',
+            agentId: agent.uuid,
+            username: agent.username,
+            availability: agent.availability || 'online',
+            currentCalls: agent.currentCalls || 0,
+            maxCalls: agent.maxCalls || 5
+        });
+    }
+    catch (error) {
+        console.error('Get agent status error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 // Update agent status
 router.post('/agent/status', (req, res) => {
     try {

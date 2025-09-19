@@ -34,6 +34,7 @@
   let muteBtn = null;
   let currentModal = null;
   let currentSessionId = null;
+  let pendingCandidates = [];
 
   function log(...args) { console.log('[Widget]', ...args); }
 
@@ -327,11 +328,12 @@
       });
     });
 
-    // Create peer connection with ICE servers
+    // Create peer connection with enhanced ICE servers
     peerConnection = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" },
         {
           urls: [
             "stun:102.68.86.104:3478",
@@ -340,6 +342,12 @@
           ],
           username: "mindfirm",
           credential: "superSecret123"
+        },
+        // Additional TURN servers for better connectivity
+        {
+          urls: "turn:numb.viagenie.ca",
+          credential: "muazkh",
+          username: "webrtc@live.com"
         }
       ]
     });
@@ -426,6 +434,13 @@
           const answer = new RTCSessionDescription(data.sdp);
           await peerConnection.setRemoteDescription(answer);
           console.log('[WebRTC] Set remote description from answer');
+          
+          // Flush queued ICE candidates
+          console.log('[WebRTC] Flushing', pendingCandidates.length, 'queued ICE candidates');
+          pendingCandidates.forEach(candidate => {
+            peerConnection.addIceCandidate(candidate).catch(err => console.error('[WebRTC] Error adding queued ICE candidate:', err));
+          });
+          pendingCandidates = [];
         } catch (err) {
           console.error('[WebRTC] Error setting remote description:', err);
         }
@@ -434,13 +449,19 @@
       }
     });
 
-    // Handle incoming ICE candidates from agent
+    // Handle incoming ICE candidates from agent with queuing
     socket.on('ice-candidate', async (data) => {
       console.log('[WebRTC] Received ICE candidate:', data);
       if (peerConnection && data && data.candidate) {
         try {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-          console.log('[WebRTC] Added ICE candidate');
+          const ice = new RTCIceCandidate(data.candidate);
+          if (peerConnection.remoteDescription) {
+            await peerConnection.addIceCandidate(ice);
+            console.log('[WebRTC] Added ICE candidate');
+          } else {
+            console.warn('[WebRTC] Queueing ICE candidate until remote description is set');
+            pendingCandidates.push(ice);
+          }
         } catch (err) {
           console.error('[WebRTC] Error adding ICE candidate:', err);
         }

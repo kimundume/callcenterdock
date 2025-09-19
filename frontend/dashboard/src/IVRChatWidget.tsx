@@ -107,6 +107,7 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const pendingCandidatesRef = useRef<RTCIceCandidate[]>([]);
   // Mute state
   const [muted, setMuted] = useState(false);
   // Hold state
@@ -392,6 +393,7 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
           {
             urls: [
               "stun:102.68.86.104:3478",
@@ -400,6 +402,12 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
             ],
             username: "mindfirm",
             credential: "superSecret123"
+          },
+          // Additional TURN servers for better connectivity
+          {
+            urls: "turn:numb.viagenie.ca",
+            credential: "muazkh",
+            username: "webrtc@live.com"
           }
         ]
       });
@@ -449,15 +457,28 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
           pc.setRemoteDescription(new RTCSessionDescription(answer));
           setWebrtcState('connected');
           console.log('[IVRChatWidget] Set remote description from answer');
+          
+          // Flush queued ICE candidates
+          console.log('[IVRChatWidget] Flushing', pendingCandidatesRef.current.length, 'queued ICE candidates');
+          pendingCandidatesRef.current.forEach(candidate => {
+            pc.addIceCandidate(candidate).catch(err => console.error('[IVRChatWidget] Error adding queued ICE candidate:', err));
+          });
+          pendingCandidatesRef.current = [];
         } else {
           console.warn('[IVRChatWidget] Tried to setRemoteDescription on closed connection');
         }
       });
-      // Handle ICE from agent
+      // Handle ICE from agent with queuing
       socketRef.current.on('ice-candidate', ({ candidate, sessionId }) => {
         console.log('[IVRChatWidget] Received ICE candidate for session:', sessionId);
         if (pc.signalingState !== 'closed') {
-          pc.addIceCandidate(new RTCIceCandidate(candidate));
+          const ice = new RTCIceCandidate(candidate);
+          if (pc.remoteDescription) {
+            pc.addIceCandidate(ice).catch(err => console.error('[IVRChatWidget] Error adding ICE candidate:', err));
+          } else {
+            console.warn('[IVRChatWidget] Queueing ICE candidate until remote description is set');
+            pendingCandidatesRef.current.push(ice);
+          }
         } else {
           console.warn('[IVRChatWidget] Tried to addIceCandidate on closed connection');
         }
@@ -783,6 +804,7 @@ export default function IVRChatWidget({ open, onClose, companyUuid, logoSrc }: I
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
           {
             urls: [
               "stun:102.68.86.104:3478",
